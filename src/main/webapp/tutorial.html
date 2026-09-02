@@ -1125,10 +1125,165 @@ Clock fixed = Clock.fixed(Instant.parse(<span class="s">"2025-09-01T10:00:00Z"</
     </section>
   </article>
 
-  <!-- ============================ 9. RUNNING IT ============================ -->
-  <article class="chapter" data-cat="Running">
+  <!-- ============================ 9. SCHEDULED ============================ -->
+  <article class="chapter" data-cat="Scheduled">
     <div class="chapter-head">
       <div class="eyebrow">Chapter 09</div>
+      <h1>Work nobody requested</h1>
+      <p>Two jobs are running on your server right now, on a timer, with no HTTP request behind them. That absence changes more than you would expect.</p>
+    </div>
+
+    <section class="sub" id="j-1">
+      <h2><code class="inline">@Schedule</code> — cron in an annotation</h2>
+      <p class="lede">No scheduler library, no configuration file. One annotation and the container runs the method.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">service/EnrollmentMaintenanceJob.java</span><span>both jobs in this project</span></div>
+<pre><span class="c">// Nightly at 03:00 — withdraw enrollments from finished academic years.</span>
+<span class="k">@Schedule</span>(hour = <span class="s">"3"</span>, minute = <span class="s">"0"</span>, second = <span class="s">"0"</span>, persistent = <span class="k">false</span>,
+          info = <span class="s">"Nightly stale-enrollment sweep"</span>)
+<span class="k">public void</span> closeStaleEnrollments() { ... }
+
+<span class="c">// Every 5 minutes, on the clock — a metrics heartbeat.</span>
+<span class="k">@Schedule</span>(minute = <span class="s">"*/5"</span>, hour = <span class="s">"*"</span>, persistent = <span class="k">false</span>,
+          info = <span class="s">"Enrollment statistics heartbeat"</span>)
+<span class="k">public void</span> reportStatistics() { ... }</pre>
+      </div>
+      <p>These are <em class="term">calendar-based expressions</em>, and they are not quite cron. Each unit is its own attribute, so <code class="inline">minute = "*/5"</code> means "every fifth minute of every hour" — not "five minutes after startup". The job fires at :00, :05, :10 and so on, aligned to the wall clock. Anything you leave out defaults to <code class="inline">0</code>, which is why the nightly sweep does not also run every minute of hour 3.</p>
+      <p><code class="inline">persistent = false</code> means the timer lives in memory only. A persistent timer is written to the database and survives a restart — so a nightly sweep missed while the server was down would fire on boot. For a heartbeat that would be pointless catch-up noise, and for the sweep it is a decision you want to make deliberately rather than inherit.</p>
+      <div class="note">
+        <span class="tag">It is running as you read this</span>
+        <p>The heartbeat has already fired dozens of times on your server. Watch the next one land:</p>
+      </div>
+      <div class="code">
+        <div class="code-top"><span class="file">server.log — real output</span><span>note the empty brackets</span></div>
+<pre>16:25:00,016 INFO [EnrollmentMaintenanceJob] [] [METRICS] students.active=3 students.suspended=1
+16:30:00,016 INFO [EnrollmentMaintenanceJob] [] [METRICS] students.active=3 students.suspended=1
+16:35:00,059 INFO [EnrollmentMaintenanceJob] [] [METRICS] students.active=3 students.suspended=1</pre>
+      </div>
+      <p>Those empty brackets are where a correlation ID would be. There is none — the MDC is populated per HTTP request by <code class="inline">CorrelationIdFilter</code>, and no request happened here. <strong>Scheduled work is invisible to request-scoped tooling</strong>, which is exactly why the job logs a count on every run: a job that silently does nothing is indistinguishable from a job that is broken.</p>
+      <div class="livebox">
+        <div class="livebox-top">
+          <span class="ttl">What the next heartbeat will log</span>
+          <button class="btn" id="hb-refresh">Refresh</button>
+        </div>
+        <div class="livebox-body">
+          <div class="stats" id="hb-stats" hidden></div>
+          <p class="offline-note" id="hb-off">Not connected. Serve this page from WildFly to read the same counts the job reads.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="sub" id="j-2">
+      <h2>Two doors into the same service layer</h2>
+      <p>A scheduled job is a second entry point. It reaches the same repositories and the same domain rules as a REST call, without any of the HTTP machinery above it.</p>
+      <figure>
+        <div class="fig-wrap">
+          <svg viewBox="0 0 660 210" role="img" aria-label="An HTTP request and a container timer both reach the service layer, but only the request passes through the filter and resource layers">
+            <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><polygon points="0 0, 9 4.5, 0 9" fill="currentColor"/></marker></defs>
+            <rect x="14" y="14" width="180" height="30" rx="4" fill="var(--accent-wash)" stroke="var(--accent)"/>
+            <text x="104" y="34" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">HTTP request</text>
+            <rect x="14" y="58" width="180" height="28" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+            <text x="104" y="77" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)">CorrelationIdFilter</text>
+            <rect x="14" y="98" width="180" height="28" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+            <text x="104" y="117" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink)">Resource</text>
+            <rect x="466" y="14" width="180" height="30" rx="4" fill="var(--runtime-wash)" stroke="var(--runtime)"/>
+            <text x="556" y="34" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">container timer</text>
+            <text x="556" y="72" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--runtime)">no filter</text>
+            <text x="556" y="88" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--runtime)">no resource</text>
+            <text x="556" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--runtime)">no MDC</text>
+            <rect x="150" y="140" width="360" height="32" rx="4" fill="var(--surface-2)" stroke="var(--ink)" stroke-width="1.5"/>
+            <text x="330" y="161" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">service + repository + domain</text>
+            <line x1="104" y1="130" x2="104" y2="140" stroke="currentColor" marker-end="url(#ar3)"/>
+            <line x1="104" y1="46" x2="104" y2="56" stroke="currentColor" marker-end="url(#ar3)"/>
+            <line x1="104" y1="88" x2="104" y2="96" stroke="currentColor" marker-end="url(#ar3)"/>
+            <path d="M 556 48 L 556 120 Q 556 140 520 148" fill="none" stroke="var(--runtime)" stroke-width="1.5" marker-end="url(#ar3)" color="var(--runtime)"/>
+            <text x="330" y="196" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--ink-soft)">The rules cannot be bypassed by either route — which is why they live down there.</text>
+          </svg>
+        </div>
+        <figcaption>Both paths converge on the service layer. Everything the request path adds above it — correlation IDs, validation, status-code mapping — simply does not exist for the timer.</figcaption>
+      </figure>
+      <p>This is the practical argument for keeping business rules out of resource classes. Put an eligibility check in a JAX-RS method and the nightly job silently skips it.</p>
+    </section>
+
+    <section class="sub" id="j-3">
+      <h2><code class="inline">@Singleton</code>, and who is allowed in</h2>
+      <div class="code">
+        <div class="code-top"><span class="file">the class declaration</span><span>two annotations, one guarantee</span></div>
+<pre><span class="k">@Singleton</span>
+<span class="k">@ConcurrencyManagement</span>(ConcurrencyManagementType.CONTAINER)
+<span class="k">public class</span> EnrollmentMaintenanceJob { ... }</pre>
+      </div>
+      <p>An EJB <code class="inline">@Singleton</code> is one instance for the whole application — and by default the container gives every business method a <strong>write lock</strong>. Calls are serialised: if the nightly sweep is still running at 03:05, the heartbeat waits rather than running alongside it.</p>
+      <p>That is usually what you want for maintenance work, and it is the opposite of the CDI <code class="inline">@ApplicationScoped</code> beans from Chapter 4, which are shared and fully concurrent. Same "one instance" idea, completely different concurrency contract — a distinction worth keeping straight.</p>
+    </section>
+
+    <section class="sub" id="j-4">
+      <h2><code class="inline">REQUIRES_NEW</code> — there is no caller</h2>
+      <div class="code">
+        <div class="code-top"><span class="file">on both job methods</span><span>an explicit choice</span></div>
+<pre><span class="k">@TransactionAttribute</span>(TransactionAttributeType.REQUIRES_NEW)</pre>
+      </div>
+      <p>A REST request arrives with no transaction, and <code class="inline">@Transactional</code> starts one. A timer callback also arrives with none — but it has no caller at all, so there is nothing to inherit and nothing to join. <code class="inline">REQUIRES_NEW</code> states plainly: always begin a fresh transaction, always commit it independently.</p>
+      <p>The payoff is isolation. If the nightly sweep fails, it rolls back its own work and nothing else is affected — there is no surrounding transaction for it to poison.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Attribute</th><th>Caller has a transaction</th><th>Caller has none</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">REQUIRED</td><td>Joins it</td><td>Starts one</td></tr>
+            <tr><td class="mono">REQUIRES_NEW</td><td>Suspends it, starts its own</td><td>Starts one</td></tr>
+            <tr><td class="mono">MANDATORY</td><td>Joins it</td><td>Throws</td></tr>
+            <tr><td class="mono">NEVER</td><td>Throws</td><td>Runs with none</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sub" id="j-5">
+      <h2>Bulk updates go around the persistence context</h2>
+      <p class="lede">The sweep does not load a single entity. It issues one <code class="inline">UPDATE</code>.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">repository/EnrollmentRepository.java:212</span><span>JPQL bulk update</span></div>
+<pre><span class="k">return</span> em().createQuery(
+        <span class="s">"UPDATE Enrollment e "</span>
+      + <span class="s">"SET e.status = :withdrawn, e.updatedAt = :now "</span>
+      + <span class="s">"WHERE e.status = :active AND e.course.academicYear &lt; :year"</span>)
+    ...
+    .executeUpdate();     <span class="c">// returns the row count</span></pre>
+      </div>
+      <p>Loading ten thousand stale enrollments to call <code class="inline">withdraw()</code> on each would mean ten thousand objects in memory and ten thousand UPDATE statements. This is one statement, and the database does the work.</p>
+      <p>The cost is that it <strong>bypasses everything JPA normally does for you</strong>:</p>
+      <ul class="pts">
+        <li>No entity is loaded, so <code class="inline">Enrollment.withdraw()</code> never runs — the state-machine check from Chapter 7 is skipped entirely. The <code class="inline">WHERE status = ACTIVE</code> clause is doing that job instead, in SQL.</li>
+        <li>No lifecycle callbacks fire, which is why <code class="inline">updatedAt</code> is set by hand in the query.</li>
+        <li><code class="inline">@Version</code> is not bumped automatically, so optimistic locking does not protect these rows.</li>
+        <li>Any entity already in the persistence context is now <strong>stale</strong> — it holds the old status while the database holds the new one.</li>
+      </ul>
+      <div class="note trap">
+        <span class="tag">The rule</span>
+        <p>Bulk operations are right for maintenance work that touches many rows and runs in its own transaction. They are wrong inside a request that has already loaded the entities it is modifying — there you would be reading stale objects immediately afterwards. The job gets away with it precisely because <code class="inline">REQUIRES_NEW</code> gives it a persistence context that ends moments later.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="j-6">
+      <h2>Why this breaks on a second server</h2>
+      <p>Deploy this WAR to two nodes and you have two schedulers. Both fire at 03:00. Both run the sweep. The <code class="inline">WHERE</code> clause makes it harmless here — the second run updates zero rows — but a job that sends emails or charges cards would do it twice.</p>
+      <p>The README lists this openly under known limitations, and the fixes are the standard ones:</p>
+      <ul class="pts">
+        <li><strong>A database lock</strong> — every node tries to claim a row before running; only one wins.</li>
+        <li><strong>An external scheduler</strong> — Kubernetes CronJob or Quartz in clustered mode, triggering an endpoint rather than a timer.</li>
+        <li><strong>Make the work idempotent</strong>, so running it twice is harmless by construction. That is what the <code class="inline">WHERE status = ACTIVE</code> clause achieves, and it is the cheapest defence available.</li>
+      </ul>
+      <div class="note">
+        <span class="tag">Try it</span>
+        <p>Change the heartbeat to <code class="inline">minute = "*"</code>, run <code class="inline">mvn package</code>, and watch <code class="inline">[METRICS]</code> appear every minute in the log. Then suspend a student through the API and see the next heartbeat report a different number. Put it back to <code class="inline">*/5</code> afterwards.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 10. RUNNING IT ============================ -->
+  <article class="chapter" data-cat="Running">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 10</div>
       <h1>Your setup, and what to try</h1>
       <p>This application is installed natively on your machine — WildFly and PostgreSQL, no Docker.</p>
     </div>
@@ -1446,7 +1601,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   var ids = { courses:{}, students:{} };
 
   var pill = document.getElementById("pill");
-  var offNotes = ["fire-off","console-off","stats-off"];
+  var offNotes = ["fire-off","console-off","stats-off","hb-off"];
 
   function setLive(ok){
     live = ok;
@@ -1459,7 +1614,28 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     });
     document.getElementById("console-base").textContent = ok ? API : "";
     Array.prototype.forEach.call(document.querySelectorAll(".req"), function(b){ b.disabled = !ok; });
-    if(ok){ loadIds(); loadStats(); buildFire(); }
+    if(ok){ loadIds(); loadStats(); loadHeartbeat(); buildFire(); }
+  }
+
+  /* the same two numbers reportStatistics() logs every 5 minutes */
+  function loadHeartbeat(){
+    var box = document.getElementById("hb-stats");
+    if(!box) return;
+    Promise.all([api("students?status=ACTIVE&page=0&size=100"),
+                 api("students?status=SUSPENDED&page=0&size=100")])
+      .then(function(rs){
+        function count(r){
+          var d = r.json;
+          if(!d) return "—";
+          if(typeof d.totalElements === "number") return d.totalElements;
+          if(Array.isArray(d.content)) return d.content.length;
+          if(Array.isArray(d)) return d.length;
+          return "—";
+        }
+        box.innerHTML = statCard(count(rs[0]), "students.active") +
+                        statCard(count(rs[1]), "students.suspended");
+        box.hidden = false;
+      }).catch(function(){});
   }
 
   function api(path, opts){
@@ -1519,6 +1695,8 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   }
   var rf = document.getElementById("refresh");
   if(rf) rf.addEventListener("click", function(){ if(live) loadStats(); });
+  var hbr = document.getElementById("hb-refresh");
+  if(hbr) hbr.addEventListener("click", function(){ if(live) loadHeartbeat(); });
 
   /* ---------- live trace request ---------- */
   function buildFire(){
