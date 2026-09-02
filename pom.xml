@@ -66,6 +66,12 @@
         -->
         <maven.compiler.release>11</maven.compiler.release>
 
+        <!-- JUnit 5 tags excluded from a normal build. The "exercise" tests in
+             src/test/.../exercises are meant to fail until you solve them, so
+             they must not pollute the application's own pass/fail signal.
+             The `exercises` profile below flips this to run only those. -->
+        <excluded.test.groups>exercise</excluded.test.groups>
+
         <!-- Jakarta EE platform -->
         <version.jakartaee.api>10.0.0</version.jakartaee.api>
 
@@ -173,6 +179,46 @@
             <artifactId>assertj-core</artifactId>
             <version>${version.assertj}</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- A JAX-RS IMPLEMENTATION, for tests only.
+             `jakarta.jakartaee-api` is `provided`: it gives you the interfaces
+             to compile against, and nothing that runs. In production WildFly
+             supplies RESTEasy. In a plain JUnit test there is no server, so
+             `Response.ok(...).build()` fails with
+
+                 ClassNotFoundException: Provider for
+                 jakarta.ws.rs.ext.RuntimeDelegate cannot be found
+
+             This dependency plays the container's part on the test classpath.
+             It is the `provided` scope lesson from fieldbook chapter 1, met in
+             practice: an annotation-only classpath cannot execute anything.
+             Used by the exercise tests in src/test/.../exercises. -->
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-core</artifactId>
+            <version>6.2.7.Final</version>
+            <scope>test</scope>
+            <exclusions>
+                <!-- RESTEasy drags in BOTH jandex artifacts: the legacy
+                     org.jboss:jandex:2.4.4 and io.smallrye:jandex:3.1.2. They
+                     share the package name org.jboss.jandex, so whichever wins
+                     the classpath order decides. Hibernate calls
+                     Indexer.indexWithSummary(), which exists only in 3.x, so the
+                     legacy jar shadowing it breaks every JPA test with a
+                     NoSuchMethodError - an error that names neither jandex nor
+                     RESTEasy. Excluding the old coordinate leaves 3.1.2 alone.
+
+                     Worth remembering: two jars can share a package, and then
+                     "which class is loaded" is decided by build order rather
+                     than by anything you wrote. This is exactly the problem
+                     WildFly's modular classloader (see configure.cli) exists to
+                     prevent at runtime. -->
+                <exclusion>
+                    <groupId>org.jboss</groupId>
+                    <artifactId>jandex</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Hibernate + H2: lets repository tests run against a real (in-memory)
@@ -330,6 +376,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${version.plugin.surefire}</version>
+                <!-- Tests tagged "exercise" are unsolved by design: they fail
+                     until you implement the stub they describe. Excluding them
+                     by default keeps `mvn verify` an honest signal about the
+                     application. Run them with -Pexercises. -->
+                <configuration>
+                    <excludedGroups>${excluded.test.groups}</excludedGroups>
+                </configuration>
             </plugin>
 
             <!-- Failsafe runs *integration* tests during `mvn verify`, after
@@ -340,6 +393,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>${version.plugin.failsafe}</version>
+                <configuration>
+                    <excludedGroups>${excluded.test.groups}</excludedGroups>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -375,5 +431,46 @@
 
         </plugins>
     </build>
+
+    <!-- =====================================================================
+         PROFILES
+         =====================================================================
+         A profile is a named set of overrides, activated with -P. This one
+         inverts the tag filter so that ONLY the exercise tests run:
+
+             mvn verify -Pexercises                     all exercises
+             mvn test   -Pexercises -Dtest=Ex2*         one of them
+
+         They fail until you implement the corresponding stub. That is the
+         point: the failing test is the specification.
+         ===================================================================== -->
+    <profiles>
+        <profile>
+            <id>exercises</id>
+            <properties>
+                <!-- Exclude nothing... -->
+                <excluded.test.groups></excluded.test.groups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!-- ...and include only the exercises. -->
+                            <groups>exercise</groups>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <groups>exercise</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

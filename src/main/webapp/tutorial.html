@@ -385,6 +385,59 @@ figcaption{
 .stat .v{font-family:"IBM Plex Mono",monospace;font-size:23px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1}
 .stat .l{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);margin-top:5px}
 
+/* ============================================================
+   SELF-TEST
+   ============================================================ */
+.scorebar{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--rule-strong);border-radius:6px;
+  padding:12px 16px;margin:20px 0;
+}
+.scorebar-label{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--ink-faint);
+}
+.score-num{
+  font-family:"IBM Plex Mono",monospace;font-size:23px;font-weight:600;
+  color:var(--runtime);font-variant-numeric:tabular-nums;line-height:1;
+}
+.score-num.miss{color:var(--accent)}
+.score-sep{font-size:12.5px;color:var(--ink-soft);margin-right:6px}
+.score-of{font-size:12.5px;color:var(--ink-faint);margin-left:auto;margin-right:10px}
+
+.qgroup{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);
+  margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule);
+}
+.qgroup:first-child{margin-top:0}
+.q{
+  background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+  padding:16px 18px;margin-bottom:10px;transition:border-color .18s;
+}
+.q.right{border-color:var(--runtime)}
+.q.wrong{border-color:var(--accent)}
+.q-text{font-size:15.5px;margin:0 0 12px;max-width:66ch}
+.q-num{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);
+  margin-right:8px;font-variant-numeric:tabular-nums;
+}
+.q-answer{
+  margin:12px 0 0;padding:13px 15px;border-left:3px solid var(--runtime);
+  background:var(--runtime-wash);border-radius:0 4px 4px 0;font-size:14.5px;max-width:70ch;
+}
+.q-answer code{
+  font-family:"IBM Plex Mono",monospace;font-size:.9em;
+  background:var(--surface);padding:1px 4px;border-radius:3px;border:1px solid var(--rule);
+}
+.q-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.q-verdict{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;font-weight:600;
+}
+.q-verdict.ok{color:var(--runtime)}
+.q-verdict.no{color:var(--accent)}
+
 @media(max-width:940px){
   .shell{grid-template-columns:1fr;gap:0}
   .rail{display:none}
@@ -1439,10 +1492,39 @@ String caller = securityContext.getCallerPrincipal().getName();</pre>
     </section>
   </article>
 
-  <!-- ============================ 11. RUNNING IT ============================ -->
-  <article class="chapter" data-cat="Running">
+  <!-- ============================ 11. SELF-TEST ============================ -->
+  <article class="chapter" data-cat="Self-test">
     <div class="chapter-head">
       <div class="eyebrow">Chapter 11</div>
+      <h1>Answer before you look</h1>
+      <p>Re-reading a chapter feels like learning and mostly is not. Trying to retrieve the answer — and failing — is what actually moves it into memory.</p>
+    </div>
+
+    <section class="sub" id="q-how">
+      <h2>How to use this</h2>
+      <p class="lede">Say the answer out loud, or write it down, <strong>before</strong> you reveal. The struggle is the mechanism, not an obstacle to it.</p>
+      <p>Getting one wrong is more useful than getting it right — it tells you precisely which chapter to reread, and the failed attempt makes the correction stick harder than reading it cold would have. Mark yourself honestly.</p>
+      <div class="scorebar">
+        <span class="scorebar-label">Score</span>
+        <span class="score-num" id="score-right">0</span>
+        <span class="score-sep">right</span>
+        <span class="score-num miss" id="score-wrong">0</span>
+        <span class="score-sep">missed</span>
+        <span class="score-of" id="score-of">of 24</span>
+        <button class="btn" id="quiz-reset">Start over</button>
+      </div>
+    </section>
+
+    <section class="sub" id="q-list">
+      <h2>The questions</h2>
+      <div id="quiz"></div>
+    </section>
+  </article>
+
+  <!-- ============================ 12. RUNNING IT ============================ -->
+  <article class="chapter" data-cat="Running">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 12</div>
       <h1>Your setup, and what to try</h1>
       <p>This application is installed natively on your machine — WildFly and PostgreSQL, no Docker.</p>
     </div>
@@ -1749,6 +1831,130 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       (TRANS[cur].length ? " Legal next: " + TRANS[cur].join(", ") + "." : "");
   }
   drawSm();
+
+  /* ---------- self-test: retrieval practice ---------- */
+  var QUIZ = [
+    {g:"Foundations", q:"There is no <code>main()</code> anywhere in this codebase. So what starts the application, and what does that make your code?",
+     a:"WildFly has the <code>main()</code>. Your WAR is a deployment — cargo handed to a server that already exists. This is the inversion that separates Jakarta EE from Spring Boot, which embeds the server in the jar instead."},
+    {g:"Foundations", q:"<code>jakarta.jakartaee-api</code> is declared with <code>&lt;scope&gt;provided&lt;/scope&gt;</code>. What does that do to the WAR, and what is the consequence?",
+     a:"It compiles against the API but does not package it. The WAR therefore contains no implementation of JPA, CDI, JTA or JAX-RS — every annotation is a hollow marker until the container wires it up. That is why the WAR is 141 KB rather than 40 MB."},
+    {g:"The trace", q:"In the enrollment trace, query 2 ended in <code>FOR NO KEY UPDATE</code>. What put it there, and what would break without it?",
+     a:"<code>findByIdWithPessimisticLock</code>, via <code>LockModeType</code>. It takes a real database row lock on the course until commit. Without it, two simultaneous requests could both read “one seat left” and both insert."},
+    {g:"The trace", q:"Two of the eight queries in that trace were never written by anyone. Which, and what caused them?",
+     a:"The prerequisites join and the student's enrollments — fired by <code>course.getPrerequisites()</code> and the passed-prerequisite check. Both are plain getters on lazy associations. This is the mechanism behind both N+1 and LazyInitializationException."},
+    {g:"Persistence", q:"What is the difference between the owning and the inverse side of a relationship, and what happens if you set only the inverse side?",
+     a:"The owning side holds the foreign key; only changes to it are written. Setting only the inverse side (the <code>mappedBy</code> one) updates your object graph and saves nothing — a bug that looks like “JPA is ignoring me”."},
+    {g:"Persistence", q:"The same line <code>course.getPrerequisites()</code> works inside the service and throws in the mapper. Why?",
+     a:"Inside the service the transaction is open, so the lazy getter quietly fires another SELECT. By the time the mapper runs the transaction has committed, the persistence context is closed and the entity is detached — there is no session left to run that query."},
+    {g:"Persistence", q:"What is the N+1 problem, and how would you detect it in this project?",
+     a:"One query for a list, then one more per row because a lazy association is touched in a loop. Detect it by reading the SQL log — <code>org.hibernate.SQL</code> is at DEBUG for exactly this reason. A suspiciously round number of near-identical queries is the signature."},
+    {g:"Persistence", q:"When would you choose pessimistic locking over optimistic, and which does this project use where?",
+     a:"Optimistic (<code>@Version</code>) for “two admins edited the same course” — cheap, detects conflict at write time, surfaces as 409. Pessimistic (<code>FOR UPDATE</code>) for the seat-counting race, where you must read-decide-insert without anyone else intervening."},
+    {g:"Injection", q:"You add a mutable field to an <code>@ApplicationScoped</code> bean. What have you just built?",
+     a:"A race condition. One instance is shared by every concurrent request, so the field is shared state. It will look fine in testing and fail under load. The services here are stateless for exactly this reason."},
+    {g:"Injection", q:"What does <code>ctx.proceed()</code> do inside an interceptor, and what other annotation works the same way?",
+     a:"It continues the chain to the real method: everything before it runs on the way in, everything after on the way out. <code>@Transactional</code> is an interceptor too — begin before <code>proceed()</code>, commit or roll back after."},
+    {g:"Injection", q:"Two observers receive the same event. One is <code>@Observes</code>, the other <code>@Observes(during = AFTER_SUCCESS)</code>. What is the practical difference?",
+     a:"The plain one runs immediately, inside the transaction — if it throws, everything rolls back. <code>AFTER_SUCCESS</code> waits until after commit. That is why you never send an email from inside a transaction: it can still roll back and you have emailed a lie."},
+    {g:"Transactions", q:"A <em>checked</em> exception is thrown inside a <code>@Transactional</code> method. Does the transaction roll back?",
+     a:"No — by default only unchecked exceptions and Errors roll back. The spec treats a checked exception as an expected business outcome. This rarely matches intuition, which is why every business exception in this project extends RuntimeException."},
+    {g:"Transactions", q:"What is the self-invocation trap, and why does the annotation silently do nothing?",
+     a:"Interceptors work through a proxy. A call from outside goes through it; a call from inside the same object goes straight to <code>this</code>, bypassing the proxy entirely. The annotation is still in the source — it just never runs. It applies to <code>@RolesAllowed</code> too."},
+    {g:"REST", q:"When do you return 400 and when 409?",
+     a:"400 means the request itself was malformed — a missing field, a bad enum. 409 means the request was perfectly well-formed but the current state forbids it: course full, student suspended, window closed. Getting this distinction right is most of designing a decent API."},
+    {g:"REST", q:"Why does no resource in this project return a JPA entity directly?",
+     a:"It would couple the public API to the database mapping, so a schema change would silently alter the contract; lazy associations would serialise unpredictably; and every internal field would be exposed. The mapper is the seam — and also where fetch plans get enforced."},
+    {g:"REST", q:"What is a correlation ID for, and what makes it work across every log line?",
+     a:"<code>CorrelationIdFilter</code> assigns one per request and puts it in the MDC — a per-thread map. The log pattern includes <code>%X{correlationId}</code>, so every line that request produced carries it. A user quotes the id; you grep one string and get the whole request."},
+    {g:"Domain", q:"An enrollment is COMPLETED. What can it legally transition to?",
+     a:"Nothing. COMPLETED and WITHDRAWN are both terminal — <code>EnumSet.noneOf(...)</code>. Attempting to grade it again returns ILLEGAL_STATE_TRANSITION. FAILED, by contrast, can go back to ACTIVE for a retake."},
+    {g:"Domain", q:"What makes <code>Enrollment</code> a rich domain model rather than an anemic one?",
+     a:"It has no public setter for status. The only way to change state is a method that enforces the rules — <code>recordPass</code> checks the transition, the 18–30 range, and that <em>lode</em> requires exactly 30. You cannot construct an invalid Enrollment through its public API."},
+    {g:"Testing", q:"Why does <code>CourseRepositoryIT</code> call <code>entityManager.clear()</code> before asserting?",
+     a:"To detach everything, reproducing the conditions the REST mapper actually runs under. Without it a lazy getter simply fires another query and succeeds, so the test would pass whether or not the association was fetch-joined."},
+    {g:"Testing", q:"What kind of bug can a unit test here never catch, and what kind can an integration test never catch?",
+     a:"A unit test cannot catch a broken fetch plan — there is no database to fetch from. Neither catches a concurrency bug like a missing row lock, because both are single-threaded. Knowing what your tests structurally cannot cover tells you where to be careful by other means."},
+    {g:"Scheduled", q:"The scheduled job's log lines show empty brackets where a correlation ID would be. Why?",
+     a:"The MDC is populated per HTTP request by <code>CorrelationIdFilter</code>, and a timer callback has no request behind it. Scheduled work is invisible to request-scoped tooling — which is why the job logs a row count on every run instead."},
+    {g:"Scheduled", q:"The nightly sweep uses a JPQL bulk <code>UPDATE</code>. What does that skip?",
+     a:"Everything JPA normally does: no entity is loaded, so <code>withdraw()</code> and its state-machine check never run; no lifecycle callbacks fire (hence <code>updatedAt</code> set by hand); <code>@Version</code> is not bumped; and anything already in the persistence context is now stale."},
+    {g:"Security", q:"This API has no authentication at all. What is actually preventing anyone from awarding themselves a 30 e lode right now?",
+     a:"One line: WildFly is bound to <code>127.0.0.1</code>. The OS will not route external packets to loopback. Network position is doing the entire job of an access-control system — and the Docker CMD used <code>-b 0.0.0.0</code>, which removes even that."},
+    {g:"Security", q:"Searching for <code>' OR '1'='1</code> returns <em>fewer</em> rows than a normal search, not more. Why is that the expected result?",
+     a:"Bound parameters are sent to the database separately from the SQL text, so the payload can never be parsed as code. The server searched for a student literally named <code>' OR '1'='1</code> and found none. 34 bound parameters, zero concatenated queries."}
+  ];
+
+  (function buildQuiz(){
+    var host = document.getElementById("quiz");
+    if(!host) return;
+    var right = 0, wrong = 0;
+    var rightEl = document.getElementById("score-right");
+    var wrongEl = document.getElementById("score-wrong");
+    var ofEl = document.getElementById("score-of");
+    if(ofEl) ofEl.textContent = "of " + QUIZ.length;
+
+    function render(){
+      host.innerHTML = "";
+      right = 0; wrong = 0; sync();
+      var lastGroup = null;
+      QUIZ.forEach(function(item, i){
+        if(item.g !== lastGroup){
+          var h = document.createElement("div");
+          h.className = "qgroup";
+          h.textContent = item.g;
+          host.appendChild(h);
+          lastGroup = item.g;
+        }
+        var card = document.createElement("div");
+        card.className = "q";
+        card.innerHTML =
+          '<p class="q-text"><span class="q-num">' + String(i + 1).padStart(2, "0") + '</span>' + item.q + '</p>' +
+          '<div class="q-actions"><button class="btn reveal">Show answer</button></div>' +
+          '<div class="q-answer" hidden>' + item.a + '</div>';
+
+        var answer = card.querySelector(".q-answer");
+        var actions = card.querySelector(".q-actions");
+        var revealBtn = card.querySelector(".reveal");
+
+        revealBtn.addEventListener("click", function(){
+          answer.hidden = false;
+          actions.innerHTML = "";
+          var got = document.createElement("button");
+          got.className = "btn"; got.textContent = "I had it";
+          var miss = document.createElement("button");
+          miss.className = "btn"; miss.textContent = "I missed it";
+          var verdict = document.createElement("span");
+          verdict.className = "q-verdict";
+
+          function mark(ok){
+            if(card.classList.contains("right")) right--;
+            if(card.classList.contains("wrong")) wrong--;
+            card.classList.remove("right", "wrong");
+            card.classList.add(ok ? "right" : "wrong");
+            if(ok){ right++; } else { wrong++; }
+            verdict.className = "q-verdict " + (ok ? "ok" : "no");
+            verdict.textContent = ok ? "got it" : "reread " + item.g.toLowerCase();
+            sync();
+          }
+          got.addEventListener("click", function(){ mark(true); });
+          miss.addEventListener("click", function(){ mark(false); });
+          actions.appendChild(got);
+          actions.appendChild(miss);
+          actions.appendChild(verdict);
+        });
+        host.appendChild(card);
+      });
+    }
+
+    function sync(){
+      if(rightEl) rightEl.textContent = right;
+      if(wrongEl) wrongEl.textContent = wrong;
+    }
+
+    var resetBtn = document.getElementById("quiz-reset");
+    if(resetBtn) resetBtn.addEventListener("click", render);
+    render();
+  })();
 
   /* =========================================================
      LIVE MODE — only works when WildFly serves this page,
