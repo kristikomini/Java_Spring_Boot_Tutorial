@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jakarta EE Fieldbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600;700&display=swap">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<style>
+/* ============================================================
+   TOKENS — light is the bare :root, dark redefines tokens only
+   ============================================================ */
+:root{
+  --bg:#F1EFEC;
+  --surface:#FBFAF9;
+  --surface-2:#E7E2DD;
+  --ink:#1B1918;
+  --ink-soft:#5D5551;
+  --ink-faint:#8A807A;
+  --rule:#D5CEC7;
+  --rule-strong:#B8AEA5;
+  --accent:#8A2733;
+  --accent-ink:#FFFFFF;
+  --accent-wash:#F3E4E2;
+  --runtime:#2F6B63;
+  --runtime-wash:#DFEAE7;
+  --code-bg:#211E1D;
+  --code-fg:#E6DFD9;
+  --code-dim:#8F847C;
+  --code-key:#E8A2A8;
+  --code-str:#9FC7A6;
+  --code-num:#DDBE86;
+  --shadow:0 1px 2px rgba(27,25,24,.06), 0 8px 24px rgba(27,25,24,.06);
+  --maxw:1240px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151312;
+    --surface:#1D1A19;
+    --surface-2:#272322;
+    --ink:#EDE7E2;
+    --ink-soft:#A99E97;
+    --ink-faint:#7C726C;
+    --rule:#332D2A;
+    --rule-strong:#4A423E;
+    --accent:#D9707C;
+    --accent-ink:#1B1918;
+    --accent-wash:#33211F;
+    --runtime:#6FB3A7;
+    --runtime-wash:#1B2A27;
+    --code-bg:#0F0D0D;
+    --code-fg:#E6DFD9;
+    --code-dim:#7A706A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151312;
+  --surface:#1D1A19;
+  --surface-2:#272322;
+  --ink:#EDE7E2;
+  --ink-soft:#A99E97;
+  --ink-faint:#7C726C;
+  --rule:#332D2A;
+  --rule-strong:#4A423E;
+  --accent:#D9707C;
+  --accent-ink:#1B1918;
+  --accent-wash:#33211F;
+  --runtime:#6FB3A7;
+  --runtime-wash:#1B2A27;
+  --code-bg:#0F0D0D;
+  --code-fg:#E6DFD9;
+  --code-dim:#7A706A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.65;
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:"IBM Plex Serif",Georgia,serif;text-wrap:balance;margin:0;line-height:1.22}
+code,pre,.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+/* ============================================================
+   NAVBAR
+   ============================================================ */
+.topbar{
+  position:sticky;top:0;z-index:60;
+  background:color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--rule);
+}
+.topbar-inner{
+  max-width:var(--maxw);margin:0 auto;padding:0 24px;
+  display:flex;align-items:center;gap:28px;min-height:60px;
+}
+.brand{display:flex;align-items:baseline;gap:9px;flex:none}
+.brand-mark{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+  letter-spacing:.14em;color:var(--accent-ink);background:var(--accent);
+  padding:3px 7px;border-radius:2px;
+}
+.brand-name{font-family:"IBM Plex Serif",serif;font-weight:600;font-size:15px;letter-spacing:-.01em}
+nav.cats{display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin;flex:1}
+nav.cats button{
+  font-family:inherit;font-size:13.5px;font-weight:500;
+  background:none;border:0;color:var(--ink-soft);
+  padding:8px 11px;cursor:pointer;white-space:nowrap;border-radius:3px;
+  border-bottom:2px solid transparent;transition:color .15s, border-color .15s;
+}
+nav.cats button:hover{color:var(--ink)}
+nav.cats button[aria-current="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ============================================================
+   SHELL
+   ============================================================ */
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 24px;display:grid;grid-template-columns:216px minmax(0,1fr);gap:52px;align-items:start}
+.rail{position:sticky;top:88px;padding:34px 0 60px;font-size:13.5px}
+.rail-label{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);
+  padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--rule);
+}
+.rail a{
+  display:block;color:var(--ink-soft);text-decoration:none;
+  padding:6px 0 6px 13px;border-left:2px solid var(--rule);
+  transition:color .15s,border-color .15s;
+}
+.rail a:hover{color:var(--ink)}
+.rail a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+main{padding:34px 0 120px;min-width:0}
+
+/* ============================================================
+   CHAPTERS + SECTIONS
+   ============================================================ */
+.chapter{display:none}
+.chapter.on{display:block;animation:rise .34s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+.chapter-head{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:8px}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.17em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;
+}
+.chapter-head h1{font-size:clamp(29px,4.1vw,42px);font-weight:700;letter-spacing:-.02em}
+.chapter-head p{color:var(--ink-soft);font-size:17px;max-width:63ch;margin:12px 0 0}
+
+section.sub{padding:44px 0;border-bottom:1px solid var(--rule);scroll-margin-top:80px}
+section.sub:last-of-type{border-bottom:0}
+section.sub h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+section.sub h3{font-size:16.5px;font-weight:600;margin:28px 0 8px}
+section.sub p{max-width:66ch;margin:13px 0;color:var(--ink)}
+section.sub p.lede{color:var(--ink-soft);font-size:16.5px}
+ul.pts{max-width:66ch;padding-left:0;list-style:none;margin:14px 0;display:flex;flex-direction:column;gap:9px}
+ul.pts li{padding-left:19px;position:relative;color:var(--ink)}
+ul.pts li::before{content:"";position:absolute;left:2px;top:.66em;width:6px;height:1.5px;background:var(--accent)}
+strong{font-weight:600}
+em.term{font-style:normal;font-weight:600;color:var(--accent)}
+
+/* ============================================================
+   CODE
+   ============================================================ */
+.code{
+  background:var(--code-bg);color:var(--code-fg);
+  border-radius:5px;overflow:hidden;margin:18px 0;box-shadow:var(--shadow);
+}
+.code-top{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.09);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--code-dim);
+}
+.code-top .file{color:#C9BEB6}
+.code pre{margin:0;padding:14px 16px;overflow-x:auto;font-size:12.9px;line-height:1.72}
+.code pre::-webkit-scrollbar{height:8px}
+.code pre::-webkit-scrollbar-thumb{background:#4A423E;border-radius:4px}
+.k{color:var(--code-key)}
+.s{color:var(--code-str)}
+.n{color:var(--code-num)}
+.c{color:var(--code-dim);font-style:italic}
+code.inline{
+  background:var(--surface-2);padding:1.5px 5px;border-radius:3px;
+  font-size:.885em;color:var(--ink);border:1px solid var(--rule);
+}
+
+/* ============================================================
+   CALLOUTS
+   ============================================================ */
+.note{
+  border-left:3px solid var(--accent);background:var(--accent-wash);
+  padding:15px 18px;margin:20px 0;border-radius:0 4px 4px 0;max-width:70ch;
+}
+.note .tag{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px;
+}
+.note p{margin:0;font-size:15px}
+.note p + p{margin-top:9px}
+
+.trap{border-left-color:var(--runtime);background:var(--runtime-wash)}
+.trap .tag{color:var(--runtime)}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.tw{overflow-x:auto;margin:20px 0;border:1px solid var(--rule);border-radius:5px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:460px}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+th{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);
+  background:var(--surface-2);
+}
+tr:last-child td{border-bottom:0}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace;font-size:12.5px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ============================================================
+   FIGURES
+   ============================================================ */
+figure{margin:26px 0;padding:0}
+figure svg{max-width:100%;height:auto;display:block;margin:0 auto}
+figcaption{
+  font-size:13px;color:var(--ink-soft);margin-top:11px;
+  padding-top:9px;border-top:1px solid var(--rule);max-width:70ch;
+}
+.fig-wrap{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:22px;overflow-x:auto}
+
+/* ============================================================
+   TRACE PLAYER
+   ============================================================ */
+.player{background:var(--surface);border:1px solid var(--rule-strong);border-radius:6px;overflow:hidden;margin:24px 0;box-shadow:var(--shadow)}
+.player-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:11px 15px;border-bottom:1px solid var(--rule);background:var(--surface-2);
+}
+.player-bar .ttl{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-right:auto;
+}
+.btn{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;font-weight:500;
+  background:var(--surface);color:var(--ink);border:1px solid var(--rule-strong);
+  padding:5px 13px;border-radius:3px;cursor:pointer;transition:all .14s;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.1);color:var(--accent-ink)}
+.player-body{display:grid;grid-template-columns:minmax(0,1fr) 288px}
+@media(max-width:880px){.player-body{grid-template-columns:1fr}}
+.trace-log{
+  background:var(--code-bg);color:var(--code-fg);
+  font-family:"IBM Plex Mono",monospace;font-size:11.9px;line-height:1.55;
+  padding:13px;min-height:330px;max-height:330px;overflow-y:auto;
+}
+.tl{display:grid;grid-template-columns:66px 1fr;gap:9px;padding:2.5px 6px;border-radius:3px;opacity:.24;transition:opacity .25s,background .25s}
+.tl.seen{opacity:1}
+.tl.now{background:rgba(217,112,124,.17);opacity:1}
+.tl .t{color:var(--code-dim)}
+.tl .m{word-break:break-word}
+.tl.sql .m{color:var(--code-str)}
+.tl.evt .m{color:var(--code-num)}
+.side{padding:15px;border-left:1px solid var(--rule)}
+@media(max-width:880px){.side{border-left:0;border-top:1px solid var(--rule)}}
+.side h4{font-size:13.5px;font-weight:600;margin-bottom:7px}
+.side p{font-size:13.2px;color:var(--ink-soft);margin:0 0 10px}
+.side .where{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent);
+  display:block;padding-top:9px;border-top:1px solid var(--rule);word-break:break-all;
+}
+.lay{transition:opacity .3s}
+.lay.dim{opacity:.2}
+
+/* ============================================================
+   FETCH TOGGLE DEMO
+   ============================================================ */
+.demo{background:var(--surface);border:1px solid var(--rule-strong);border-radius:6px;padding:18px;margin:24px 0}
+.switch{display:flex;gap:0;border:1px solid var(--rule-strong);border-radius:4px;overflow:hidden;width:fit-content;margin-bottom:15px}
+.switch button{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;background:var(--surface);
+  color:var(--ink-soft);border:0;padding:7px 15px;cursor:pointer;transition:all .14s;
+}
+.switch button+button{border-left:1px solid var(--rule-strong)}
+.switch button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.outbox{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.outbox{grid-template-columns:1fr}}
+.out h5{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-faint);margin:0 0 7px;font-weight:600;
+}
+.status{
+  font-family:"IBM Plex Mono",monospace;font-size:20px;font-weight:600;
+  padding:9px 13px;border-radius:4px;margin-bottom:9px;
+}
+.status.ok{background:var(--runtime-wash);color:var(--runtime)}
+.status.bad{background:var(--accent-wash);color:var(--accent)}
+.outp{font-size:13px;color:var(--ink-soft);margin:0}
+
+/* ============================================================
+   STATE MACHINE
+   ============================================================ */
+.sm{display:flex;gap:7px;flex-wrap:wrap;margin:16px 0}
+.sm button{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;padding:7px 14px;
+  border:1px solid var(--rule-strong);background:var(--surface);color:var(--ink-soft);
+  border-radius:3px;cursor:pointer;transition:all .15s;
+}
+.sm button.cur{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.sm button.can{border-color:var(--runtime);color:var(--runtime)}
+.sm button.cant{opacity:.42;cursor:not-allowed}
+.sm-out{font-size:13.5px;color:var(--ink-soft);margin-top:6px;min-height:1.6em}
+
+/* ============================================================
+   LIVE MODE
+   ============================================================ */
+.pill{
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;padding:3px 8px;border-radius:99px;
+  border:1px solid var(--rule-strong);color:var(--ink-faint);white-space:nowrap;flex:none;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.pill::before{content:"";width:6px;height:6px;border-radius:99px;background:var(--ink-faint)}
+.pill.live{border-color:var(--runtime);color:var(--runtime)}
+.pill.live::before{background:var(--runtime);animation:beat 2.1s ease-in-out infinite}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.28}}
+
+.livebox{border:1px solid var(--rule-strong);border-radius:6px;background:var(--surface);margin:24px 0;overflow:hidden}
+.livebox-top{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 15px;
+  background:var(--surface-2);border-bottom:1px solid var(--rule);
+}
+.livebox-top .ttl{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-right:auto;
+}
+.livebox-body{padding:15px}
+.offline-note{
+  font-size:13.5px;color:var(--ink-soft);margin:0;
+  padding:11px 14px;border-left:3px solid var(--rule-strong);background:var(--surface-2);border-radius:0 4px 4px 0;
+}
+
+.reqs{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.req{
+  display:grid;grid-template-columns:52px 1fr auto;gap:11px;align-items:center;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;text-align:left;
+  background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+  padding:7px 11px;cursor:pointer;color:var(--ink);transition:border-color .14s,background .14s;
+}
+.req:hover:not(:disabled){border-color:var(--accent)}
+.req:disabled{opacity:.5;cursor:not-allowed}
+.req .verb{font-weight:600;font-size:10.5px;letter-spacing:.06em}
+.req .verb.get{color:var(--runtime)}
+.req .verb.post{color:var(--accent)}
+.req .verb.del{color:var(--accent)}
+.req .path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.req .want{font-size:10px;color:var(--ink-faint);white-space:nowrap}
+
+.resp{background:var(--code-bg);border-radius:5px;overflow:hidden}
+.resp-top{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 13px;
+  border-bottom:1px solid rgba(255,255,255,.09);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--code-dim);
+}
+.resp-code{font-weight:600;font-size:13px}
+.resp-code.ok{color:#7FBF8F}
+.resp-code.err{color:#E8929C}
+.resp pre{
+  margin:0;padding:13px;overflow-x:auto;max-height:280px;overflow-y:auto;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;line-height:1.6;color:var(--code-fg);
+}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:11px}
+.stat{background:var(--surface-2);border:1px solid var(--rule);border-radius:5px;padding:12px 14px}
+.stat .v{font-family:"IBM Plex Mono",monospace;font-size:23px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .l{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);margin-top:5px}
+
+@media(max-width:940px){
+  .shell{grid-template-columns:1fr;gap:0}
+  .rail{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">EE 10</span>
+      <span class="brand-name">Fieldbook</span>
+    </div>
+    <nav class="cats" id="cats" aria-label="Chapters"></nav>
+    <span class="pill" id="pill" title="Whether this page can reach the enrollment API">checking</span>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-label">In this chapter</div>
+    <div id="rail"></div>
+  </aside>
+
+  <main id="main">
+
+  <!-- ============================ 1. FOUNDATIONS ============================ -->
+  <article class="chapter on" data-cat="Foundations">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 01</div>
+      <h1>What you are actually running</h1>
+      <p>Before any annotation makes sense, one idea has to land: your code is not a program. It is a <em class="term">deployment</em> — a slice handed to a server that already exists.</p>
+    </div>
+
+    <section class="sub" id="f-1">
+      <h2>Jakarta EE is a set of contracts</h2>
+      <p class="lede">Jakarta EE is not a library you call. It is a specification — a list of promises an application server makes to your code.</p>
+      <p>You write a class, mark it with an annotation, and something else takes responsibility for creating it, wrapping it in a transaction, exposing it over HTTP, or handing it a database connection. That "something else" is the <em class="term">container</em>. In this project it is WildFly.</p>
+      <p>This is the inversion that confuses everyone coming from Spring Boot or plain Java: there is no <code class="inline">main()</code> in this codebase. Search for one — you won't find it. The server has the <code class="inline">main()</code>. Your code is cargo.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Specification</th><th>What it gives you</th><th>Where you see it here</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">JPA</td><td>Objects ↔ database tables</td><td class="mono">domain/model, repository</td></tr>
+            <tr><td class="mono">CDI</td><td>Creates and wires your objects</td><td class="mono">@Inject, @ApplicationScoped</td></tr>
+            <tr><td class="mono">JTA</td><td>Transaction boundaries</td><td class="mono">@Transactional</td></tr>
+            <tr><td class="mono">JAX-RS</td><td>HTTP endpoints</td><td class="mono">api/rest</td></tr>
+            <tr><td class="mono">Bean Validation</td><td>Constraint checking</td><td class="mono">@NotNull, @StudentNumber</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sub" id="f-2">
+      <h2>The WAR, and the word <code class="inline">provided</code></h2>
+      <p>Your build produces a <strong>WAR</strong> — a Web Application Archive. Not a runnable jar. Look at what the build declares:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">pom.xml</span><span>the two lines that define everything</span></div>
+<pre><span class="k">&lt;packaging&gt;</span>war<span class="k">&lt;/packaging&gt;</span>
+
+<span class="k">&lt;dependency&gt;</span>
+    <span class="k">&lt;groupId&gt;</span>jakarta.platform<span class="k">&lt;/groupId&gt;</span>
+    <span class="k">&lt;artifactId&gt;</span>jakarta.jakartaee-api<span class="k">&lt;/artifactId&gt;</span>
+    <span class="k">&lt;scope&gt;</span><span class="s">provided</span><span class="k">&lt;/scope&gt;</span>   <span class="c">&lt;!-- ← the whole model, in one word --&gt;</span>
+<span class="k">&lt;/dependency&gt;</span></pre>
+      </div>
+      <p><em class="term">provided</em> means: compile against this, but do <strong>not</strong> package it. The runtime supplies it. So the WAR contains your classes and <strong>no implementation</strong> of JPA, CDI, JTA or JAX-RS. Every annotation in the project is an empty marker until WildFly wires it up.</p>
+      <p>That is why this application's WAR is about <strong>141 KB</strong>. A Spring Boot fat jar doing the same job is 30–50 MB, because it embeds the server. Neither is wrong — they are opposite answers to "who owns the runtime?"</p>
+      <figure>
+        <div class="fig-wrap">
+          <svg viewBox="0 0 700 268" role="img" aria-label="The WAR contains only application classes; the container supplies every specification implementation beneath it">
+            <rect x="8" y="8" width="684" height="252" rx="6" fill="none" stroke="var(--runtime)" stroke-width="1.5"/>
+            <text x="24" y="32" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--runtime)" font-weight="600">WILDFLY 31 — THE CONTAINER (provided)</text>
+            <rect x="24" y="44" width="652" height="86" rx="4" fill="var(--surface-2)" stroke="var(--rule)"/>
+            <text x="40" y="66" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-faint)">SPECIFICATION IMPLEMENTATIONS</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">
+              <rect x="40" y="78" width="118" height="34" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="99" y="99" text-anchor="middle">Hibernate</text>
+              <rect x="170" y="78" width="118" height="34" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="229" y="99" text-anchor="middle">Weld (CDI)</text>
+              <rect x="300" y="78" width="118" height="34" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="359" y="99" text-anchor="middle">Narayana</text>
+              <rect x="430" y="78" width="118" height="34" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="489" y="99" text-anchor="middle">RESTEasy</text>
+              <rect x="560" y="78" width="100" height="34" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="610" y="99" text-anchor="middle">Undertow</text>
+            </g>
+            <rect x="24" y="146" width="652" height="98" rx="4" fill="var(--accent-wash)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="40" y="168" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)" font-weight="600">enrollment.war — 141 KB — EVERYTHING YOU WROTE</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">
+              <rect x="40" y="182" width="150" height="30" rx="3" fill="var(--surface)" stroke="var(--rule-strong)"/><text x="115" y="201" text-anchor="middle">api/</text>
+              <rect x="202" y="182" width="150" height="30" rx="3" fill="var(--surface)" stroke="var(--rule-strong)"/><text x="277" y="201" text-anchor="middle">service/</text>
+              <rect x="364" y="182" width="150" height="30" rx="3" fill="var(--surface)" stroke="var(--rule-strong)"/><text x="439" y="201" text-anchor="middle">repository/</text>
+              <rect x="526" y="182" width="134" height="30" rx="3" fill="var(--surface)" stroke="var(--rule-strong)"/><text x="593" y="201" text-anchor="middle">domain/</text>
+            </g>
+            <text x="40" y="232" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--ink-soft)">No framework code ships inside. The annotations are hollow until the layer above binds them.</text>
+          </svg>
+        </div>
+        <figcaption>Everything in teal is supplied by WildFly at deploy time. Everything in bordeaux is your 141 KB. Remove the container and nothing in the lower box can run.</figcaption>
+      </figure>
+    </section>
+
+    <section class="sub" id="f-3">
+      <h2>The four layers, and the rule between them</h2>
+      <p>Requests descend; nothing skips a level. Each layer is allowed to know only about the one directly beneath it.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Layer</th><th>Job</th><th>Forbidden</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">api/</td><td>HTTP in, JSON out</td><td>Business rules</td></tr>
+            <tr><td class="mono">service/</td><td>Rules, transactions, events</td><td>Knowing about HTTP</td></tr>
+            <tr><td class="mono">repository/</td><td>Queries</td><td>Business rules</td></tr>
+            <tr><td class="mono">domain/</td><td>State + invariants</td><td>Knowing about anything above</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="tag">Why it matters</span>
+        <p>The service layer never imports a JAX-RS type. That is what lets the same <code class="inline">EnrollmentService</code> be driven by a REST call, a scheduled job, or a test — none of which involve HTTP. When a layer starts importing from above, the architecture has quietly become a single layer wearing four folder names.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 2. THE TRACE ============================ -->
+  <article class="chapter" data-cat="The Trace">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 02</div>
+      <h1>One request, all the way down</h1>
+      <p>This is a real trace, captured from this application enrolling student 100003 into CS101. Every line below came out of the server log. Step through it.</p>
+    </div>
+
+    <section class="sub" id="t-1">
+      <h2>The replay</h2>
+      <p class="lede">Press play. The left pane is the log; the right pane explains the step you are on; the diagram lights up the layer currently executing.</p>
+
+      <div class="player">
+        <div class="player-bar">
+          <span class="ttl">POST /api/enrollments · correlation TRACE-DEMO-1</span>
+          <button class="btn primary" id="play">▶ Play</button>
+          <button class="btn" id="step">Step</button>
+          <button class="btn" id="reset">Reset</button>
+        </div>
+        <div class="player-body">
+          <div class="trace-log" id="log"></div>
+          <div class="side">
+            <svg viewBox="0 0 260 172" role="img" aria-label="Layer diagram highlighting the currently executing layer" style="margin-bottom:14px">
+              <g font-family="IBM Plex Mono, monospace" font-size="10.5">
+                <g class="lay" id="ly-filter"><rect x="6" y="6" width="248" height="26" rx="3" fill="var(--accent-wash)" stroke="var(--accent)"/><text x="130" y="23" text-anchor="middle" fill="var(--ink)">CorrelationIdFilter</text></g>
+                <g class="lay" id="ly-rest"><rect x="6" y="38" width="248" height="26" rx="3" fill="var(--surface-2)" stroke="var(--rule-strong)"/><text x="130" y="55" text-anchor="middle" fill="var(--ink)">EnrollmentResource</text></g>
+                <g class="lay" id="ly-svc"><rect x="6" y="70" width="248" height="26" rx="3" fill="var(--surface-2)" stroke="var(--rule-strong)"/><text x="130" y="87" text-anchor="middle" fill="var(--ink)">EnrollmentService @Transactional</text></g>
+                <g class="lay" id="ly-repo"><rect x="6" y="102" width="248" height="26" rx="3" fill="var(--surface-2)" stroke="var(--rule-strong)"/><text x="130" y="119" text-anchor="middle" fill="var(--ink)">Repositories</text></g>
+                <g class="lay" id="ly-db"><rect x="6" y="134" width="248" height="26" rx="3" fill="var(--runtime-wash)" stroke="var(--runtime)"/><text x="130" y="151" text-anchor="middle" fill="var(--ink)">PostgreSQL</text></g>
+              </g>
+            </svg>
+            <h4 id="s-title">Ready</h4>
+            <p id="s-body">Press Play to send the request.</p>
+            <span class="where" id="s-where"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sub" id="t-1b">
+      <h2>Now send it for real</h2>
+      <p class="lede">The replay above is a recording. This one actually hits your server.</p>
+      <p>Each attempt generates a fresh correlation ID. Copy it, then grep the WildFly log for that string and you will find the whole request — filter, interceptor, every query, commit.</p>
+      <div class="livebox">
+        <div class="livebox-top">
+          <span class="ttl">Live request</span>
+          <button class="btn primary" id="fire">Send POST /api/enrollments</button>
+        </div>
+        <div class="livebox-body" id="fire-body">
+          <p class="offline-note" id="fire-off">Not connected to the API. Open this page at <code class="inline">localhost:8280/enrollment/tutorial.html</code> to enable live requests.</p>
+        </div>
+      </div>
+      <div class="note trap">
+        <span class="tag">This writes to your database</span>
+        <p>A successful call creates a real enrollment row. Repeat it and the second attempt returns <strong>409 DUPLICATE_RESOURCE</strong> — which is the rule engine working, not a failure. That is also why <code class="inline">api-tour.sh</code> only scores 41/41 against a freshly seeded database.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="t-2">
+      <h2>Eight queries, eight business rules</h2>
+      <p>The service fired eight SQL statements. Each one exists because a rule demanded it — the mapping is one to one.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th class="num">#</th><th>Java</th><th>Rule</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td class="mono">studentRepository.findById</td><td>Does the student exist and may they enrol?</td></tr>
+            <tr><td class="num">2</td><td class="mono">findByIdWithPessimisticLock</td><td>Does the course exist, is the window open?</td></tr>
+            <tr><td class="num">3</td><td class="mono">findByStudentAndCourse</td><td>Already enrolled?</td></tr>
+            <tr><td class="num">4</td><td class="mono">countOccupiedSeats</td><td>Is the course full?</td></tr>
+            <tr><td class="num">5</td><td class="mono">course.getPrerequisites()</td><td>What are the prerequisites?</td></tr>
+            <tr><td class="num">6</td><td class="mono">student.getEnrollments()</td><td>Have they passed them?</td></tr>
+            <tr><td class="num">7–8</td><td class="mono">save() + flush()</td><td>Write the row</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note trap">
+        <span class="tag">Look again at 5 and 6</span>
+        <p>Nobody wrote those queries. They are plain getter calls — <code class="inline">course.getPrerequisites()</code> — that silently fired SQL because the collections are lazy. This is the single most important mechanism in JPA, and Chapter 3 is about what happens when it fires at the wrong moment.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 3. PERSISTENCE ============================ -->
+  <article class="chapter" data-cat="Persistence">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 03</div>
+      <h1>JPA and the persistence context</h1>
+      <p>Objects in memory, rows in a database, and a cache in between that explains almost every surprise you will hit.</p>
+    </div>
+
+    <section class="sub" id="p-1">
+      <h2>Entities and the shared base class</h2>
+      <p>Every table in this schema has an <code class="inline">id</code>, a <code class="inline">version</code>, and timestamps. Rather than repeat them, they live in one place:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">domain/model/BaseEntity.java</span><span>Java: inheritance for mapping reuse</span></div>
+<pre><span class="k">@MappedSuperclass</span>
+<span class="k">public abstract class</span> BaseEntity <span class="k">implements</span> Serializable {
+
+    <span class="k">@Id</span>
+    <span class="k">@GeneratedValue</span>(strategy = GenerationType.SEQUENCE, generator = <span class="s">"app_id_generator"</span>)
+    <span class="k">private</span> Long id;
+
+    <span class="k">@Version</span>                          <span class="c">// optimistic locking — see below</span>
+    <span class="k">private long</span> version;
+
+    <span class="k">@Column</span>(name = <span class="s">"created_at"</span>, updatable = <span class="k">false</span>)
+    <span class="k">private</span> Instant createdAt;
+}</pre>
+      </div>
+      <p><em class="term">@MappedSuperclass</em> is pure code reuse. It is not an entity, has no table of its own, and cannot be queried. Its fields are copied into each subclass's table at mapping time. Contrast that with real JPA inheritance (<code class="inline">@Inheritance</code>), where the parent <em>is</em> queryable and the database layout changes.</p>
+      <h3>The Java bit: why <code class="inline">equals()</code> is hard here</h3>
+      <p>Two objects representing the same row must be equal. But before <code class="inline">persist()</code>, <code class="inline">id</code> is <code class="inline">null</code> — so an id-based <code class="inline">equals</code> makes every new object equal to every other new object, and a <code class="inline">HashSet</code> of unsaved entities collapses to one element. This is a genuine, famous JPA trap, and it is why <code class="inline">BaseEntity</code> handles it deliberately rather than letting the IDE generate it.</p>
+    </section>
+
+    <section class="sub" id="p-2">
+      <h2>All four relationships, in one class</h2>
+      <p><code class="inline">Course</code> was written to contain every association type you will meet:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">domain/model/Course.java</span><span>the four shapes</span></div>
+<pre><span class="c">// MANY courses → ONE professor. The owning side: this table holds the FK.</span>
+<span class="k">@ManyToOne</span>(fetch = FetchType.LAZY, optional = <span class="k">false</span>)
+<span class="k">@JoinColumn</span>(name = <span class="s">"professor_id"</span>)
+<span class="k">private</span> Professor professor;
+
+<span class="c">// SELF-referencing MANY-to-MANY: a course requires other courses.</span>
+<span class="k">@ManyToMany</span>(fetch = FetchType.LAZY)
+<span class="k">@JoinTable</span>(name = <span class="s">"course_prerequisites"</span>,
+    joinColumns        = <span class="k">@JoinColumn</span>(name = <span class="s">"course_id"</span>),
+    inverseJoinColumns = <span class="k">@JoinColumn</span>(name = <span class="s">"prerequisite_id"</span>))
+<span class="k">private</span> Set&lt;Course&gt; prerequisites = <span class="k">new</span> LinkedHashSet&lt;&gt;();
+
+<span class="c">// INVERSE side. mappedBy = "this is mirrored by a field over there".</span>
+<span class="k">@OneToMany</span>(mappedBy = <span class="s">"course"</span>, fetch = FetchType.LAZY)
+<span class="k">private</span> Set&lt;Enrollment&gt; enrollments = <span class="k">new</span> LinkedHashSet&lt;&gt;();</pre>
+      </div>
+      <p><strong>Owning versus inverse</strong> is the concept to hold onto. The owning side is whichever one has the foreign-key column; only changes to the owning side are written. Setting the inverse side alone updates your object graph and saves nothing to the database — a bug that looks like "JPA is ignoring me".</p>
+      <p><code class="inline">Enrollment</code> is not a plain join table: it carries a grade, a status and timestamps. When a relationship has its own data it stops being <code class="inline">@ManyToMany</code> and becomes an <em class="term">association entity</em> — two <code class="inline">@ManyToOne</code>s pointing outward.</p>
+    </section>
+
+    <section class="sub" id="p-3">
+      <h2>Lazy loading, and the exception it causes</h2>
+      <p class="lede">Every association above is <code class="inline">LAZY</code>. Accessing one runs a query — but only while the persistence context is still open.</p>
+      <p>The <em class="term">persistence context</em> is a cache of managed entities that lives for the duration of the transaction. Inside it, a lazy getter transparently fires SQL. Once the transaction commits, entities become <em class="term">detached</em>, and the same getter throws.</p>
+      <p>Here is that boundary, drawn against the request from Chapter 2:</p>
+      <figure>
+        <div class="fig-wrap">
+          <svg viewBox="0 0 700 178" role="img" aria-label="Timeline showing the persistence context open during the service method and closed when the mapper runs">
+            <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><polygon points="0 0, 9 4.5, 0 9" fill="currentColor"/></marker></defs>
+            <line x1="30" y1="150" x2="670" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+            <text x="30" y="169" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">time</text>
+            <rect x="126" y="40" width="330" height="76" rx="4" fill="var(--runtime-wash)" stroke="var(--runtime)" stroke-width="1.5"/>
+            <text x="291" y="60" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--runtime)">PERSISTENCE CONTEXT OPEN</text>
+            <text x="291" y="80" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">entities managed · lazy getters fire SQL</text>
+            <text x="291" y="99" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-soft)">getPrerequisites() → works</text>
+            <line x1="126" y1="40" x2="126" y2="150" stroke="var(--runtime)" stroke-dasharray="3 3"/>
+            <line x1="456" y1="40" x2="456" y2="150" stroke="var(--runtime)" stroke-dasharray="3 3"/>
+            <text x="126" y="30" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--runtime)">@Transactional in</text>
+            <text x="456" y="30" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--runtime)">COMMIT</text>
+            <rect x="470" y="52" width="196" height="64" rx="4" fill="var(--accent-wash)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="568" y="72" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--accent)">DETACHED</text>
+            <text x="568" y="90" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink)">the mapper runs here</text>
+            <text x="568" y="108" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)">getPrerequisites() → throws</text>
+            <g font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-soft)">
+              <text x="60" y="145" text-anchor="middle">filter</text>
+              <text x="291" y="145" text-anchor="middle">service</text>
+              <text x="568" y="145" text-anchor="middle">CourseMapper</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption>The identical line of code succeeds on the left of the commit and throws on the right. Nothing about the entity changed — only whether a session is still open behind it.</figcaption>
+      </figure>
+
+      <h3>Run the experiment</h3>
+      <p>This project's query fetch-joins prerequisites so the mapper can read them. Toggle that one clause and watch the endpoint flip:</p>
+      <div class="demo">
+        <div class="switch" role="group" aria-label="Fetch plan">
+          <button id="fp-on" aria-pressed="true">with LEFT JOIN FETCH</button>
+          <button id="fp-off" aria-pressed="false">without it</button>
+        </div>
+        <div class="code" style="margin-top:0">
+          <div class="code-top"><span class="file">repository/CourseRepository.java</span><span id="fp-note">complete fetch plan</span></div>
+<pre id="fp-code"><span class="s">"SELECT DISTINCT c FROM Course c "</span>
+  + <span class="s">"JOIN FETCH c.professor "</span>
+  + <span class="s">"LEFT JOIN FETCH c.prerequisites "</span>
+  + <span class="s">"WHERE c.id = :id"</span></pre>
+        </div>
+        <div class="outbox">
+          <div class="out">
+            <h5>GET /api/courses/55</h5>
+            <div class="status ok" id="fp-status">200 OK</div>
+            <p class="outp" id="fp-msg">prerequisiteCodes: ["CS101","CS301"]</p>
+          </div>
+          <div class="out">
+            <h5>CourseRepositoryIT</h5>
+            <div class="status ok" id="fp-test">PASSES</div>
+            <p class="outp" id="fp-testmsg">6 tests, 0 failures.</p>
+          </div>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag">The rule to remember</span>
+        <p>A fetch plan is a <strong>contract between a query and every consumer of its result</strong>. <code class="inline">CourseMapper</code> touches <code class="inline">getPrerequisites()</code>, so the fetch join is part of that mapper's requirements — even though no compiler, type or interface records the connection. Add a consumer that reads one more association and the query must change with it.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="p-4">
+      <h2>N+1, the performance bug you will meet</h2>
+      <p>Load 50 courses in a loop, touch <code class="inline">getProfessor()</code> on each, and JPA issues 1 query for the list plus 50 more — one per course. Nothing looks wrong in the Java. The fix is to declare the fetch plan up front:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">the difference</span><span>1 query vs 51</span></div>
+<pre><span class="c">// N+1: one SELECT for courses, then one per professor</span>
+<span class="s">"SELECT c FROM Course c"</span>
+
+<span class="c">// One SELECT, joined</span>
+<span class="s">"SELECT c FROM Course c JOIN FETCH c.professor"</span></pre>
+      </div>
+      <p>You detect it by reading the SQL log, which is exactly why this project sets <code class="inline">org.hibernate.SQL</code> to DEBUG. If a single request emits a suspiciously round number of near-identical queries, that is N+1.</p>
+    </section>
+
+    <section class="sub" id="p-5">
+      <h2>Two kinds of locking</h2>
+      <p>Both appear in this codebase, for different problems.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Optimistic</th><th>Pessimistic</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code class="inline">@Version</code> on BaseEntity. Assumes no conflict; on write, checks the version still matches. If not → <code class="inline">OptimisticLockException</code> → HTTP 409.</td>
+              <td><code class="inline">LockModeType.PESSIMISTIC_WRITE</code>. Takes a real database row lock immediately. Others wait.</td>
+            </tr>
+            <tr>
+              <td>Cheap. Right for "two admins edited the same course".</td>
+              <td>Expensive. Right for the seat-counting race — read count, decide, insert.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>You saw the pessimistic one in the trace: query 2 ended in <code class="inline">FOR NO KEY UPDATE</code>. That clause is the lock, and it is why two students cannot both take the last seat.</p>
+    </section>
+  </article>
+
+  <!-- ============================ 4. CDI ============================ -->
+  <article class="chapter" data-cat="Injection">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 04</div>
+      <h1>CDI — who builds your objects</h1>
+      <p>You never call <code class="inline">new</code> on a service in this codebase. Something else does, and that indirection buys you interceptors, scopes and events.</p>
+    </div>
+
+    <section class="sub" id="c-1">
+      <h2>Scopes decide lifetime</h2>
+      <p>An annotation on the class tells the container how many instances to keep and how long they live. This project uses four:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Scope</th><th class="num">Uses</th><th>Lifetime</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">@ApplicationScoped</td><td class="num">17</td><td>One per application. Services, repositories, mappers.</td></tr>
+            <tr><td class="mono">@RequestScoped</td><td class="num">5</td><td>One per HTTP request. Anything holding per-request state.</td></tr>
+            <tr><td class="mono">@Singleton</td><td class="num">4</td><td>One, eagerly created, no proxy.</td></tr>
+            <tr><td class="mono">@Dependent</td><td class="num">4</td><td>Lives and dies with whoever injected it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note trap">
+        <span class="tag">The classic bug</span>
+        <p><code class="inline">@ApplicationScoped</code> beans are shared by every concurrent request. Give one a mutable field and you have built a race condition that only appears under load. Services here are stateless for exactly this reason — all state travels in method parameters.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="c-2">
+      <h2>Interceptors — the same idea as a decorator</h2>
+      <p>Because the container constructs your beans, it can wrap them. <code class="inline">@Loggable</code> is a custom binding; anything annotated with it gets timed:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">common/logging/LoggingInterceptor.java</span><span>AOP without a framework</span></div>
+<pre><span class="k">@Loggable</span>
+<span class="k">@Interceptor</span>
+<span class="k">public class</span> LoggingInterceptor {
+
+    <span class="k">@AroundInvoke</span>
+    <span class="k">public</span> Object logInvocation(InvocationContext ctx) <span class="k">throws</span> Exception {
+        <span class="c">// ... log entry, start timer</span>
+        Object result = ctx.proceed();     <span class="c">// ← continue the chain</span>
+        <span class="c">// ... log exit and elapsed time</span>
+        <span class="k">return</span> result;
+    }
+}</pre>
+      </div>
+      <p>Those <code class="inline">-&gt; EnrollmentService.enroll</code> and <code class="inline">&lt;- completed in 162ms</code> lines in the trace came from here, not from the service. <code class="inline">ctx.proceed()</code> is the hinge: everything before it runs on the way in, everything after on the way out.</p>
+      <p><strong>This is precisely how <code class="inline">@Transactional</code> works.</strong> It is an interceptor too — begin before <code class="inline">proceed()</code>, commit or roll back after. Understanding one explains the other.</p>
+    </section>
+
+    <section class="sub" id="c-3">
+      <h2>Events, and the phase that matters</h2>
+      <p>The service fires one event. Two observers receive it — and the difference between them is a single clause:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">service/EnrollmentNotificationListener.java</span><span>same event, different timing</span></div>
+<pre><span class="c">// Runs IMMEDIATELY, inside the transaction. If it throws, everything rolls back.</span>
+<span class="k">public void</span> auditEnrollmentCreated(<span class="k">@Observes</span> EnrollmentCreatedEvent e) { ... }
+
+<span class="c">// Runs only AFTER a successful commit.</span>
+<span class="k">public void</span> onEnrollmentCreated(
+        <span class="k">@Observes</span>(during = TransactionPhase.<span class="s">AFTER_SUCCESS</span>) EnrollmentCreatedEvent e) { ... }</pre>
+      </div>
+      <p>In the trace you can see the commit happen between them:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">server.log</span><span>the 6 ms that separates them</span></div>
+<pre>14:34:40,710  [AUDIT] enrollment.created id=202   <span class="c">← inside the transaction</span>
+14:34:40,710  &lt;- enroll completed in 162ms       <span class="c">← COMMIT happens here</span>
+14:34:40,716  [NOTIFICATION] To matteo...        <span class="c">← after the commit</span></pre>
+      </div>
+      <div class="note">
+        <span class="tag">Why you care</span>
+        <p>Never send an email inside a transaction. The transaction can still roll back after your observer runs, and then you have emailed a student about an enrollment that does not exist. <code class="inline">AFTER_SUCCESS</code> is the guarantee that the row really landed.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 5. TRANSACTIONS ============================ -->
+  <article class="chapter" data-cat="Transactions">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 05</div>
+      <h1>JTA — where the boundary is</h1>
+      <p>One annotation decides what commits together, what rolls back, and how long entities stay alive.</p>
+    </div>
+
+    <section class="sub" id="x-1">
+      <h2><code class="inline">@Transactional</code> wraps the method</h2>
+      <p>Put it on a method and the container begins a transaction before the body runs and commits when it returns. The whole method is atomic: all eight of those queries either land together or not at all.</p>
+      <p>It also defines the persistence-context lifetime — which is why the detachment boundary from Chapter 3 sits exactly at the closing brace of <code class="inline">enroll()</code>.</p>
+    </section>
+
+    <section class="sub" id="x-2">
+      <h2>Rollback rules surprise everyone</h2>
+      <p>By default, Jakarta EE rolls back on <strong>unchecked</strong> exceptions only.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Thrown</th><th>Default behaviour</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">RuntimeException</td><td>Rolls back</td></tr>
+            <tr><td class="mono">Error</td><td>Rolls back</td></tr>
+            <tr><td class="mono">Checked Exception</td><td><strong>Commits anyway</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That last row is not a bug — it comes from a distinction the specification draws between a checked exception (an expected business outcome, e.g. "insufficient funds") and an unchecked one (something broke). It rarely matches intuition, which is why every business exception in this project extends <code class="inline">RuntimeException</code>. If you need different behaviour: <code class="inline">@Transactional(rollbackOn = ...)</code>.</p>
+    </section>
+
+    <section class="sub" id="x-3">
+      <h2>The self-invocation trap</h2>
+      <p class="lede">This is the one that silently costs people days.</p>
+      <p>Interceptors work through a <strong>proxy</strong>. The container hands callers a wrapper, and the wrapper applies the annotation before delegating to your real object. So a call from outside is intercepted. A call from <em>inside</em> the same object goes straight to <code class="inline">this</code> — bypassing the proxy entirely.</p>
+      <figure>
+        <div class="fig-wrap">
+          <svg viewBox="0 0 660 196" role="img" aria-label="External calls pass through the proxy and start a transaction; internal this-calls bypass the proxy and run with none">
+            <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><polygon points="0 0, 9 4.5, 0 9" fill="currentColor"/></marker></defs>
+            <rect x="14" y="62" width="112" height="44" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+            <text x="70" y="88" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">Resource</text>
+            <rect x="196" y="62" width="112" height="44" rx="4" fill="var(--runtime-wash)" stroke="var(--runtime)" stroke-width="1.5"/>
+            <text x="252" y="82" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--runtime)">PROXY</text>
+            <text x="252" y="97" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--runtime)">begins TX</text>
+            <rect x="378" y="40" width="150" height="110" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+            <text x="453" y="60" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink)">DataSeeder</text>
+            <rect x="392" y="70" width="122" height="26" rx="3" fill="var(--surface)" stroke="var(--rule)"/>
+            <text x="453" y="87" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink)">seed()</text>
+            <rect x="392" y="106" width="122" height="26" rx="3" fill="var(--surface)" stroke="var(--rule)"/>
+            <text x="453" y="123" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink)">@Transactional</text>
+            <line x1="128" y1="84" x2="192" y2="84" stroke="currentColor" marker-end="url(#ar2)"/>
+            <line x1="310" y1="84" x2="388" y2="84" stroke="var(--runtime)" stroke-width="1.6" marker-end="url(#ar2)" color="var(--runtime)"/>
+            <text x="349" y="76" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--runtime)">TX open</text>
+            <path d="M 545 83 C 585 83, 585 119, 545 119" fill="none" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#ar2)" color="var(--accent)"/>
+            <text x="600" y="96" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--accent)">this.method()</text>
+            <text x="600" y="110" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--accent)">NO TX</text>
+            <text x="330" y="176" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--ink-soft)">The annotation is still there. It simply never runs.</text>
+          </svg>
+        </div>
+        <figcaption>An internal <code>this.method()</code> call never leaves the object, so the proxy never sees it and the annotation has no effect. <code>DataSeeder</code> is structured specifically to avoid this.</figcaption>
+      </figure>
+      <p>The symptom is brutal: the annotation is right there in the source, so the code looks correct, but no transaction is ever started. The fix is to move the annotated method into a different bean and inject it.</p>
+    </section>
+  </article>
+
+  <!-- ============================ 6. REST ============================ -->
+  <article class="chapter" data-cat="REST">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 06</div>
+      <h1>JAX-RS and the error contract</h1>
+      <p>How little a resource class should do, and why every failure in this API has the same shape.</p>
+    </div>
+
+    <section class="sub" id="r-1">
+      <h2>A resource is a thin translator</h2>
+      <div class="code">
+        <div class="code-top"><span class="file">api/rest/EnrollmentResource.java</span><span>note what is absent</span></div>
+<pre><span class="k">@Path</span>(<span class="s">"/enrollments"</span>)
+<span class="k">@Consumes</span>(MediaType.APPLICATION_JSON)
+<span class="k">public class</span> EnrollmentResource {
+
+    <span class="k">@POST</span>
+    <span class="k">public</span> Response enroll(<span class="k">@Valid @NotNull</span> EnrollRequest request) {
+        <span class="c">// validate → delegate → map → status code. No rules live here.</span>
+    }
+}</pre>
+      </div>
+      <p>No business logic, no SQL, no try/catch. <code class="inline">@Valid</code> makes the container validate before your method is entered, and failures are handled centrally. A resource that grows an <code class="inline">if</code> about eligibility has taken work that belongs to the service.</p>
+      <h3>DTOs exist to break a coupling</h3>
+      <p>Entities are never returned directly. If they were, a JPA mapping change would silently alter your public API, lazy associations would serialise unpredictably, and every internal field would be exposed. The mapper is the seam — and, as Chapter 3 showed, also where fetch plans get enforced.</p>
+    </section>
+
+    <section class="sub" id="r-2">
+      <h2>Exception mappers: errors handled once</h2>
+      <p>Instead of try/catch in fifty endpoints, each exception type is mapped to a status in one place:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Exception</th><th class="num">Status</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ResourceNotFoundException</td><td class="num">404</td></tr>
+            <tr><td class="mono">InvalidRequestException</td><td class="num">400</td></tr>
+            <tr><td class="mono">ConstraintViolationException</td><td class="num">400</td></tr>
+            <tr><td class="mono">BusinessRuleViolationException</td><td class="num">409</td></tr>
+            <tr><td class="mono">DuplicateResourceException</td><td class="num">409</td></tr>
+            <tr><td class="mono">OptimisticLockException</td><td class="num">409</td></tr>
+            <tr><td class="mono">Exception (catch-all)</td><td class="num">500</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The 409s are worth noticing. <strong>409 Conflict</strong> means "your request was well-formed, but the current state of the server forbids it" — a full course, a suspended student, a closed window. That is a different failure from <strong>400 Bad Request</strong>, which means the request itself was malformed. Getting this distinction right is most of designing a decent API.</p>
+    </section>
+
+    <section class="sub" id="r-3">
+      <h2>RFC 7807 and correlation IDs</h2>
+      <p>Every error returns the same document shape — a published standard, not a house style:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">a real 500 from this server</span><span>application/problem+json</span></div>
+<pre>{
+  <span class="s">"type"</span>: <span class="s">"https://api.unicam.it/problems/internal-error"</span>,
+  <span class="s">"title"</span>: <span class="s">"Internal Server Error"</span>,
+  <span class="s">"status"</span>: <span class="n">500</span>,
+  <span class="s">"errorCode"</span>: <span class="s">"INTERNAL_ERROR"</span>,
+  <span class="s">"instance"</span>: <span class="s">"/courses/55"</span>,
+  <span class="s">"correlationId"</span>: <span class="s">"BREAK-2"</span>
+}</pre>
+      </div>
+      <p>That <code class="inline">correlationId</code> is the operational payoff. <code class="inline">CorrelationIdFilter</code> assigns an ID per request and puts it in the <em class="term">MDC</em> — a per-thread map the logging system reads. The log pattern includes <code class="inline">%X{correlationId}</code>, so every line that request produced carries it.</p>
+      <p>A user reports an error and quotes the ID; you grep one string and get that request's entire life — filter, service, all eight queries, the exception. Without it, you are searching a shared log by timestamp and hoping.</p>
+    </section>
+
+    <section class="sub" id="r-4">
+      <h2>Console — provoke every status code</h2>
+      <p class="lede">Reading a table of status codes teaches you less than making the server produce them. Each button below is a real request.</p>
+      <p>The read-only ones are safe to repeat. The two marked <em class="term">writes</em> change data — that is deliberate, because the second click is what demonstrates the duplicate rule.</p>
+      <div class="livebox">
+        <div class="livebox-top">
+          <span class="ttl">Live API console</span>
+          <span id="console-base" class="mono" style="font-size:11px;color:var(--ink-faint)"></span>
+        </div>
+        <div class="livebox-body">
+          <div class="reqs" id="reqs"></div>
+          <div class="resp" id="resp" hidden>
+            <div class="resp-top">
+              <span class="resp-code" id="resp-code">—</span>
+              <span id="resp-ms"></span>
+              <span id="resp-cid"></span>
+            </div>
+            <pre id="resp-body"></pre>
+          </div>
+          <p class="offline-note" id="console-off">Not connected to the API. These run only when the page is served by WildFly at <code class="inline">localhost:8280</code>.</p>
+        </div>
+      </div>
+      <div class="note">
+        <span class="tag">What to watch for</span>
+        <p>Compare a <strong>400</strong> with a <strong>409</strong>. The 400 lists every invalid field at once — Bean Validation collects them all rather than failing on the first. The 409 carries an <code class="inline">errorCode</code> like <code class="inline">PREREQUISITES_NOT_MET</code>, because the request was perfectly well-formed and the <em>domain</em> refused it. Same JSON shape, completely different meaning.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 7. DOMAIN ============================ -->
+  <article class="chapter" data-cat="Domain">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 07</div>
+      <h1>Rules that live in the model</h1>
+      <p>An entity that only has getters and setters is a database row wearing a Java costume. These ones defend themselves.</p>
+    </div>
+
+    <section class="sub" id="d-1">
+      <h2>Rich versus anemic</h2>
+      <p>The <em class="term">anemic domain model</em> is the common shape: entities hold data, services hold all logic. It works, but every rule can be bypassed by any code that sets a field directly.</p>
+      <p><code class="inline">Enrollment</code> takes the other approach — it has no public setter for status. The only way to change it is a method that enforces the rules:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">domain/model/Enrollment.java</span><span>the object protects its own invariants</span></div>
+<pre><span class="k">public void</span> recordPass(<span class="k">int</span> grade, <span class="k">boolean</span> withHonours, Instant at) {
+    transitionTo(EnrollmentStatus.COMPLETED);      <span class="c">// legal move?</span>
+
+    <span class="k">if</span> (grade &lt; <span class="n">18</span> || grade &gt; <span class="n">30</span>)
+        <span class="k">throw new</span> IllegalArgumentException(...);   <span class="c">// Italian scale</span>
+
+    <span class="k">if</span> (withHonours &amp;&amp; grade != <span class="n">30</span>)
+        <span class="k">throw new</span> IllegalArgumentException(...);   <span class="c">// lode needs exactly 30</span>
+}</pre>
+      </div>
+      <p>You cannot construct an invalid <code class="inline">Enrollment</code> through the public API of the class. That is the whole idea: make illegal states unrepresentable rather than merely unlikely.</p>
+    </section>
+
+    <section class="sub" id="d-2">
+      <h2>The state machine — try it</h2>
+      <p>Transitions are declared once, as data, and every mutating method routes through the check. Click a status to see what it can legally become:</p>
+      <div class="sm" id="sm"></div>
+      <p class="sm-out" id="sm-out">Selected: <strong>ACTIVE</strong> — an enrollment starts here.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">domain/model/EnrollmentStatus.java</span><span>rules as data, not as if-statements</span></div>
+<pre>map.put(ACTIVE,    EnumSet.of(COMPLETED, WITHDRAWN, FAILED));
+map.put(FAILED,    EnumSet.of(ACTIVE, WITHDRAWN));       <span class="c">// retake allowed</span>
+map.put(COMPLETED, EnumSet.noneOf(EnrollmentStatus.class));  <span class="c">// terminal</span>
+map.put(WITHDRAWN, EnumSet.noneOf(EnrollmentStatus.class));  <span class="c">// terminal</span></pre>
+      </div>
+      <div class="note">
+        <span class="tag">Java note</span>
+        <p>Enums here are not just constants — they carry behaviour and a lookup table. <code class="inline">EnumSet</code> and <code class="inline">EnumMap</code> are specialised implementations backed by bit vectors and arrays; they are dramatically faster than <code class="inline">HashSet</code> for enum keys, and they make the legal-move table impossible to get out of sync with the enum itself.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="d-3">
+      <h2>Custom validation</h2>
+      <p>Bean Validation ships with <code class="inline">@NotNull</code>, <code class="inline">@Size</code>, <code class="inline">@Positive</code> and friends. When a rule is domain-specific you write your own — an annotation plus a validator:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">domain/validation/StudentNumber.java</span><span>annotation + implementation</span></div>
+<pre><span class="k">@Constraint</span>(validatedBy = StudentNumberValidator.class)
+<span class="k">@Target</span>({FIELD, METHOD, PARAMETER, ANNOTATION_TYPE})
+<span class="k">@Retention</span>(RUNTIME)
+<span class="k">public @interface</span> StudentNumber {
+    String message() <span class="k">default</span> <span class="s">"must be a valid student number: exactly 6 digits"</span>;
+}
+
+<span class="c">// The validator. Pattern is compiled ONCE as a static field —</span>
+<span class="c">// String.matches() would recompile it on every single call.</span>
+<span class="k">public boolean</span> isValid(String value, ConstraintValidatorContext ctx) {
+    <span class="k">return</span> MATRICOLA_PATTERN.matcher(value).matches();
+}</pre>
+      </div>
+      <p><code class="inline">@Retention(RUNTIME)</code> is mandatory — without it the annotation is discarded after compilation and the container can never see it. That single missing line is a common cause of "my custom constraint does nothing".</p>
+    </section>
+  </article>
+
+  <!-- ============================ 8. TESTING ============================ -->
+  <article class="chapter" data-cat="Testing">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 08</div>
+      <h1>Proving it, and the test that lies</h1>
+      <p>This project has 60 tests. One line in one of them is the difference between catching a production outage and shipping it.</p>
+    </div>
+
+    <section class="sub" id="s-1">
+      <h2>Two kinds of test</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Unit (<span class="mono">*Test</span>)</th><th>Integration (<span class="mono">*IT</span>)</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>35 tests. No database. Repositories are mocked. Runs in milliseconds via Surefire.</td>
+              <td>25 tests. Real JPA against in-memory H2 in PostgreSQL mode. Runs via Failsafe.</td>
+            </tr>
+            <tr>
+              <td>Proves <em>logic</em>: given a full course, does <code class="inline">enroll</code> throw?</td>
+              <td>Proves <em>mapping</em>: does the query actually fetch what it claims?</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The split matters because they fail for different reasons. A unit test cannot catch a broken fetch plan — there is no database to fetch from. An integration test is too slow to run on every keystroke. You need both.</p>
+      <div class="note">
+        <span class="tag">Useful consequence</span>
+        <p>Because the integration tests use in-memory H2, <code class="inline">mvn verify</code> runs all 60 with no server and no database installed. Most of what this fieldbook covers can be studied without ever starting WildFly.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="s-2">
+      <h2>The line that makes the test honest</h2>
+      <p class="lede">A test that asserts while the persistence context is still open is testing a world that never happens in production.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">test/repository/CourseRepositoryIT.java</span><span>one line, everything hinges on it</span></div>
+<pre>Optional&lt;Course&gt; found = repository.findByIdWithPrerequisites(id);
+
+entityManager.clear();   <span class="c">// ← detach everything, exactly as the REST layer sees it</span>
+
+Course detached = found.get();
+assertThat(catchThrowable(() -&gt; detached.getPrerequisites().size()))
+        .as(<span class="s">"prerequisites must have been fetch-joined"</span>)
+        .isNull();</pre>
+      </div>
+      <p>Here is what was measured on this codebase — the fetch join removed, then the same bug tested with and without that <code class="inline">clear()</code>:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Scenario</th><th>Endpoint</th><th>Test suite</th></tr></thead>
+          <tbody>
+            <tr><td>Fetch plan intact</td><td class="mono">200 OK</td><td class="mono">passes</td></tr>
+            <tr><td>Fetch join removed</td><td class="mono">500</td><td class="mono">fails — caught it</td></tr>
+            <tr><td>Removed, <code class="inline">clear()</code> disabled</td><td class="mono">500</td><td class="mono">passes — missed it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="tag">The lesson</span>
+        <p>In that last row the endpoint is returning 500 to real users while the build reports <code class="inline">BUILD SUCCESS, 0 failures</code>. A test configuration that differs from production will happily prove the wrong thing. The value of a test is not that it passes — it is that it would have failed.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="s-3">
+      <h2>Controlling time</h2>
+      <p>Enrollment windows depend on "now". A test that reads the system clock is a test that fails on a Sunday, or in a different timezone, or at the end of a semester. So the clock is injected:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">common/ClockProducer.java + tests</span><span>time as a dependency</span></div>
+<pre><span class="c">// Production: the real clock, produced as a CDI bean</span>
+<span class="k">@Produces</span> <span class="k">public</span> Clock clock() { <span class="k">return</span> Clock.systemUTC(); }
+
+<span class="c">// Test: pin it. The window is now fully deterministic.</span>
+Clock fixed = Clock.fixed(Instant.parse(<span class="s">"2025-09-01T10:00:00Z"</span>), ZoneOffset.UTC);</pre>
+      </div>
+      <p>Any value that makes a test non-deterministic — time, randomness, UUIDs — should be a dependency rather than a static call. That is most of what "testable design" means in practice.</p>
+    </section>
+  </article>
+
+  <!-- ============================ 9. RUNNING IT ============================ -->
+  <article class="chapter" data-cat="Running">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 09</div>
+      <h1>Your setup, and what to try</h1>
+      <p>This application is installed natively on your machine — WildFly and PostgreSQL, no Docker.</p>
+    </div>
+
+    <section class="sub" id="o-0">
+      <h2>What the server holds right now</h2>
+      <p class="lede">Read live from your database when this page is served by WildFly.</p>
+      <div class="livebox">
+        <div class="livebox-top">
+          <span class="ttl">Live snapshot</span>
+          <button class="btn" id="refresh">Refresh</button>
+        </div>
+        <div class="livebox-body">
+          <div class="stats" id="stats" hidden></div>
+          <p class="offline-note" id="stats-off">Not connected. Serve this page from WildFly to read live counts.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="sub" id="o-1">
+      <h2>Where everything lives</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Thing</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td>Application</td><td class="mono">http://localhost:8280/enrollment/</td></tr>
+            <tr><td>API base</td><td class="mono">http://localhost:8280/enrollment/api</td></tr>
+            <tr><td>Admin console</td><td class="mono">http://localhost:10190 — admin / Admin#2026</td></tr>
+            <tr><td>PostgreSQL 16.9</td><td class="mono">localhost:5433 — enrollment / enrollment</td></tr>
+            <tr><td>WildFly 31.0.1</td><td class="mono">C:\Users\krsit\tools\wildfly-31.0.1.Final</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Ports are offset because 8080 and 5432 were already taken: WildFly runs with <code class="inline">-Djboss.socket.binding.port-offset=200</code>, which shifts every port by 200 at once. That is why the app is on 8280 and the console on 10190.</p>
+    </section>
+
+    <section class="sub" id="o-2">
+      <h2>Starting and stopping</h2>
+      <p>Neither service auto-starts. PostgreSQL must come up first — WildFly's connection pool tries to prefill at boot.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">start postgres</span><span>then wildfly</span></div>
+<pre>pg_ctl.exe -D C:\Users\krsit\tools\pgsql\data -o "-p 5433" -l pg.log start
+
+standalone.bat -Djboss.socket.binding.port-offset=200</pre>
+      </div>
+      <p>The development loop is one command. Maven writes the WAR into <code class="inline">docker/deployments/</code> plus a <code class="inline">.dodeploy</code> marker; WildFly's scanner is pointed at that folder and redeploys within a second or two.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">the loop</span><span>edit → rebuild → live</span></div>
+<pre>mvn package        <span class="c"># WildFly hot-redeploys. No restart.</span>
+mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
+      </div>
+    </section>
+
+    <section class="sub" id="o-3">
+      <h2>Experiments worth running</h2>
+      <ul class="pts">
+        <li><strong>Watch the SQL.</strong> Logging is at DEBUG. Call <code class="inline">/api/courses/open</code> and read every statement Hibernate emits — that is Chapter 3 happening live.</li>
+        <li><strong>Break the fetch plan.</strong> Delete <code class="inline">LEFT JOIN FETCH c.prerequisites</code>, run <code class="inline">mvn package</code>, and call <code class="inline">/api/courses/55</code>. Then put it back.</li>
+        <li><strong>Trigger optimistic locking.</strong> Load a course, change its capacity twice from two clients, and watch the second attempt return 409.</li>
+        <li><strong>Force self-invocation.</strong> Call one <code class="inline">@Transactional</code> method from another in the same class and observe that no transaction starts.</li>
+        <li><strong>Chase a correlation ID.</strong> Send <code class="inline">X-Correlation-Id: mine-1</code> on any request, then grep the server log for it.</li>
+      </ul>
+      <div class="note">
+        <span class="tag">One caution</span>
+        <p><code class="inline">scripts/api-tour.sh</code> is not idempotent — it changes course capacity and creates enrollments. It reports 41/41 only against a freshly seeded database, so a second run showing failures is leftover data, not a broken build.</p>
+      </div>
+    </section>
+  </article>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- chapter + rail navigation ---------- */
+  var chapters = Array.prototype.slice.call(document.querySelectorAll(".chapter"));
+  var catsEl = document.getElementById("cats");
+  var railEl = document.getElementById("rail");
+
+  chapters.forEach(function(ch, i){
+    var b = document.createElement("button");
+    b.textContent = ch.getAttribute("data-cat");
+    b.setAttribute("aria-current", i === 0 ? "true" : "false");
+    b.addEventListener("click", function(){ show(i); });
+    catsEl.appendChild(b);
+  });
+
+  function buildRail(ch){
+    railEl.innerHTML = "";
+    Array.prototype.forEach.call(ch.querySelectorAll("section.sub"), function(s){
+      var h = s.querySelector("h2");
+      if(!h) return;
+      var a = document.createElement("a");
+      a.href = "#" + s.id;
+      a.textContent = h.textContent;
+      a.addEventListener("click", function(e){
+        e.preventDefault();
+        s.scrollIntoView({behavior:"smooth", block:"start"});
+      });
+      railEl.appendChild(a);
+    });
+    spy();
+  }
+
+  function show(i){
+    chapters.forEach(function(c,j){ c.classList.toggle("on", j===i); });
+    Array.prototype.forEach.call(catsEl.children, function(b,j){
+      b.setAttribute("aria-current", j===i ? "true" : "false");
+    });
+    buildRail(chapters[i]);
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function spy(){
+    var active = document.querySelector(".chapter.on");
+    if(!active) return;
+    var secs = Array.prototype.slice.call(active.querySelectorAll("section.sub"));
+    var links = Array.prototype.slice.call(railEl.querySelectorAll("a"));
+    var best = 0;
+    secs.forEach(function(s,i){
+      if(s.getBoundingClientRect().top < 140) best = i;
+    });
+    links.forEach(function(a,i){ a.classList.toggle("on", i===best); });
+  }
+  window.addEventListener("scroll", spy, {passive:true});
+  buildRail(chapters[0]);
+
+  /* ---------- trace player: real log lines from this server ---------- */
+  var STEPS = [
+    {t:"40,464", m:"--> POST /enrollment/api/enrollments", k:"", lay:"ly-filter",
+     ti:"The filter runs first", bo:"Before any of your code, CorrelationIdFilter assigns this request an ID and puts it in the MDC so every later log line carries it.",
+     w:"api/filter/CorrelationIdFilter.java"},
+    {t:"40,550", m:"-> EnrollmentService.enroll", k:"", lay:"ly-svc",
+     ti:"Interceptor, then transaction", bo:"@Loggable logs the entry and starts a timer. @Transactional opens the transaction and with it the persistence context.",
+     w:"common/logging/LoggingInterceptor.java"},
+    {t:"40,554", m:"[1] select ... from students where id=?", k:"sql", lay:"ly-repo",
+     ti:"Does the student exist?", bo:"Loads the student and checks canEnroll(). A SUSPENDED student is rejected here with 409.",
+     w:"service/EnrollmentService.java:151"},
+    {t:"40,567", m:"[2] select ... from courses where id=? FOR NO KEY UPDATE", k:"sql", lay:"ly-db",
+     ti:"A real row lock", bo:"FOR NO KEY UPDATE is the pessimistic lock. PostgreSQL now holds this course row until commit, so two students cannot both take the last seat.",
+     w:"repository/CourseRepository.java:103"},
+    {t:"40,582", m:"[3] select ... from enrollments where student_id=? and course_id=?", k:"sql", lay:"ly-repo",
+     ti:"Already enrolled?", bo:"Duplicate check. If a row comes back, the request fails with DUPLICATE_RESOURCE.",
+     w:"repository/EnrollmentRepository.java"},
+    {t:"40,588", m:"[4] select count(id) from enrollments where course_id=? and status in (?,?)", k:"sql", lay:"ly-repo",
+     ti:"Is the course full?", bo:"Counts occupied seats. Only ACTIVE and FAILED occupy a seat — WITHDRAWN frees it.",
+     w:"domain/model/EnrollmentStatus.java"},
+    {t:"40,658", m:"[5] select ... from course_prerequisites join courses ...", k:"sql", lay:"ly-db",
+     ti:"Nobody wrote this query", bo:"course.getPrerequisites() is a plain getter. It fired SQL because the collection is lazy. This is the mechanism behind both N+1 and LazyInitializationException.",
+     w:"service/EnrollmentService.java:245"},
+    {t:"40,668", m:"[6] select ... from enrollments where student_id=?", k:"sql", lay:"ly-db",
+     ti:"A second lazy load", bo:"Now the student's own enrollments load, to check whether each prerequisite was actually passed.",
+     w:"domain/model/Student.java"},
+    {t:"40,676", m:"[7] select nextval('app_id_seq')", k:"sql", lay:"ly-db",
+     ti:"The id, before the insert", bo:"GenerationType.SEQUENCE asks the database for the next value first, so the entity has its id before the row exists.",
+     w:"domain/model/BaseEntity.java"},
+    {t:"40,700", m:"[8] insert into enrollments (...) values (...)", k:"sql", lay:"ly-db",
+     ti:"The write", bo:"save() then flush(). Flushing inside the method means a constraint violation surfaces here, where it can still be rolled back.",
+     w:"service/EnrollmentService.java:195"},
+    {t:"40,710", m:"Student 100003 enrolled in CS101 (1 of 120 seats now taken)", k:"", lay:"ly-svc",
+     ti:"Rules satisfied", bo:"Every check passed. The enrollment exists in the transaction, though nothing is committed yet.",
+     w:"service/EnrollmentService.java"},
+    {t:"40,710", m:"[AUDIT] enrollment.created id=202 student=100003", k:"evt", lay:"ly-svc",
+     ti:"Observer one — inside the transaction", bo:"A plain @Observes runs immediately. If it threw, the whole enrollment would roll back.",
+     w:"service/EnrollmentNotificationListener.java:81"},
+    {t:"40,710", m:"<- EnrollmentService.enroll completed in 162ms", k:"", lay:"ly-svc",
+     ti:"COMMIT — the important line", bo:"The method returns, the transaction commits, and the persistence context closes. Every entity is now detached: lazy getters will throw from here on.",
+     w:"common/logging/LoggingInterceptor.java"},
+    {t:"40,716", m:"[NOTIFICATION] To matteo.esposito@studenti.unicam.it ...", k:"evt", lay:"ly-svc",
+     ti:"Observer two — after the commit", bo:"AFTER_SUCCESS deferred this until the data was safely committed. That is why you never email from inside a transaction.",
+     w:"service/EnrollmentNotificationListener.java:58"},
+    {t:"40,721", m:"<-- POST /enrollment/api/enrollments 201 (256ms)", k:"", lay:"ly-rest",
+     ti:"201 Created", bo:"The mapper turns the entity into a DTO and the resource returns 201 with a Location header. Total round trip: 256 ms.",
+     w:"api/rest/EnrollmentResource.java"}
+  ];
+
+  var logEl = document.getElementById("log");
+  var rows = STEPS.map(function(s){
+    var d = document.createElement("div");
+    d.className = "tl" + (s.k ? " " + s.k : "");
+    d.innerHTML = '<span class="t">' + s.t + '</span><span class="m"></span>';
+    d.querySelector(".m").textContent = s.m;
+    logEl.appendChild(d);
+    return d;
+  });
+
+  var idx = -1, timer = null;
+  var titleEl = document.getElementById("s-title");
+  var bodyEl = document.getElementById("s-body");
+  var whereEl = document.getElementById("s-where");
+  var playBtn = document.getElementById("play");
+
+  function paint(){
+    rows.forEach(function(r,i){
+      r.classList.toggle("seen", i <= idx);
+      r.classList.toggle("now", i === idx);
+    });
+    ["ly-filter","ly-rest","ly-svc","ly-repo","ly-db"].forEach(function(id){
+      var g = document.getElementById(id);
+      if(g) g.classList.toggle("dim", idx >= 0 && STEPS[idx].lay !== id);
+    });
+    if(idx >= 0){
+      var s = STEPS[idx];
+      titleEl.textContent = s.ti;
+      bodyEl.textContent = s.bo;
+      whereEl.textContent = s.w;
+      rows[idx].scrollIntoView({block:"nearest"});
+    }
+  }
+
+  function step(){
+    if(idx < STEPS.length - 1){ idx++; paint(); }
+    else stop();
+  }
+  function stop(){
+    if(timer){ clearInterval(timer); timer = null; }
+    playBtn.textContent = "▶ Play";
+  }
+  playBtn.addEventListener("click", function(){
+    if(timer){ stop(); return; }
+    if(idx >= STEPS.length - 1){ idx = -1; }
+    playBtn.textContent = "❚❚ Pause";
+    step();
+    timer = setInterval(step, 1150);
+  });
+  document.getElementById("step").addEventListener("click", function(){ stop(); step(); });
+  document.getElementById("reset").addEventListener("click", function(){
+    stop(); idx = -1;
+    rows.forEach(function(r){ r.classList.remove("seen","now"); });
+    ["ly-filter","ly-rest","ly-svc","ly-repo","ly-db"].forEach(function(id){
+      var g = document.getElementById(id); if(g) g.classList.remove("dim");
+    });
+    titleEl.textContent = "Ready";
+    bodyEl.textContent = "Press Play to send the request.";
+    whereEl.textContent = "";
+  });
+
+  /* ---------- fetch-plan toggle ---------- */
+  var WITH = '<span class="s">"SELECT DISTINCT c FROM Course c "</span>\n  + <span class="s">"JOIN FETCH c.professor "</span>\n  + <span class="s">"LEFT JOIN FETCH c.prerequisites "</span>\n  + <span class="s">"WHERE c.id = :id"</span>';
+  var WITHOUT = '<span class="s">"SELECT DISTINCT c FROM Course c "</span>\n  + <span class="s">"JOIN FETCH c.professor "</span>\n  + <span class="s">"WHERE c.id = :id"</span>   <span class="c">// prerequisites no longer fetched</span>';
+  var on = document.getElementById("fp-on"), off = document.getElementById("fp-off");
+
+  function setPlan(hasFetch){
+    on.setAttribute("aria-pressed", hasFetch ? "true" : "false");
+    off.setAttribute("aria-pressed", hasFetch ? "false" : "true");
+    document.getElementById("fp-code").innerHTML = hasFetch ? WITH : WITHOUT;
+    document.getElementById("fp-note").textContent = hasFetch ? "complete fetch plan" : "one clause removed";
+    var st = document.getElementById("fp-status"), ms = document.getElementById("fp-msg");
+    var ts = document.getElementById("fp-test"), tm = document.getElementById("fp-testmsg");
+    if(hasFetch){
+      st.className = "status ok"; st.textContent = "200 OK";
+      ms.textContent = 'prerequisiteCodes: ["CS101","CS301"]';
+      ts.className = "status ok"; ts.textContent = "PASSES";
+      tm.textContent = "6 tests, 0 failures.";
+    } else {
+      st.className = "status bad"; st.textContent = "500";
+      ms.textContent = "LazyInitializationException: could not initialize proxy — no Session. Thrown in CourseMapper, line 101.";
+      ts.className = "status bad"; ts.textContent = "FAILS";
+      tm.textContent = '"prerequisites must have been fetch-joined" — caught only because the test calls entityManager.clear() first.';
+    }
+  }
+  on.addEventListener("click", function(){ setPlan(true); });
+  off.addEventListener("click", function(){ setPlan(false); });
+
+  /* ---------- state machine ---------- */
+  var TRANS = {
+    ACTIVE:    ["COMPLETED","WITHDRAWN","FAILED"],
+    FAILED:    ["ACTIVE","WITHDRAWN"],
+    COMPLETED: [],
+    WITHDRAWN: []
+  };
+  var NOTE = {
+    ACTIVE:    "an enrollment starts here, and it occupies a seat.",
+    FAILED:    "a failed exam can be retaken (back to ACTIVE) or abandoned. Still occupies a seat.",
+    COMPLETED: "terminal. Grading twice returns ILLEGAL_STATE_TRANSITION.",
+    WITHDRAWN: "terminal, and the seat is released back to the course."
+  };
+  var smEl = document.getElementById("sm"), smOut = document.getElementById("sm-out");
+  var order = ["ACTIVE","COMPLETED","FAILED","WITHDRAWN"], cur = "ACTIVE";
+
+  function drawSm(){
+    smEl.innerHTML = "";
+    order.forEach(function(st){
+      var b = document.createElement("button");
+      b.textContent = st;
+      if(st === cur) b.className = "cur";
+      else if(TRANS[cur].indexOf(st) >= 0) b.className = "can";
+      else b.className = "cant";
+      b.addEventListener("click", function(){
+        if(st === cur) return;
+        if(TRANS[cur].indexOf(st) >= 0){
+          cur = st; drawSm();
+        } else {
+          smOut.innerHTML = "<strong>" + cur + " → " + st + "</strong> is refused — <code>ILLEGAL_STATE_TRANSITION</code>. " +
+            (TRANS[cur].length ? "Legal from " + cur + ": " + TRANS[cur].join(", ") + "." : cur + " is terminal; nothing follows it.");
+        }
+      });
+      smEl.appendChild(b);
+    });
+    smOut.innerHTML = "Selected: <strong>" + cur + "</strong> — " + NOTE[cur] +
+      (TRANS[cur].length ? " Legal next: " + TRANS[cur].join(", ") + "." : "");
+  }
+  drawSm();
+
+  /* =========================================================
+     LIVE MODE — only works when WildFly serves this page,
+     because then the API is same-origin. As a published
+     artifact the fetch is blocked and everything degrades
+     to the recorded content above.
+     ========================================================= */
+  var API = new URL("api/", window.location.href).href;
+  var live = false;
+  var ids = { courses:{}, students:{} };
+
+  var pill = document.getElementById("pill");
+  var offNotes = ["fire-off","console-off","stats-off"];
+
+  function setLive(ok){
+    live = ok;
+    pill.textContent = ok ? "live" : "recorded";
+    pill.classList.toggle("live", ok);
+    pill.title = ok ? "Connected to " + API : "Not connected — showing recorded data";
+    offNotes.forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.hidden = ok;
+    });
+    document.getElementById("console-base").textContent = ok ? API : "";
+    Array.prototype.forEach.call(document.querySelectorAll(".req"), function(b){ b.disabled = !ok; });
+    if(ok){ loadIds(); loadStats(); buildFire(); }
+  }
+
+  function api(path, opts){
+    opts = opts || {};
+    var cid = opts.cid || ("fb-" + Math.random().toString(36).slice(2,9));
+    var started = performance.now();
+    return fetch(API + path, {
+      method: opts.method || "GET",
+      headers: Object.assign({"Accept":"application/json","X-Correlation-Id":cid},
+                             opts.body ? {"Content-Type":"application/json"} : {}),
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function(res){
+      return res.text().then(function(txt){
+        var json = null;
+        try { json = txt ? JSON.parse(txt) : null; } catch(e){}
+        return { status:res.status, json:json, text:txt, cid:cid,
+                 ms:Math.round(performance.now()-started),
+                 hdrCid:res.headers.get("X-Correlation-Id") };
+      });
+    });
+  }
+
+  /* probe */
+  api("courses/open").then(function(r){ setLive(r.status === 200); })
+                     .catch(function(){ setLive(false); });
+
+  /* resolve ids by business key, so nothing is hard-coded */
+  function loadIds(){
+    api("courses?year=2025&size=20").then(function(r){
+      var list = r.json && (r.json.content || r.json);
+      if(Array.isArray(list)) list.forEach(function(c){ ids.courses[c.code] = c.id; });
+    }).catch(function(){});
+    api("students?page=0&size=20").then(function(r){
+      var list = r.json && (r.json.content || r.json);
+      if(Array.isArray(list)) list.forEach(function(s){ ids.students[s.studentNumber] = s.id; });
+    }).catch(function(){});
+  }
+
+  /* ---------- live stats ---------- */
+  function statCard(v,l){ return '<div class="stat"><div class="v">'+v+'</div><div class="l">'+l+'</div></div>'; }
+  function loadStats(){
+    var box = document.getElementById("stats");
+    Promise.all([api("courses?year=2025&size=100"), api("students?page=0&size=100"), api("professors"), api("courses/open")])
+      .then(function(rs){
+        function count(r){
+          var d = r.json;
+          if(!d) return "—";
+          if(Array.isArray(d)) return d.length;
+          if(typeof d.totalElements === "number") return d.totalElements;
+          if(Array.isArray(d.content)) return d.content.length;
+          return "—";
+        }
+        box.innerHTML = statCard(count(rs[0]),"courses 2025") + statCard(count(rs[1]),"students") +
+                        statCard(count(rs[2]),"professors") + statCard(count(rs[3]),"open now");
+        box.hidden = false;
+      }).catch(function(){});
+  }
+  var rf = document.getElementById("refresh");
+  if(rf) rf.addEventListener("click", function(){ if(live) loadStats(); });
+
+  /* ---------- live trace request ---------- */
+  function buildFire(){
+    var body = document.getElementById("fire-body");
+    var pre = document.createElement("div");
+    pre.className = "resp";
+    pre.hidden = true;
+    pre.innerHTML = '<div class="resp-top"><span class="resp-code" id="f-code">—</span>' +
+                    '<span id="f-ms"></span><span id="f-cid"></span></div><pre id="f-body"></pre>';
+    body.appendChild(pre);
+
+    document.getElementById("fire").addEventListener("click", function(){
+      var sid = ids.students["100003"], cid2 = ids.courses["CS101"];
+      if(!sid || !cid2){ loadIds(); return; }
+      var corr = "fieldbook-" + Date.now().toString(36);
+      api("enrollments", {method:"POST", body:{studentId:sid, courseId:cid2}, cid:corr})
+        .then(function(r){
+          pre.hidden = false;
+          var c = document.getElementById("f-code");
+          c.textContent = r.status;
+          c.className = "resp-code " + (r.status < 400 ? "ok" : "err");
+          document.getElementById("f-ms").textContent = r.ms + " ms";
+          document.getElementById("f-cid").textContent = "grep: " + (r.hdrCid || corr);
+          document.getElementById("f-body").textContent =
+            r.json ? JSON.stringify(r.json, null, 2) : (r.text || "(empty)");
+        });
+    });
+  }
+
+  /* ---------- console presets ---------- */
+  var PRESETS = [
+    {v:"GET",  p:"courses/open",                 want:"200 · list",              b:null},
+    {v:"GET",  p:"students?page=0&size=2",       want:"200 · paginated",         b:null},
+    {v:"GET",  p:"courses/999999",               want:"404 · not found",         b:null},
+    {v:"POST", p:"enrollments",                  want:"409 · suspended student", b:{student:"100004", course:"CS101"}, write:true},
+    {v:"POST", p:"enrollments",                  want:"409 · prerequisites",     b:{student:"100002", course:"CS401"}, write:true},
+    {v:"POST", p:"students",                     want:"400 · every field named", b:"bad"},
+    {v:"GET",  p:"students/by-number/100001",    want:"200 · lookup",            b:null},
+    {v:"GET",  p:"enrollments/999999",           want:"404 · not found",         b:null}
+  ];
+
+  var reqsEl = document.getElementById("reqs");
+  PRESETS.forEach(function(pr){
+    var b = document.createElement("button");
+    b.className = "req";
+    b.disabled = true;
+    var verbClass = pr.v === "GET" ? "get" : "post";
+    b.innerHTML = '<span class="verb ' + verbClass + '"></span><span class="path"></span><span class="want"></span>';
+    b.querySelector(".verb").textContent = pr.v;
+    b.querySelector(".path").textContent = "/" + pr.p;
+    b.querySelector(".want").textContent = pr.want + (pr.write ? " · writes" : "");
+    b.addEventListener("click", function(){ runPreset(pr); });
+    reqsEl.appendChild(b);
+  });
+
+  function runPreset(pr){
+    var opts = {method: pr.v};
+    if(pr.b === "bad"){
+      opts.body = {firstName:"", lastName:"", email:"not-an-email",
+                   studentNumber:"12", dateOfBirth:"2099-01-01", enrollmentYear:1200};
+    } else if(pr.b){
+      var sid = ids.students[pr.b.student], cid3 = ids.courses[pr.b.course];
+      if(!sid || !cid3){ loadIds(); return; }
+      opts.body = {studentId:sid, courseId:cid3};
+    }
+    api(pr.p, opts).then(function(r){
+      var box = document.getElementById("resp");
+      box.hidden = false;
+      var c = document.getElementById("resp-code");
+      c.textContent = r.status;
+      c.className = "resp-code " + (r.status < 400 ? "ok" : "err");
+      document.getElementById("resp-ms").textContent = r.ms + " ms";
+      document.getElementById("resp-cid").textContent = r.hdrCid ? "cid " + r.hdrCid : "";
+      document.getElementById("resp-body").textContent =
+        r.json ? JSON.stringify(r.json, null, 2) : (r.text || "(empty body)");
+      box.scrollIntoView({block:"nearest", behavior:"smooth"});
+    });
+  }
+})();
+</script>
+</body>
+</html>
