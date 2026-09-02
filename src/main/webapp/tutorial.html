@@ -1280,10 +1280,169 @@ Clock fixed = Clock.fixed(Instant.parse(<span class="s">"2025-09-01T10:00:00Z"</
     </section>
   </article>
 
-  <!-- ============================ 10. RUNNING IT ============================ -->
-  <article class="chapter" data-cat="Running">
+  <!-- ============================ 10. SECURITY ============================ -->
+  <article class="chapter" data-cat="Security">
     <div class="chapter-head">
       <div class="eyebrow">Chapter 10</div>
+      <h1>Everything here is unlocked</h1>
+      <p>This application has no authentication whatsoever. That is worth studying carefully, because the reasons it is still safe on your machine are not the reasons most people assume.</p>
+    </div>
+
+    <section class="sub" id="sec-1">
+      <h2>Nothing is protecting these endpoints</h2>
+      <p class="lede">Not "weak security". None. I searched the codebase.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Control</th><th class="num">Found</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">@RolesAllowed / @PermitAll / @DenyAll</td><td class="num">0</td></tr>
+            <tr><td class="mono">SecurityContext / Principal</td><td class="num">0</td></tr>
+            <tr><td class="mono">web.xml security-constraint</td><td class="num">0</td></tr>
+            <tr><td class="mono">login-config / auth-method</td><td class="num">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Every request in this API is anonymous and equally privileged. The console you used in Chapter 6 sent no credentials — it did not need any. And these endpoints exist:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">destructive endpoints, entirely open</span><span>no credential required</span></div>
+<pre>DELETE  /api/students/{id}              <span class="c">// remove a student</span>
+POST    /api/students/{id}/suspension   <span class="c">// suspend anyone</span>
+DELETE  /api/enrollments/{id}           <span class="c">// withdraw an enrollment</span>
+PATCH   /api/courses/{id}/capacity      <span class="c">// resize any course</span>
+POST    /api/enrollments/{id}/grade     <span class="c">// award yourself a 30 e lode</span></pre>
+      </div>
+      <p>Anyone who can reach the port can award grades. That is the honest description, and the README states it plainly under known limitations rather than hiding it.</p>
+    </section>
+
+    <section class="sub" id="sec-2">
+      <h2>The one thing standing in the way</h2>
+      <p>So why is this not a catastrophe on your laptop? One line in your server log:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">server.log — your actual binding</span><span>the only real control</span></div>
+<pre>WFLYUT0006: Undertow HTTP listener default listening on <span class="s">127.0.0.1</span>:8280
+WFLYSRV0060: Http management interface listening on http://<span class="s">127.0.0.1</span>:10190</pre>
+      </div>
+      <p><code class="inline">127.0.0.1</code> is the <em class="term">loopback</em> interface. The operating system will not route external packets to it, so nothing outside your machine can open a connection — not another laptop on your wifi, not the coffee shop network. The API is unauthenticated and unreachable at the same time.</p>
+      <div class="note trap">
+        <span class="tag">The Docker version was different</span>
+        <p>The container CMD ends with <code class="inline">-b 0.0.0.0 -bmanagement 0.0.0.0</code>, which binds <strong>every</strong> interface. Inside a container that is required — otherwise the port mapping reaches nothing. But it means the isolation there came from Docker's network, not from the binding. Change one flag and an unauthenticated grade-awarding API is on your local network. <strong>Network position is doing the entire job of an access-control system, and network position changes without anyone editing code.</strong></p>
+      </div>
+    </section>
+
+    <section class="sub" id="sec-3">
+      <h2>What Jakarta EE would give you</h2>
+      <p>The platform has this built in; the project simply does not use it. Roles are declarative, exactly like the transaction and interceptor annotations from earlier chapters:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">what EnrollmentResource could look like</span><span>not currently in the codebase</span></div>
+<pre><span class="k">@POST</span>
+<span class="k">@Path</span>(<span class="s">"/{id}/grade"</span>)
+<span class="k">@RolesAllowed</span>(<span class="s">"PROFESSOR"</span>)          <span class="c">// only professors grade</span>
+<span class="k">public</span> EnrollmentResponse recordGrade(...) { ... }
+
+<span class="k">@DELETE</span>
+<span class="k">@Path</span>(<span class="s">"/students/{id}"</span>)
+<span class="k">@RolesAllowed</span>(<span class="s">"ADMIN"</span>)
+<span class="k">public void</span> delete(...) { ... }
+
+<span class="c">// And to know WHO is calling, rather than just what role:</span>
+<span class="k">@Inject</span> SecurityContext securityContext;
+String caller = securityContext.getCallerPrincipal().getName();</pre>
+      </div>
+      <p>Enforcement is an interceptor, the same mechanism as <code class="inline">@Transactional</code> and <code class="inline">@Loggable</code> — which is why <code class="inline">@RolesAllowed</code> is mentioned in <code class="inline">Loggable.java</code> as a sibling example. That also means it inherits the <strong>self-invocation trap from Chapter 5</strong>: an internal call bypasses the proxy and therefore bypasses the role check.</p>
+      <h3>Where identity comes from</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Mechanism</th><th>Suited to</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">BASIC / FORM auth</td><td>Server-rendered apps. Needs a session; awkward for APIs.</td></tr>
+            <tr><td class="mono">JWT bearer tokens</td><td>Stateless APIs. The token carries roles and is verified per request.</td></tr>
+            <tr><td class="mono">OIDC / OAuth2</td><td>Delegating login to an identity provider — the university SSO.</td></tr>
+            <tr><td class="mono">mTLS</td><td>Service-to-service, no humans involved.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>For an API like this one, JWT or OIDC is the realistic answer. WildFly ships Elytron to do the verification, so the application still only writes <code class="inline">@RolesAllowed</code>.</p>
+      <div class="note">
+        <span class="tag">Authentication is not authorisation</span>
+        <p>Two different questions. <em>Authentication</em> is "who are you" — a verified token. <em>Authorisation</em> is "may you do this" — <code class="inline">@RolesAllowed</code>. A role check is not enough on its own either: a professor may grade, but only their own course's enrollments. That last mile is a <em class="term">domain</em> decision and belongs in the service layer, next to the enrollment rules — not in an annotation.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="sec-4">
+      <h2>What the code does get right</h2>
+      <p class="lede">Missing authentication is a design decision. These are the bugs it did not have.</p>
+      <h3>Injection is structurally impossible</h3>
+      <p>Every query binds its inputs — 34 <code class="inline">setParameter</code> calls across the repositories, and not one string-concatenated parameter. Bound parameters are sent to the database <em>separately</em> from the SQL text, so a value can never be parsed as code, no matter what it contains.</p>
+      <p>Test it against your own server. The payloads below are the classics:</p>
+      <div class="livebox">
+        <div class="livebox-top">
+          <span class="ttl">Injection attempts · read-only</span>
+        </div>
+        <div class="livebox-body">
+          <div class="reqs" id="inj-reqs"></div>
+          <div class="resp" id="inj-resp" hidden>
+            <div class="resp-top">
+              <span class="resp-code" id="inj-code">—</span>
+              <span id="inj-rows"></span>
+            </div>
+            <pre id="inj-body"></pre>
+          </div>
+          <p class="offline-note" id="inj-off">Not connected. Serve this page from WildFly to run these against your database.</p>
+        </div>
+      </div>
+      <p>The classic <code class="inline">' OR '1'='1</code> returns <strong>fewer</strong> rows than a normal search, not more — because the server searched for a student literally named <code class="inline">' OR '1'='1</code>. The payload was treated as data. That is the whole defence, and it is free as long as you never build query strings by concatenation.</p>
+      <h3>Errors do not leak internals</h3>
+      <p>When you broke the fetch plan in Chapter 3, the response was:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">the real 500 body</span><span>note what is absent</span></div>
+<pre>{ <span class="s">"detail"</span>: <span class="s">"An unexpected error occurred. Please quote the correlation id
+              when reporting this problem."</span>,
+  <span class="s">"correlationId"</span>: <span class="s">"BREAK-2"</span> }</pre>
+      </div>
+      <p>No stack trace, no class names, no SQL, no framework versions. The full detail went to the <em>server</em> log, and the client got a correlation ID to quote. Stack traces in HTTP responses are a genuine disclosure problem — they hand an attacker your library versions and internal structure for free.</p>
+      <h3>Input is validated before your code runs</h3>
+      <p>Bean Validation rejects malformed input at the boundary, and <code class="inline">@StudentNumber</code> constrains a field to exactly six digits. That is not an anti-injection measure — parameter binding already handles that — but it shrinks the range of values that ever reach the domain.</p>
+    </section>
+
+    <section class="sub" id="sec-5">
+      <h2>Secrets, and the rest of the surface</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Issue</th><th>Why it is tolerable here</th><th>Real answer</th></tr></thead>
+          <tbody>
+            <tr><td>Hard-coded <code class="inline">admin / Admin#2026</code></td><td>Loopback-only, local machine</td><td>Secret manager; never expose :10190</td></tr>
+            <tr><td>DB password <code class="inline">enrollment</code> in config</td><td>Same</td><td>Vault, or env vars injected at deploy</td></tr>
+            <tr><td><code class="inline">hbm2ddl.auto=update</code></td><td>Convenient while learning</td><td>Flyway or Liquibase; never let an app rewrite its own schema</td></tr>
+            <tr><td>No rate limiting</td><td>Single user</td><td>Gateway or filter — an open API is trivially floodable</td></tr>
+            <tr><td>Admin console on :10190</td><td>Loopback-only</td><td>Never routable; separate management network</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>The CORS question, answered properly</h3>
+      <p>The project sends no CORS headers, and that is frequently misread as a vulnerability. It is the opposite. Without <code class="inline">Access-Control-Allow-Origin</code>, browsers refuse to let JavaScript on another origin <em>read</em> the responses — the restrictive default.</p>
+      <p>Two things follow. First, this tutorial page can call the API only because WildFly serves it from the same origin; that is why the artifact copy cannot. Second, CORS is a <strong>browser</strong> policy, not an access control: <code class="inline">curl</code>, a script, or any non-browser client ignores it entirely. It is not a substitute for authentication, and it never was.</p>
+    </section>
+
+    <section class="sub" id="sec-6">
+      <h2>The exercise</h2>
+      <p>Adding authentication is the most valuable change you could make to this codebase, and it touches every layer you have studied.</p>
+      <ul class="pts">
+        <li><strong>Start with roles.</strong> Add <code class="inline">@RolesAllowed("ADMIN")</code> to one destructive endpoint and watch it return <strong>401</strong> instead of succeeding. One annotation, immediate feedback.</li>
+        <li><strong>Then identity.</strong> Configure an Elytron JWT realm so a bearer token supplies the caller and their roles.</li>
+        <li><strong>Then the domain rule.</strong> A professor may grade only their own course. That check belongs in <code class="inline">EnrollmentService</code>, beside the eligibility rules — not in an annotation, because it depends on data.</li>
+        <li><strong>Then the tests.</strong> Assert that an unauthenticated call is refused. A security control with no test is a security control that will be removed by a future refactor without anyone noticing.</li>
+      </ul>
+      <div class="note">
+        <span class="tag">Keep the honesty</span>
+        <p>The README documents this gap openly rather than pretending. That is worth imitating: a study project claiming to be production-ready teaches the wrong lesson, and a real project with an undocumented gap is worse. Write down what you have not secured yet.</p>
+      </div>
+    </section>
+  </article>
+
+  <!-- ============================ 11. RUNNING IT ============================ -->
+  <article class="chapter" data-cat="Running">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 11</div>
       <h1>Your setup, and what to try</h1>
       <p>This application is installed natively on your machine — WildFly and PostgreSQL, no Docker.</p>
     </div>
@@ -1601,7 +1760,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   var ids = { courses:{}, students:{} };
 
   var pill = document.getElementById("pill");
-  var offNotes = ["fire-off","console-off","stats-off","hb-off"];
+  var offNotes = ["fire-off","console-off","stats-off","hb-off","inj-off"];
 
   function setLive(ok){
     live = ok;
@@ -1614,6 +1773,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     });
     document.getElementById("console-base").textContent = ok ? API : "";
     Array.prototype.forEach.call(document.querySelectorAll(".req"), function(b){ b.disabled = !ok; });
+    Array.prototype.forEach.call(document.querySelectorAll(".inj"), function(b){ b.disabled = !ok; });
     if(ok){ loadIds(); loadStats(); loadHeartbeat(); buildFire(); }
   }
 
@@ -1751,6 +1911,51 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     b.addEventListener("click", function(){ runPreset(pr); });
     reqsEl.appendChild(b);
   });
+
+  /* ---------- injection demonstration (read-only) ---------- */
+  var INJ = [
+    {label:"baseline — a real surname", q:"ferrari"},
+    {label:"classic OR 1=1",            q:"' OR '1'='1"},
+    {label:"statement terminator",      q:"x'; DROP TABLE students; --"},
+    {label:"comment-out tail",          q:"ferrari' --"}
+  ];
+  var injEl = document.getElementById("inj-reqs");
+  if(injEl){
+    INJ.forEach(function(it){
+      var b = document.createElement("button");
+      b.className = "req inj";
+      b.disabled = true;
+      b.innerHTML = '<span class="verb get">GET</span><span class="path"></span><span class="want"></span>';
+      b.querySelector(".path").textContent = "name=" + it.q;
+      b.querySelector(".want").textContent = it.label;
+      b.addEventListener("click", function(){ runInj(it); });
+      injEl.appendChild(b);
+    });
+  }
+
+  function runInj(it){
+    api("students?page=0&size=50&name=" + encodeURIComponent(it.q)).then(function(r){
+      var box = document.getElementById("inj-resp");
+      box.hidden = false;
+      var c = document.getElementById("inj-code");
+      c.textContent = r.status;
+      c.className = "resp-code " + (r.status < 400 ? "ok" : "err");
+      var rows = "—";
+      if(r.json){
+        if(Array.isArray(r.json.content)) rows = r.json.content.length;
+        else if(Array.isArray(r.json)) rows = r.json.length;
+        else if(typeof r.json.totalElements === "number") rows = r.json.totalElements;
+      }
+      document.getElementById("inj-rows").textContent = rows + " row(s) returned · searched for the literal string";
+      var names = [];
+      if(r.json && Array.isArray(r.json.content)) names = r.json.content.map(function(s){ return s.fullName; });
+      document.getElementById("inj-body").textContent =
+        "sent   name=" + it.q + "\nrows   " + rows +
+        (names.length ? "\nnames  " + names.join(", ") : "\nnames  (none matched)") +
+        "\n\nThe database never parsed this as SQL. The tables are untouched.";
+      box.scrollIntoView({block:"nearest", behavior:"smooth"});
+    });
+  }
 
   function runPreset(pr){
     var opts = {method: pr.v};
