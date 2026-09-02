@@ -1472,7 +1472,7 @@ String caller = securityContext.getCallerPrincipal().getName();</pre>
             <tr><td>API base</td><td class="mono">http://localhost:8280/enrollment/api</td></tr>
             <tr><td>Admin console</td><td class="mono">http://localhost:10190 — admin / Admin#2026</td></tr>
             <tr><td>PostgreSQL 16.9</td><td class="mono">localhost:5433 — enrollment / enrollment</td></tr>
-            <tr><td>WildFly 31.0.1</td><td class="mono">C:\Users\krsit\tools\wildfly-31.0.1.Final</td></tr>
+            <tr><td>WildFly 31.0.1</td><td class="mono">%USERPROFILE%\tools\wildfly-31.0.1.Final</td></tr>
           </tbody>
         </table>
       </div>
@@ -1484,10 +1484,11 @@ String caller = securityContext.getCallerPrincipal().getName();</pre>
       <p>Neither service auto-starts. PostgreSQL must come up first — WildFly's connection pool tries to prefill at boot.</p>
       <div class="code">
         <div class="code-top"><span class="file">start postgres</span><span>then wildfly</span></div>
-<pre>pg_ctl.exe -D C:\Users\krsit\tools\pgsql\data -o "-p 5433" -l pg.log start
+<pre>pg_ctl.exe -D %USERPROFILE%\tools\pgsql\data -o "-p 5433" -l pg.log start
 
 standalone.bat -Djboss.socket.binding.port-offset=200</pre>
       </div>
+      <p><code class="inline">%USERPROFILE%</code> expands to your home directory in <code class="inline">cmd</code>. In PowerShell write <code class="inline">$env:USERPROFILE</code> instead, and wrap the path in quotes.</p>
       <p>The development loop is one command. Maven writes the WAR into <code class="inline">docker/deployments/</code> plus a <code class="inline">.dodeploy</code> marker; WildFly's scanner is pointed at that folder and redeploys within a second or two.</p>
       <div class="code">
         <div class="code-top"><span class="file">the loop</span><span>edit → rebuild → live</span></div>
