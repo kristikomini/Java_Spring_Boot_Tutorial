@@ -40,7 +40,25 @@
         <tracking-mode>COOKIE</tracking-mode>
     </session-config>
 
+    <!--
+      WHAT "/" SERVES.
+      The container walks this list in order for a request that names a
+      directory rather than a file, and serves the first entry that exists.
+      tutorial.html is first because the fieldbook IS the project: someone who
+      types the bare hostname wants the course, not the endpoint table.
+
+      index.html stays second, and stays reachable at /index.html - it is the
+      API reference, now linked from the fieldbook's sidebar rather than
+      occupying the front door. Reordering these two lines is the whole
+      change: nothing was renamed, so no existing link can break.
+
+      This only decides what "/" resolves to. It is NOT a redirect - the URL
+      in the address bar stays "/", which is why the fieldbook's own links
+      must stay relative (tutorial.html, not /tutorial.html) to keep working
+      under any context path.
+    -->
     <welcome-file-list>
+        <welcome-file>tutorial.html</welcome-file>
         <welcome-file>index.html</welcome-file>
     </welcome-file-list>
 

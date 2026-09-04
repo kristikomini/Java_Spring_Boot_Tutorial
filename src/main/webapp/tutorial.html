@@ -1378,15 +1378,88 @@ figcaption{
 /* ============================================================
    ACCOUNT
    ============================================================ */
+.acct-wrap{position:relative;flex:none}
+
+/* The button is an avatar plus a label. Signed out the avatar is a glyph and
+   the label reads "sign in"; signed in the avatar carries the initials and the
+   label the name, which is the whole point - "am I signed in, and as whom" is
+   answered by looking, not by clicking. */
 .acct-btn{
-  flex:none;font-family:var(--mono);font-size:10px;font-weight:600;
-  letter-spacing:.09em;text-transform:uppercase;
+  flex:none;display:flex;align-items:center;gap:7px;max-width:186px;
   color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--rule);
-  border-radius:var(--radius-btn);padding:4px 9px;cursor:pointer;max-width:170px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  border-radius:var(--radius-pill);padding:2px 11px 2px 2px;cursor:pointer;
+  transition:color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),
+             background var(--t-fast) var(--ease);
 }
 .acct-btn:hover{color:var(--ink);border-color:var(--rule-strong)}
-.acct-btn.in{color:var(--runtime);border-color:var(--runtime)}
+.acct-btn[aria-expanded="true"]{border-color:var(--accent);color:var(--ink)}
+.acct-btn.in{border-color:var(--runtime)}
+.acct-btn.in:hover,.acct-btn.in[aria-expanded="true"]{border-color:var(--runtime);color:var(--ink)}
+
+.avatar{
+  flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
+  background:var(--rule);color:var(--ink-soft);
+  font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.02em;
+  line-height:1;text-transform:uppercase;
+}
+.acct-btn.in .avatar{background:var(--runtime);color:var(--accent-ink)}
+.avatar svg{width:13px;height:13px;display:block;fill:currentColor}
+
+.acct-label{
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* Below this the bar is tight enough that the name is the first thing worth
+   dropping - the avatar still says signed-in, and the menu still says as whom. */
+@media(max-width:760px){
+  .acct-label{display:none}
+  .acct-btn{padding:2px;gap:0}
+}
+
+/* ---- the menu ----------------------------------------------------------
+   role="menu", so it closes on Escape and on a click anywhere outside, and
+   arrow keys walk it. A dropdown that traps you is worse than no dropdown. */
+.acct-menu{
+  position:absolute;top:calc(100% + 8px);right:0;width:258px;z-index:110;
+  background:var(--surface);border:1px solid var(--rule-strong);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:5px;
+  animation:acct-pop var(--t-fast) var(--ease);
+}
+@keyframes acct-pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+.acct-who{padding:9px 10px 11px;border-bottom:1px solid var(--rule);margin-bottom:5px}
+.acct-who b{
+  display:block;font-size:13.5px;font-weight:600;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.acct-who span{
+  display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);
+  margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.acct-who .acct-state{
+  display:inline-block;margin-top:6px;font-family:var(--mono);font-size:9.5px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);
+  border:1px solid var(--rule);border-radius:var(--radius-pill);padding:1px 7px;
+}
+.acct-who .acct-state.on{color:var(--runtime);border-color:var(--runtime)}
+
+.acct-menu a,.acct-menu button{
+  display:flex;align-items:center;gap:9px;width:100%;box-sizing:border-box;
+  padding:7px 10px;border:none;background:none;border-radius:var(--radius-btn);
+  font:inherit;font-size:13px;color:var(--ink-soft);
+  text-align:left;text-decoration:none;cursor:pointer;
+}
+.acct-menu a:hover,.acct-menu button:hover,
+.acct-menu a:focus,.acct-menu button:focus{
+  background:var(--surface-2);color:var(--ink);outline:none;
+}
+.acct-menu .ic{flex:none;width:17px;text-align:center;font-size:13px;line-height:1}
+.acct-menu .danger:hover{color:var(--accent)}
+.acct-menu hr{border:none;border-top:1px solid var(--rule);margin:5px 0}
+.acct-foot{
+  padding:8px 10px 4px;margin:0;font-size:11.5px;color:var(--ink-faint);line-height:1.55;
+}
 
 .field{display:block;margin-bottom:9px}
 .field span{
@@ -1410,6 +1483,26 @@ figcaption{
   background:none;border:none;color:var(--accent);font:inherit;font-size:12.5px;
   cursor:pointer;padding:0;text-decoration:underline;
 }
+
+/* The password rule, said next to the field it governs rather than after the
+   server has rejected the attempt. */
+.acct-fine{font-size:11.5px;color:var(--ink-faint);line-height:1.55;margin:-4px 0 10px}
+
+/* Folded shut, because it is the reasoning behind the form and not part of
+   filling it in - but present, because on this project the reasoning IS the
+   product. */
+.acct-why{
+  margin-top:15px;border-top:1px solid var(--rule);padding-top:12px;
+  font-size:12px;color:var(--ink-faint);line-height:1.65;
+}
+.acct-why summary{
+  cursor:pointer;color:var(--ink-soft);font-family:var(--mono);font-size:10px;
+  letter-spacing:.09em;text-transform:uppercase;
+}
+.acct-why summary:hover{color:var(--ink)}
+.acct-why ul{margin:11px 0 0;padding-left:17px}
+.acct-why li{margin-bottom:9px}
+.acct-why p{margin:11px 0 0}
 
 /* ============================================================
    TOAST — milestones, and only milestones
@@ -1518,7 +1611,21 @@ figcaption{
 
     <div class="acct-group">
       <span class="pill" id="pill" title="Whether this page can reach the enrollment API">checking</span>
-      <button class="acct-btn" id="acct-btn" aria-haspopup="dialog">sign in</button>
+
+      <!-- Everything account-shaped hangs off this one control: who you are,
+           and every page that only makes sense once the server knows it. The
+           menu is built in JavaScript because its contents depend on an answer
+           only the server has - see paintAccountButton(). -->
+      <div class="acct-wrap">
+        <button class="acct-btn" id="acct-btn"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="acct-menu">
+          <span class="avatar" id="acct-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.5-8 5.6V22h16v-2.4c0-3.1-3.6-5.6-8-5.6Z"/></svg>
+          </span>
+          <span class="acct-label" id="acct-label">sign in</span>
+        </button>
+        <div class="acct-menu" id="acct-menu" role="menu" aria-labelledby="acct-btn" hidden></div>
+      </div>
     </div>
   </div>
 </header>
@@ -1535,7 +1642,6 @@ figcaption{
         <li><a href="#ch-the-interview" data-goto="ch-the-interview"><span class="ic" aria-hidden="true">&#128221;</span>Mock exam</a></li>
         <li><button type="button" id="nav-notes"><span class="ic" aria-hidden="true">&#128204;</span>My notes</button></li>
         <li><a href="#ch-cheat-sheet" data-goto="ch-cheat-sheet"><span class="ic" aria-hidden="true">&#128203;</span>Cheat sheet</a></li>
-        <li><a href="area-riservata.html"><span class="ic" aria-hidden="true">&#128274;</span>Area riservata</a></li>
       </ul>
     </nav>
 
@@ -16166,11 +16272,15 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
         opts.body = JSON.stringify(body);
       }
       return fetch(target, opts).then(function(r){
-        if (r.status === 204) return { status: r.status, json: null };
+        /* Carried through because a 429 from the sign-in throttle sets it, and
+           "try again in about 15 minutes" is a different message from "try
+           again later" - one of them tells you whether to wait. */
+        var retryAfter = parseInt(r.headers.get("Retry-After") || "", 10);
+        if (r.status === 204) return { status: r.status, json: null, retryAfter: retryAfter };
         return r.text().then(function(t){
           var json = null;
           try { json = t ? JSON.parse(t) : null; } catch (e) {}
-          return { status: r.status, json: json };
+          return { status: r.status, json: json, retryAfter: retryAfter };
         });
       });
     }
@@ -16364,83 +16474,358 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     };
   })();
 
-  /* ---------- the account panel ---------- */
-  var acctBtn  = document.getElementById("acct-btn");
-  var acctTray = document.getElementById("acct-tray");
-  var acctBody = document.getElementById("acct-body");
-  var acctTitle = document.getElementById("acct-title");
+  /* ============================================================
+     THE ACCOUNT MENU AND THE ACCOUNT PANEL
+     ============================================================
+     Two surfaces, and the split is deliberate:
 
+       - the MENU is navigation. Who you are, and the handful of places that
+         only mean something once the server knows it. It opens under the
+         avatar, it closes when you look away, and it never contains a form.
+       - the PANEL - the tray on the right - is where a form lives, because a
+         form needs room, a message line, and somewhere for a mistake to be
+         shown without the whole thing jumping.
+
+     Both are rebuilt from Sync.me() every time they open, and NOTHING here
+     caches "signed in" anywhere. The session is an HttpOnly cookie this script
+     cannot read; a local flag would be a guess that goes stale the moment the
+     session is revoked from another tab. "Am I signed in" is a question only
+     the server answers - chapter 15 is the long version.
+     ============================================================ */
+  var acctBtn    = document.getElementById("acct-btn");
+  var acctLabel  = document.getElementById("acct-label");
+  var acctAvatar = document.getElementById("acct-avatar");
+  var acctMenu   = document.getElementById("acct-menu");
+  var acctTray   = document.getElementById("acct-tray");
+  var acctBody   = document.getElementById("acct-body");
+  var acctTitle  = document.getElementById("acct-title");
+
+  var acctMode  = "in";        /* in | up | manage */
+  var menuOpen  = false;
+
+  /* The floor the server enforces in AccountService.MIN_PASSWORD_LENGTH,
+     repeated so the form can say so before spending a round trip. The server
+     is still the one that decides; this only saves a wasted request. */
+  var MIN_PASSWORD = 12;
+
+  var PERSON_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 ' +
+    '10Zm0 2c-4.4 0-8 2.5-8 5.6V22h16v-2.4c0-3.1-3.6-5.6-8-5.6Z"/></svg>';
+
+  /* Two letters out of whatever the account actually has. A display name gives
+     first-and-last initials; "ada@example.com" gives AD, which is still a
+     stable mark you recognise at a glance. */
+  function initials(me){
+    var name = ((me && me.displayName) || "").trim();
+    if (name) {
+      var parts = name.split(/\s+/);
+      return parts.length > 1
+        ? parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+        : name.slice(0, 2);
+    }
+    var email = (me && me.email) || "";
+    return email ? email.slice(0, 2) : "?";
+  }
+
+  function acctName(me){
+    if (!me) return "";
+    var name = (me.displayName || "").trim();
+    return name || String(me.email || "").split("@")[0];
+  }
+
+  /* ---------- the avatar in the bar ----------
+     This is the only always-visible answer to "am I signed in, and as whom",
+     so it carries both: the initials in the disc, the name beside it. */
   function paintAccountButton(label){
     if (!acctBtn) return;
     var me = Sync.me();
-    if (label) { acctBtn.textContent = label; acctBtn.className = "acct-btn in"; return; }
+    var state = Sync.state();
+
     if (me) {
-      acctBtn.textContent = me.displayName || me.email;
       acctBtn.className = "acct-btn in";
-      acctBtn.title = "Signed in as " + me.email + " — your progress syncs to the server";
-    } else if (Sync.state() === "offline") {
-      acctBtn.textContent = "local only";
-      acctBtn.className = "acct-btn";
-      acctBtn.title = "No server reachable. Everything is saved in this browser.";
-    } else if (Sync.state() === "error") {
-      acctBtn.textContent = "sync failed";
-      acctBtn.className = "acct-btn";
+      acctAvatar.textContent = initials(me);
+      acctLabel.textContent = label || (state === "error" ? "sync failed" : acctName(me));
+      acctBtn.title = "Signed in as " + me.email +
+        (state === "error" ? " — the last sync did not go through"
+                           : " — your progress syncs to the server");
     } else {
-      acctBtn.textContent = "sign in";
       acctBtn.className = "acct-btn";
-      acctBtn.title = "Optional. Sign in to carry your progress between machines.";
+      acctAvatar.innerHTML = PERSON_SVG;
+      if (state === "offline") {
+        acctLabel.textContent = "local only";
+        acctBtn.title = "No server reachable. Everything is saved in this browser.";
+      } else {
+        acctLabel.textContent = "sign in";
+        acctBtn.title = "Optional. Sign in to carry your progress between machines.";
+      }
     }
+    /* Repaint the open menu so the sync chip is honest - but not while the
+       keyboard is in it, because replacing innerHTML drops focus to the body
+       and the arrow keys stop working mid-navigation. */
+    if (menuOpen && !acctMenu.contains(document.activeElement)) renderAcctMenu();
   }
 
-  function openAcct(){ acctTray.classList.add("open"); renderAcct(); }
-  function closeAcct(){ acctTray.classList.remove("open"); }
+  /* ============================================================
+     THE MENU
+     ============================================================ */
+  function mItem(id, icon, text, cls){
+    return '<button type="button" role="menuitem" id="' + id + '"' +
+           (cls ? ' class="' + cls + '"' : '') + '>' +
+           '<span class="ic" aria-hidden="true">' + icon + '</span>' + text + '</button>';
+  }
+  function mLink(href, icon, text){
+    return '<a role="menuitem" href="' + href + '">' +
+           '<span class="ic" aria-hidden="true">' + icon + '</span>' + text + '</a>';
+  }
+
+  function renderAcctMenu(){
+    if (!acctMenu) return;
+    var me = Sync.me();
+    var state = Sync.state();
+    var html;
+
+    if (!Sync.available()) {
+      /* Not being served by the application. Offering "sign in" here would be
+         a button that can only fail, so it is not offered. */
+      html =
+        '<div class="acct-who"><b>Local only</b>' +
+        '<span>no server to sign in to</span>' +
+        '<span class="acct-state">this browser</span></div>' +
+        mItem("m-why", "&#8505;", "Why is there no account?") +
+        mLink("index.html", "&#128268;", "API reference") +
+        '<p class="acct-foot">Your progress and notes are in this browser&rsquo;s ' +
+        'localStorage. Nothing is lost &mdash; it just lives in one place.</p>';
+
+    } else if (me) {
+      var chip = state === "error" ? '<span class="acct-state">sync failed</span>'
+               : state === "in"    ? '<span class="acct-state on">synced</span>'
+               :                     '<span class="acct-state">syncing</span>';
+      html =
+        '<div class="acct-who"><b>' + escapeText(acctName(me)) + '</b>' +
+        '<span>' + escapeText(me.email || "") + '</span>' + chip + '</div>' +
+        mLink("area-riservata.html", "&#128274;", "Area riservata") +
+        mItem("m-sync", "&#128260;", "Sync now") +
+        '<hr>' +
+        mItem("m-manage", "&#9881;", "Account &amp; security") +
+        mItem("m-out", "&#10132;", "Sign out", "danger");
+
+    } else {
+      html =
+        '<div class="acct-who"><b>Not signed in</b>' +
+        '<span>progress is saved in this browser</span></div>' +
+        mItem("m-in", "&#10141;", "Sign in") +
+        mItem("m-up", "&#10133;", "Create an account") +
+        '<hr>' +
+        mLink("area-riservata.html", "&#128274;", "Area riservata") +
+        mLink("index.html", "&#128268;", "API reference") +
+        '<p class="acct-foot">An account is optional. It carries the same record ' +
+        'between machines &mdash; nothing here is locked behind it.</p>';
+    }
+
+    acctMenu.innerHTML = html;
+
+    bindClick("m-in",     function(){ closeMenu(); openAcct("in"); });
+    bindClick("m-up",     function(){ closeMenu(); openAcct("up"); });
+    bindClick("m-manage", function(){ closeMenu(); openAcct("manage"); });
+    bindClick("m-why",    function(){ closeMenu(); openAcct("in"); });
+    bindClick("m-sync",   function(){ closeMenu(); Sync.now(); });
+    bindClick("m-out",    function(){ closeMenu(); signOut(); });
+  }
+
+  function menuItems(){
+    return Array.prototype.slice.call(acctMenu.querySelectorAll('[role="menuitem"]'));
+  }
+
+  function openMenu(){
+    if (!acctMenu) return;
+    menuOpen = true;
+    acctMenu.hidden = false;
+    acctBtn.setAttribute("aria-expanded", "true");
+    renderAcctMenu();
+    var first = menuItems()[0];
+    if (first) first.focus();
+  }
+
+  function closeMenu(focusBack){
+    if (!menuOpen) return;
+    menuOpen = false;
+    acctMenu.hidden = true;
+    acctBtn.setAttribute("aria-expanded", "false");
+    if (focusBack && acctBtn) acctBtn.focus();
+  }
+
   if (acctBtn) acctBtn.addEventListener("click", function(){
-    if (acctTray.classList.contains("open")) closeAcct(); else openAcct();
+    if (menuOpen) closeMenu(); else openMenu();
   });
+
+  /* A menu that only closes on its own button is a menu you fight. */
+  document.addEventListener("click", function(e){
+    if (!menuOpen) return;
+    if (acctMenu.contains(e.target) || acctBtn.contains(e.target)) return;
+    closeMenu();
+  });
+
+  /* Arrow keys walk it, Escape leaves it, Tab abandons it. That is the whole
+     of the ARIA menu keyboard contract a menu this size needs. */
+  if (acctMenu) acctMenu.addEventListener("keydown", function(e){
+    if (e.key === "Escape") { e.stopPropagation(); closeMenu(true); return; }
+    if (e.key === "Tab") { closeMenu(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    var items = menuItems();
+    var at = items.indexOf(document.activeElement);
+    var next = e.key === "ArrowDown" ? at + 1 : at - 1;
+    if (next < 0) next = items.length - 1;
+    if (next >= items.length) next = 0;
+    if (items[next]) items[next].focus();
+  });
+
+  /* ============================================================
+     THE PANEL
+     ============================================================ */
+  function openAcct(mode){
+    if (mode) acctMode = mode;
+    acctTray.classList.add("open");
+    renderAcct();
+    var first = acctBody.querySelector("input");
+    if (first) first.focus();
+  }
+  function closeAcct(){ acctTray.classList.remove("open"); }
   bindClick("acct-x", closeAcct);
 
-  var acctMode = "in";   /* in | up */
+  function signOut(){
+    return Sync.call("auth/logout", "POST").then(function(){
+      Sync.setMe(null);
+      acctMode = "in";
+      if (acctTray.classList.contains("open")) renderAcct();
+      toast("signed out", "Your progress stays in this browser. Sign in again to put it back on the server.");
+    }).catch(function(){});
+  }
+
+  /* One sentence a person can act on, out of whatever the server said.
+     Bean Validation returns every violation rather than only the first, so
+     they are joined; a throttle answers 429 with Retry-After, which is a
+     different sentence entirely because it is about time, not about you. */
+  function explain(r, signingUp){
+    if (r.status === 429) return "Too many attempts. Try again " + retryWording(r.retryAfter) + ".";
+    var p = r.json;
+    if (p && Object.prototype.toString.call(p.violations) === "[object Array]" && p.violations.length) {
+      return p.violations.map(function(v){
+        return v.message || ((v.field || "That") + " is not valid");
+      }).join(" ");
+    }
+    if (p && p.detail) return p.detail;
+    if (p && p.title) return p.title;
+    return signingUp ? "The account could not be created." : "That did not work.";
+  }
+
+  function retryWording(seconds){
+    var n = parseInt(seconds, 10);
+    if (!n || isNaN(n)) return "in a few minutes";
+    var mins = Math.ceil(n / 60);
+    return mins <= 1 ? "in about a minute" : "in about " + mins + " minutes";
+  }
+
+  /* What the two standalone account pages used to say underneath their forms.
+     It belongs with the form it is about, so it moved here rather than being
+     deleted along with them. */
+  function acctWhy(signingUp){
+    var items = signingUp ? [
+      "The password is stored as a <b>PBKDF2-HMAC-SHA256</b> hash, 210&thinsp;000 iterations, " +
+      "with its own random salt. The stored string names its own parameters, so the cost can be " +
+      "raised later and old rows upgrade themselves on the next successful sign-in.",
+      "There is <b>no email verification and no password reset</b>, because both need a mail " +
+      "server this project does not have. A forgotten password means a new account. That is a " +
+      "missing feature, written down rather than hidden.",
+      "Registering an address that already exists does not answer &ldquo;already registered&rdquo; " +
+      "&mdash; that answer would turn this form into a way of asking who has an account. It " +
+      "quietly tries to sign you in instead.",
+      "You can delete the account and everything in it in one click. A tool that stores your " +
+      "history and offers no way out is one you should not sign in to."
+    ] : [
+      "An unknown address and a wrong password produce the <b>same</b> message, and the server " +
+      "hashes a throwaway value for an unknown address so the two take the same time. Either " +
+      "difference would turn this form into a way of asking which addresses have accounts.",
+      "Failures are counted twice over: eight per account and thirty per source address in a " +
+      "quarter of an hour. The second counter is the one that catches credential stuffing, where " +
+      "no single account is ever tried twice.",
+      "The session arrives as an <code class=\"inline\">HttpOnly</code> cookie, so no script on " +
+      "this page can read it &mdash; not even this one. Whether you are signed in is a question " +
+      "only the server can answer."
+    ];
+    return '<details class="acct-why"><summary>What this form does not tell you</summary><ul><li>' +
+           items.join("</li><li>") + '</li></ul>' +
+           '<p>The reasoning in full is in <code class="inline">docs/ACCOUNTS.md</code> and in ' +
+           'chapter 15.</p></details>';
+  }
 
   function renderAcct(){
     if (!acctBody) return;
     var me = Sync.me();
 
+    /* ---------- nothing to sign in to ---------- */
     if (!Sync.available()) {
       acctTitle.textContent = "Local only";
       acctBody.innerHTML =
         '<p class="acct-msg">This page is not being served by the application, so there is no ' +
-        'server to sign in to. Everything still works — your progress and notes are in this ' +
+        'server to sign in to. Everything still works &mdash; your progress and notes are in this ' +
         "browser's <code class=\"inline\">localStorage</code>.</p>" +
         '<p class="acct-note">Deploy the WAR and open the page from WildFly to get accounts, ' +
         'and the same record on more than one machine.</p>';
       return;
     }
 
+    /* ---------- signed in ---------- */
     if (me) {
-      acctTitle.textContent = "Signed in";
+      acctTitle.textContent = "Your account";
       acctBody.innerHTML =
-        '<p class="acct-msg ok">' + escapeText(me.displayName || "") + ' &middot; ' +
-        escapeText(me.email) + '</p>' +
+        '<p class="acct-msg ok">' + escapeText(acctName(me)) + ' &middot; ' +
+        escapeText(me.email || "") + '</p>' +
         '<p class="acct-note">Your chapters, checkpoint scores, review schedule and notes are ' +
         'stored on the server and merged with whatever this browser knows. Answering something ' +
         'here shows up on your other machine the next time it syncs.</p>' +
         '<div class="acct-row">' +
           '<button class="btn" id="acct-sync">Sync now</button>' +
           '<button class="btn" id="acct-out">Sign out</button>' +
+          '<button class="btn" id="acct-outall">Sign out everywhere</button>' +
         '</div>' +
-        '<p class="acct-note">The whole record — every chapter, the streak calendar, your notes ' +
-        'and the account itself — is on the <a href="area-riservata.html">area riservata</a> page.</p>' +
+        '<p class="acct-msg" id="acct-out-msg" role="status" aria-live="polite"></p>' +
+        '<p class="acct-note">The whole record &mdash; every chapter, the streak calendar, your ' +
+        'notes and the password itself &mdash; is on the ' +
+        '<a href="area-riservata.html">area riservata</a> page.</p>' +
         '<p class="acct-note">Streak: <b>' + Progress.streak() + '</b> days &middot; longest <b>' +
         Progress.best() + '</b>.</p>' +
         '<p class="acct-note">Leaving? <button class="linkish" id="acct-kill">Delete this account ' +
         'and everything in it</button>. There is no undo and none is pretended.</p>';
 
-      bindClick("acct-sync", function(){ Sync.now(); });
-      bindClick("acct-out", function(){
-        Sync.call("auth/logout", "POST").then(function(){
-          Sync.setMe(null);
-          renderAcct();
-        });
+      var sayHere = function(kind, text){
+        var m = document.getElementById("acct-out-msg");
+        if (!m) return;
+        m.className = "acct-msg" + (kind ? " " + kind : "");
+        m.textContent = text;
+      };
+
+      bindClick("acct-sync", function(){
+        sayHere("", "Syncing…");
+        Sync.now().then(function(){ sayHere("ok", "Up to date."); });
+      });
+      bindClick("acct-out", function(){ signOut(); });
+
+      /* Every session, not this one only. The button people look for after
+         signing in on a machine they no longer have. */
+      bindClick("acct-outall", function(){
+        sayHere("", "Working…");
+        Sync.call("auth/logout-all", "POST").then(function(r){
+          if (r.status === 200 || r.status === 204) {
+            Sync.setMe(null);
+            acctMode = "in";
+            renderAcct();
+            toast("signed out everywhere",
+                  "Every session on every machine has been ended, this one included.");
+          } else {
+            sayHere("bad", explain(r));
+          }
+        }).catch(function(){ sayHere("bad", "Could not reach the server."); });
       });
 
       var killArmed = false;
@@ -16457,84 +16842,225 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
         }
         Sync.call("auth/me", "DELETE").then(function(){
           Sync.setMe(null);
+          acctMode = "in";
           renderAcct();
         });
       });
       return;
     }
 
+    /* ---------- signed out: the form ---------- */
     var signingUp = acctMode === "up";
     acctTitle.textContent = signingUp ? "Create an account" : "Sign in";
+
+    /* A real <form>. Not decoration: it is what makes Enter submit, what lets
+       a password manager recognise the pair of fields, and what gives the
+       browser somewhere to hang autofill. A div full of inputs does none of
+       those and looks identical. */
     acctBody.innerHTML =
-      '<p class="acct-note" style="border:none;padding:0;margin:0 0 14px">Entirely optional. ' +
-      'Everything works without an account; signing in carries the same record between machines ' +
-      'and gives it somewhere to live that is not one browser profile.</p>' +
-      (signingUp ? '<label class="field"><span>Name</span><input id="acct-name" autocomplete="nickname"></label>' : '') +
-      '<label class="field"><span>Email</span><input id="acct-email" type="email" autocomplete="username"></label>' +
-      '<label class="field"><span>Password</span><input id="acct-pass" type="password" autocomplete="' +
-        (signingUp ? "new-password" : "current-password") + '"></label>' +
-      (signingUp ? '<p class="acct-note" style="border:none;padding:0;margin:2px 0 0">At least 12 characters. ' +
-        'No symbol requirements — length is what actually buys entropy, and composition rules mostly ' +
-        'produce <code class="inline">Password1!</code>.</p>' : '') +
-      '<div class="acct-row">' +
-        '<button class="btn primary" id="acct-go">' + (signingUp ? "Create account" : "Sign in") + '</button>' +
-        '<button class="linkish" id="acct-swap">' +
-          (signingUp ? "I already have one" : "Create one instead") + '</button>' +
-      '</div>' +
-      '<p class="acct-msg" id="acct-out-msg"></p>' +
-      '<p class="acct-note">Prefer a page to a tray? There is a full ' +
-      '<a href="signin.html">sign-in</a> and <a href="register.html">create-account</a> page, ' +
-      'and they annotate what the server does with what you type.</p>' +
-      '<p class="acct-note">The session lives in an <code class="inline">HttpOnly</code> cookie, ' +
-      'not in <code class="inline">localStorage</code> — chapter 15 explains why that is a choice ' +
-      'between two different attacks rather than a free win.</p>';
+      '<p class="tray-hint">Entirely optional. Everything works without an account; signing in ' +
+      'carries the same record between machines and gives it somewhere to live that is not one ' +
+      'browser profile.</p>' +
+      '<form id="acct-form" novalidate>' +
+        (signingUp
+          ? '<label class="field"><span>Name</span>' +
+            '<input id="acct-name" autocomplete="nickname" maxlength="60" placeholder="optional"></label>'
+          : '') +
+        '<label class="field"><span>Email</span>' +
+          '<input id="acct-email" type="email" autocomplete="username" autocapitalize="off" ' +
+          'spellcheck="false" required></label>' +
+        '<label class="field"><span>Password</span>' +
+          '<input id="acct-pass" type="password" required autocomplete="' +
+          (signingUp ? "new-password" : "current-password") + '"></label>' +
+        (signingUp
+          ? '<p class="acct-fine">At least ' + MIN_PASSWORD + ' characters. No symbol ' +
+            'requirements &mdash; length is what actually buys entropy, and composition rules ' +
+            'mostly produce <code class="inline">Password1!</code>.</p>'
+          : '') +
+        '<div class="acct-row">' +
+          '<button class="btn primary" type="submit" id="acct-go">' +
+            (signingUp ? "Create account" : "Sign in") + '</button>' +
+          '<button class="btn" type="button" id="acct-reveal" aria-pressed="false">Show password</button>' +
+        '</div>' +
+        '<p class="acct-msg" id="acct-out-msg" role="status" aria-live="polite"></p>' +
+      '</form>' +
+      '<p class="acct-note">' +
+        (signingUp
+          ? 'Already have one? <button class="linkish" id="acct-swap">Sign in instead</button>'
+          : 'No account yet? <button class="linkish" id="acct-swap">Create one</button>') +
+      '</p>' +
+      acctWhy(signingUp);
 
     bindClick("acct-swap", function(){
       acctMode = signingUp ? "in" : "up";
       renderAcct();
+      var first = acctBody.querySelector("input");
+      if (first) first.focus();
     });
 
-    bindClick("acct-go", function(){
-      var msg = document.getElementById("acct-out-msg");
-      var email = (document.getElementById("acct-email") || {}).value || "";
-      var pass  = (document.getElementById("acct-pass")  || {}).value || "";
-      var name  = (document.getElementById("acct-name")  || {}).value || "";
+    /* Typing a password you cannot see, into a form that may reject it for
+       being too short, is a bad time. The button is not a security hole - the
+       characters are already in the DOM either way. */
+    bindClick("acct-reveal", function(){
+      var pass = document.getElementById("acct-pass");
+      var btn  = document.getElementById("acct-reveal");
+      var show = pass.type === "password";
+      pass.type = show ? "text" : "password";
+      btn.setAttribute("aria-pressed", show ? "true" : "false");
+      btn.textContent = show ? "Hide password" : "Show password";
+      pass.focus();
+    });
+
+    var form = document.getElementById("acct-form");
+    var busy = false;
+
+    form.addEventListener("submit", function(e){
+      e.preventDefault();
+      if (busy) return;
+
+      var emailEl = document.getElementById("acct-email");
+      var passEl  = document.getElementById("acct-pass");
+      var nameEl  = document.getElementById("acct-name");
+      var msg     = document.getElementById("acct-out-msg");
+      var go      = document.getElementById("acct-go");
+
+      function fail(text, field){
+        msg.className = "acct-msg bad";
+        msg.textContent = text;
+        if (field) field.focus();
+      }
+
+      var email = (emailEl.value || "").trim();
+      var pass  = passEl.value || "";
+
+      /* Checked here AND on the server, and the server is the one that counts.
+         This exists so an obvious mistake costs a keystroke instead of a round
+         trip - never as the rule itself, because anything checked in a browser
+         can be skipped in a browser. */
+      if (!email || email.indexOf("@") < 1 || email.indexOf(".", email.indexOf("@")) < 0) {
+        fail("That does not look like an email address.", emailEl); return;
+      }
+      if (!pass) { fail("Enter a password.", passEl); return; }
+      if (signingUp && pass.length < MIN_PASSWORD) {
+        fail("The password must be at least " + MIN_PASSWORD + " characters long. That one is " +
+             pass.length + ".", passEl);
+        return;
+      }
+
+      busy = true;
+      if (go) go.disabled = true;
       msg.className = "acct-msg";
-      msg.textContent = "Working…";
+      msg.textContent = signingUp ? "Creating the account…" : "Signing in…";
 
       var zone = "";
-      try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+      try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) {}
 
       var body = signingUp
-        ? { email: email, password: pass, displayName: name, timeZone: zone }
+        ? { email: email, password: pass,
+            displayName: ((nameEl && nameEl.value) || "").trim(), timeZone: zone }
         : { email: email, password: pass };
 
       Sync.call(signingUp ? "auth/register" : "auth/login", "POST", body).then(function(r){
         if (r.status === 200 || r.status === 201) {
           Sync.setMe(r.json);
+          acctMode = "manage";
           renderAcct();
           Sync.now();
-          toast("signed in", "Your progress will now follow you between machines. It was never lost, it just lived in one browser.");
+          toast(signingUp ? "account created" : "signed in",
+                "Your progress will now follow you between machines. It was never lost, it just lived in one browser.");
+          /* Somebody sent here by a page that needs an account goes back to
+             it, rather than being left on the page that intercepted them. */
+          if (pendingNext) {
+            var back = pendingNext;
+            pendingNext = null;
+            window.location.replace(back);
+          }
           return;
         }
-        msg.className = "acct-msg bad";
-        msg.textContent = r.status === 429
-          ? "Too many attempts. Try again in a few minutes."
-          : (r.json && r.json.detail)
-            ? r.json.detail
-            : "That did not work.";
+        fail(explain(r, signingUp), r.status === 429 ? null : passEl);
       }).catch(function(){
-        msg.className = "acct-msg bad";
-        msg.textContent = "Could not reach the server.";
+        fail("Could not reach the server.", null);
+      }).then(function(){
+        busy = false;
+        var again = document.getElementById("acct-go");
+        if (again) again.disabled = false;
       });
     });
+  }
+
+  /* ============================================================
+     ARRIVING FROM A PAGE THAT NEEDS AN ACCOUNT
+     ============================================================
+     area-riservata.html has no sign-in page of its own to send you to any
+     more. It sends you here with ?account=signin, and this puts the panel up
+     with the right message and takes you back afterwards.
+     ============================================================ */
+  var pendingNext = null;
+  var acctIntent  = null;
+  var acctReason  = null;
+
+  /* ?next= is attacker-supplied, and an unchecked redirect is a real
+     vulnerability rather than a theoretical one: the link starts on a domain
+     the victim trusts, so it is the phishing link that survives a careful
+     reader. Two checks, because either alone has a bypass - reject anything
+     carrying a scheme, a backslash or a leading //, then resolve it and demand
+     the same origin anyway. Same rule as safeNext in assets/account.js. */
+  function safeNext(raw){
+    if (!raw) return null;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return null;
+    if (/\\/.test(raw)) return null;
+    if (raw.charAt(0) === "/" && raw.charAt(1) === "/") return null;
+    try {
+      var target = new URL(raw, window.location.href);
+      if (target.origin !== window.location.origin) return null;
+      return target.pathname + target.search + target.hash;
+    } catch (e) { return null; }
+  }
+
+  (function readAccountParams(){
+    var q;
+    try { q = new URLSearchParams(window.location.search); } catch (e) { return; }
+    acctIntent = q.get("account");
+    acctReason = q.get("reason");
+    pendingNext = safeNext(q.get("next"));
+    if (!acctIntent && !acctReason) return;
+    /* Take them out of the address bar, so a refresh after signing in does not
+       reopen a panel about a session that ended ten minutes ago. */
+    try {
+      q.delete("account"); q.delete("reason"); q.delete("next");
+      var rest = q.toString();
+      window.history.replaceState({}, "",
+        window.location.pathname + (rest ? "?" + rest : "") + window.location.hash);
+    } catch (e) {}
+  })();
+
+  function reasonText(reason){
+    if (reason === "expired")  return "Your session has ended. Sign in again to carry on.";
+    if (reason === "password") return "Password changed. Every session was signed out, this one included, so sign in with the new password.";
+    return "That page needs an account. Sign in and you will be taken straight back to it.";
+  }
+
+  function applyAccountIntent(){
+    if (!acctIntent && !acctReason) return;
+    if (Sync.me()) {
+      /* Already signed in, so whatever redirected here was stale. */
+      if (pendingNext) { window.location.replace(pendingNext); return; }
+      openAcct("manage");
+      return;
+    }
+    openAcct(acctIntent === "register" ? "up" : "in");
+    var msg = document.getElementById("acct-out-msg");
+    if (msg && acctReason) {
+      msg.className = "acct-msg" + (acctReason === "password" ? " ok" : " bad");
+      msg.textContent = reasonText(acctReason);
+    }
   }
 
   /* ============================================================
      KEYBOARD
      ============================================================ */
   document.addEventListener("keydown", function(e){
-    if (e.key === "Escape") { hideGrab(); closeNotes(); closeAcct(); }
+    if (e.key === "Escape") { hideGrab(); closeNotes(); closeAcct(); closeMenu(); }
     var tag = (e.target && e.target.tagName) || "";
     if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === "q" || e.key === "Q") {
@@ -16562,7 +17088,10 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   var startCourse = paintMastery();
   checkParts(startCourse);
   paintAccountButton();
-  Sync.probe();
+  /* The panel can only be opened for the right reason once auth/me has
+     answered, so the intent from the query string waits for the probe rather
+     than racing it. */
+  Sync.probe().then(applyAccountIntent);
 
   /* Anything answered anywhere on the page counts as studying today, so the
      streak is not a checkpoint-only measure. The existing banks call

@@ -366,19 +366,35 @@ attempts *are* two attempts.
 
 ## 7. The pages
 
-There are two front ends onto the same four endpoints, and the duplication is
-deliberate rather than accidental.
+There are two front ends onto the same four endpoints, and the split is by job
+rather than by duplication.
 
-The **tray inside `tutorial.html`** is the convenient one: sign in without
-losing your place in the chapter you are reading. It is part of the single-file
-course, so it works wherever that file is opened.
+The **account panel inside `tutorial.html`** is where you sign in, and it is
+the only place credentials are ever typed. It opens from the avatar menu in the
+top bar, over the chapter you were reading, so signing in never costs you your
+place. It is part of the single-file course, so it works wherever that file is
+opened. There was once a `signin.html` and a `register.html` beside it; two
+places to type a password is two places to get the handling of one wrong, and
+they were deleted rather than kept in step.
 
-The **standalone pages** are the ones you would build for a product.
+The **`area-riservata.html` page** is the other job: everything the account
+holds once you are in, which needs a page rather than a tray.
+
+A page that needs an account sends people to the panel rather than keeping a
+login form of its own. It does that with a query string:
+
+```
+tutorial.html?account=signin&reason=expired&next=area-riservata.html
+```
+
+`reason` picks the sentence the panel opens with (`expired`, `password`,
+anything else means "that page needs an account"); `next` is where to return to
+afterwards and is validated against the current origin before it is used — see
+`safeNext`, which exists in both clients for the same reason.
 
 | file | what it is |
 | --- | --- |
-| `signin.html` | Sign in |
-| `register.html` | Create an account |
+| `tutorial.html` | The avatar menu and the account panel: sign in, create an account, sync, sign out, sign out everywhere, delete |
 | `area-riservata.html` | Everything the account holds, and everything you can do to it |
 | `assets/account.css` | The fieldbook's tokens, copied. Light, dark, and a `[data-theme]` override |
 | `assets/account.js` | One `fetch` wrapper, a ProblemDetail reader, a redirect validator, and the paint helpers |
@@ -401,9 +417,14 @@ trusts. `safeNext` rejects a scheme, a backslash and a leading `//`, then
 resolves what is left and requires the same origin anyway — either check alone
 has a bypass.
 
-**Nothing user-supplied goes near `innerHTML`.** Names, notes and chapter titles
-are all written with `textContent`. Same reason the notes are stored as plain
-text: escaping by construction has no bypasses, and sanitisers do.
+**Nothing user-supplied reaches the page unescaped.** `area-riservata.html`
+writes names, notes and chapter titles with `textContent` and never builds
+markup around them. The fieldbook's avatar menu and account panel do build a
+string of HTML — a menu is a lump of markup and assembling it node by node
+would be worse — so every value that came from a person goes through
+`escapeText` on the way in. Same reason the notes are stored as plain text:
+escaping by construction has no bypasses, and sanitisers do. A display name
+reading `<img onerror=…>` is a display name about an img tag.
 
 **The reserved area sends the catalogue.** It reads
 `fieldbook.catalogue.v1`, which `tutorial.html` writes into `localStorage` when

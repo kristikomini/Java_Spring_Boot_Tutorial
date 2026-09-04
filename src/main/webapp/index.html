@@ -60,6 +60,9 @@
             padding: .9rem 1rem; overflow-x: auto; font-size: .82rem; line-height: 1.55;
         }
         a { color: var(--accent); }
+        .home { margin: 0 0 1.5rem; font-size: .85rem; }
+        .home a { text-decoration: none; }
+        .home a:hover { text-decoration: underline; }
         .note {
             border-left: 3px solid var(--accent); padding: .1rem 0 .1rem 1rem;
             color: var(--muted); font-size: .9rem; margin: 1.25rem 0;
@@ -68,8 +71,9 @@
 </head>
 <body>
 <main>
+    <p class="home"><a href="tutorial.html">&larr; The fieldbook</a></p>
     <h1>UNICAM Course Enrollment Service</h1>
-    <p class="sub">Jakarta EE 11 &middot; JPA &middot; CDI &middot; JAX-RS &middot; Bean Validation &middot; JTA</p>
+    <p class="sub">The API reference &mdash; Jakarta EE 11 &middot; JPA &middot; CDI &middot; JAX-RS &middot; Bean Validation &middot; JTA</p>
 
     <p class="note">
         This is a study project. Every class is commented to explain what it does,
@@ -80,19 +84,17 @@
     <h2>Pages</h2>
     <table>
         <tr><td class="p"><a href="tutorial.html">tutorial.html</a></td>
-            <td class="d">The fieldbook &mdash; the 30-chapter course this project is built around</td></tr>
-        <tr><td class="p"><a href="signin.html">signin.html</a></td>
-            <td class="d">Sign in, so your progress follows you between machines</td></tr>
-        <tr><td class="p"><a href="register.html">register.html</a></td>
-            <td class="d">Create an account</td></tr>
+            <td class="d">The fieldbook &mdash; the 30-chapter course this project is built around, and what <code>/</code> serves</td></tr>
         <tr><td class="p"><a href="area-riservata.html">area-riservata.html</a></td>
             <td class="d">Area riservata &mdash; mastery, streak, chapters, notes, and the account itself</td></tr>
     </table>
 
     <p class="note">
-        Those four are the fieldbook's own multi-user layer, and they are the
-        only authenticated thing here. The enrollment API below is deliberately
-        left open, because it is the specimen chapter 15 dissects.
+        Those two are the fieldbook's own multi-user layer, and they are the
+        only authenticated thing here. Signing in and creating an account both
+        happen in the account menu on the fieldbook itself &mdash; there is no
+        separate login page. The enrollment API below is deliberately left
+        open, because it is the specimen chapter 15 dissects.
         See <code>docs/ACCOUNTS.md</code>.
     </p>
 

@@ -14,7 +14,7 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="index.html">
+    <a class="brand" href="tutorial.html">
       <span class="brand-mark">EE 10</span>
       <span class="brand-name">Fieldbook</span>
     </a>
@@ -238,12 +238,29 @@
 
   var HERE = "area-riservata.html";
 
+  /* Signing out on purpose is not the same event as being bounced for lack of
+     a session. It ends on the course with the panel shut, because opening a
+     sign-in form at somebody who just chose to sign out is an argument. */
+  function toCourse() {
+    window.location.replace("tutorial.html");
+  }
+
+  /* There is no separate sign-in page any more. The fieldbook's own account
+     panel is the single place credentials are ever typed, so this page sends
+     people there with ?account=signin; ?reason= picks the sentence it opens
+     with, and ?next= is what brings them back here once they are in. */
+  function toSignin(reason, back) {
+    var url = "tutorial.html?account=signin";
+    if (reason) url += "&reason=" + reason;
+    if (back)   url += "&next=" + encodeURIComponent(back);
+    window.location.replace(url);
+  }
+
   /* Any 401 from here on means the session went away while the page was open -
      revoked from another tab, expired, or swept by the maintenance job. Back
-     to the sign-in page, saying why, and with somewhere to return to. */
+     to sign in, saying why, and with somewhere to return to. */
   function expired() {
-    window.location.replace("signin.html?reason=expired&next=" +
-                            encodeURIComponent(HERE));
+    toSignin("expired", HERE);
   }
 
   function offline() {
@@ -255,7 +272,10 @@
      1. WHO IS THIS
      ==================================================================== */
   F.call("auth/me").then(function (r) {
-    if (r.status === 401) { expired(); return; }
+    /* Not expired() - this is the first request the page makes, so a 401 here
+       usually means "never signed in", and "your session has ended" would be
+       a sentence about something that never happened. */
+    if (r.status === 401) { toSignin("required", HERE); return; }
     if (r.status !== 200 || !r.json) { offline(); return; }
 
     me = r.json;
@@ -521,7 +541,7 @@
   /* ---- sign out ---- */
   document.getElementById("signout").addEventListener("click", function () {
     F.call("auth/logout", "POST").then(function () {
-      window.location.replace("signin.html");
+      toCourse();
     }).catch(offline);
   });
 
@@ -529,7 +549,7 @@
     if (!window.confirm("Sign out of every browser signed in to this account?")) return;
     F.call("auth/logout-all", "POST").then(function (r) {
       if (r.status === 401) { expired(); return; }
-      window.location.replace("signin.html");
+      toCourse();
     }).catch(offline);
   });
 
@@ -578,7 +598,7 @@
       if (r.status === 204) {
         /* Every session was just revoked, this one included, so staying on
            this page would mean a 401 on the next request. Go and sign in. */
-        window.location.replace("signin.html?reason=password");
+        toSignin("password");
         return;
       }
       pwOld.value = "";
