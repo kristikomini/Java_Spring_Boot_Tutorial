@@ -9,14 +9,19 @@
 
 # Pinned to an exact version, never `:latest`. A floating tag means your build
 # silently changes underneath you and "it worked yesterday" becomes unanswerable.
-# The image runs on JDK 17 while your machine compiles with JDK 11 - that is fine
-# and is exactly why we set maven.compiler.release=11: the bytecode targets 11
-# and any newer JVM can run it.
-FROM quay.io/wildfly/wildfly:31.0.1.Final-jdk17
+# The image runs on JDK 21, matching maven.compiler.release=21 in pom.xml. Those
+# two numbers are allowed to differ - bytecode built for an older release runs on
+# any newer JVM - but they must never differ the OTHER way: bytecode compiled for
+# a release the server's JVM predates fails at class-load time with
+# UnsupportedClassVersionError, and it fails on deploy, not on build.
+#
+# WildFly 41 is a Jakarta EE 11 server, and EE 11 requires Java 17 as a floor.
+# There is no jdk17 tag published for 41.x, so jdk21 is the baseline here.
+FROM quay.io/wildfly/wildfly:41.0.1.Final-jdk21
 
 # A build argument, overridable with --build-arg. Keeping the version here rather
 # than buried in a URL makes upgrading a one-line change.
-ARG POSTGRES_JDBC_VERSION=42.7.3
+ARG POSTGRES_JDBC_VERSION=42.7.13
 
 ENV JBOSS_HOME=/opt/jboss/wildfly
 

@@ -43,7 +43,7 @@
 
     <name>UNICAM Course Enrollment Service</name>
     <description>
-        A Jakarta EE 10 reference application demonstrating a layered
+        A Jakarta EE 11 reference application demonstrating a layered
         enterprise architecture: JPA persistence, CDI, EJB, JAX-RS,
         Bean Validation and JTA transactions.
     </description>
@@ -64,7 +64,7 @@
           exist in that JDK version, so you cannot accidentally compile against
           a newer JDK's methods and blow up at runtime.
         -->
-        <maven.compiler.release>11</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
 
         <!-- JUnit 5 tags excluded from a normal build. The "exercise" tests in
              src/test/.../exercises are meant to fail until you solve them, so
@@ -72,29 +72,87 @@
              The `exercises` profile below flips this to run only those. -->
         <excluded.test.groups>exercise</excluded.test.groups>
 
-        <!-- Jakarta EE platform -->
-        <version.jakartaee.api>10.0.0</version.jakartaee.api>
+        <!--
+          Jakarta EE platform.
+
+          THIS FILE HAS TWO KINDS OF VERSION, AND THEY UPGRADE BY DIFFERENT RULES.
+          Getting the distinction wrong is the most common way a working Jakarta
+          EE build starts failing for reasons that look unrelated.
+
+            (a) SERVER-MIRRORED. Anything the application server also ships -
+                the EE API, Hibernate, RESTEasy, Hibernate Validator, Yasson.
+                These are `provided` or `test` here precisely BECAUSE WildFly
+                owns them at runtime, so the number below is not a free choice:
+                it is a copy of what our WildFly ships, kept in step so that a
+                unit test and a deployed request execute the same code. Bumping
+                one of these on its own does not upgrade anything - it only
+                makes the test classpath drift away from production, which is
+                how you get a green build and a broken deployment. They move
+                when, and only when, the WildFly tag in docker/wildfly/Dockerfile
+                moves. Today that tag is 41.0.1.Final, which ships:
+
+                    Jakarta EE 11 (jakarta.persistence 3.2.0,
+                                   jakarta.ws.rs 4.0.0, CDI 4.1.0)
+                    Hibernate ORM        7.4.5.Final
+                    Hibernate Validator  9.1.1.Final
+                    RESTEasy             7.0.3.Final
+                    Yasson               3.0.4
+
+            (b) BUILD-LOCAL. Anything that exists only on your machine and never
+                inside the WAR - JUnit, Mockito, AssertJ, H2, the Maven plugins,
+                the Flyway plugin and its JDBC driver. Nothing in production
+                depends on these, so they upgrade freely and often should.
+
+          The ceiling on both is `maven.compiler.release` above. That baseline
+          is now 21, which is what unlocked this whole row of versions: Jakarta
+          EE 11, Hibernate 7, Hibernate Validator 9, RESTEasy 7, Expressly 6 and
+          Flyway 13 all require Java 17 as a minimum, and none of them could be
+          adopted while the project compiled for 11. The Java version is not a
+          cosmetic setting - it is the gate on the entire dependency tree.
+        -->
+        <version.jakartaee.api>11.0.0</version.jakartaee.api>
 
         <!-- Logging facade. Provided by WildFly at runtime. -->
-        <version.slf4j>2.0.13</version.slf4j>
+        <version.slf4j>2.0.19</version.slf4j>
 
-        <!-- Test stack -->
-        <version.junit.jupiter>5.10.2</version.junit.jupiter>
-        <version.mockito>5.11.0</version.mockito>
-        <version.assertj>3.25.3</version.assertj>
-        <version.hibernate>6.4.4.Final</version.hibernate>
-        <version.hibernate.validator>8.0.1.Final</version.hibernate.validator>
-        <version.expressly>5.0.0</version.expressly>
-        <version.h2>2.2.224</version.h2>
-        <version.yasson>3.0.3</version.yasson>
+        <!-- Test stack. Build-local (b) - upgrade at will. -->
+        <version.junit.jupiter>5.14.4</version.junit.jupiter>   <!-- 6.x needs Java 17 -->
+        <version.mockito>5.23.0</version.mockito>
+        <version.assertj>3.27.7</version.assertj>               <!-- 4.x needs Java 17 -->
+        <version.h2>2.4.240</version.h2>
+
+        <!-- Test stack. Server-mirrored (a) - these track WildFly 41.0.1.Final
+             and must not be bumped independently of the Dockerfile tag. -->
+        <version.hibernate>7.4.5.Final</version.hibernate>
+        <version.hibernate.validator>9.1.1.Final</version.hibernate.validator>
+        <version.expressly>6.0.0</version.expressly>
+        <version.yasson>3.0.4</version.yasson>
+        <version.resteasy>7.0.3.Final</version.resteasy>
+
+        <!--
+          Schema migrations. Deliberately a BUILD-time tool here, not a runtime
+          dependency: nothing Flyway-related is packaged into the WAR. See the
+          `flyway` profile at the bottom of this file, and the fieldbook's
+          migrations chapter for why startup-time migration races on a
+          replicated deployment.
+
+          Flyway 10 was a repackaging as much as a release: support for each
+          database moved OUT of flyway-core into its own artifact. So the plugin
+          alone can no longer speak to PostgreSQL - `flyway-database-postgresql`
+          has to be declared beside the JDBC driver in the profile below, or
+          every goal fails with "No database found to handle jdbc:postgresql".
+          Nothing warns you at configuration time.
+        -->
+        <version.plugin.flyway>13.5.0</version.plugin.flyway>
+        <version.postgresql.driver>42.7.13</version.postgresql.driver>
 
         <!-- Build plugins -->
-        <version.plugin.compiler>3.13.0</version.plugin.compiler>
-        <version.plugin.war>3.4.0</version.plugin.war>
-        <version.plugin.surefire>3.2.5</version.plugin.surefire>
-        <version.plugin.failsafe>3.2.5</version.plugin.failsafe>
-        <version.plugin.clean>3.3.2</version.plugin.clean>
-        <version.plugin.resources>3.3.1</version.plugin.resources>
+        <version.plugin.compiler>3.16.0</version.plugin.compiler>
+        <version.plugin.war>3.5.1</version.plugin.war>
+        <version.plugin.surefire>3.6.0</version.plugin.surefire>
+        <version.plugin.failsafe>3.6.0</version.plugin.failsafe>
+        <version.plugin.clean>3.5.0</version.plugin.clean>
+        <version.plugin.resources>3.5.0</version.plugin.resources>
 
         <!--
           Where `mvn package` drops the .war. We point it at a folder that
@@ -109,7 +167,7 @@
         <!-- ================================================================
              THE PLATFORM API  -  scope: provided
              ================================================================
-             This one artifact contains every Jakarta EE 10 API: JPA, CDI,
+             This one artifact contains every Jakarta EE 11 API: JPA, CDI,
              EJB, JAX-RS, Bean Validation, JSON-B, Servlet, JTA...
 
              `provided` is the single most important scope to understand here.
@@ -197,7 +255,7 @@
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
             <artifactId>resteasy-core</artifactId>
-            <version>6.2.7.Final</version>
+            <version>${version.resteasy}</version>
             <scope>test</scope>
             <exclusions>
                 <!-- RESTEasy drags in BOTH jandex artifacts: the legacy
@@ -467,6 +525,84 @@
                         <configuration>
                             <groups>exercise</groups>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+          =====================================================================
+          `flyway` - versioned schema migrations
+          =====================================================================
+          Not active by default, so `mvn verify` and `mvn package` are entirely
+          unaffected and the WAR gains nothing.
+
+            mvn -Pflyway flyway:info       what has been applied, and what is pending
+            mvn -Pflyway flyway:migrate    apply everything pending, in order
+            mvn -Pflyway flyway:validate   do the applied files still match the repo?
+
+          The connection defaults below match docker-compose.yml. A native
+          PostgreSQL on another port needs one flag:
+
+            mvn -Pflyway flyway:migrate -Dflyway.url=jdbc:postgresql://localhost:5433/enrollment
+
+          IF YOUR DATABASE ALREADY HAS TABLES - which it does, because Hibernate
+          created them with hbm2ddl "update" - then `flyway:migrate` will fail on
+          V1 with "relation already exists", and record V1 as failed. Run
+          `flyway:baseline` FIRST: it stamps the current schema as version 1
+          without executing anything, so only V2 onwards are applied. Adopting
+          migrations on a live schema is exactly this one command, and forgetting
+          it is the classic first mistake.
+
+          The password sitting in this file is fine for a local learning stack
+          and would be a finding in a real review - real pipelines inject
+          `flyway.password` from a secret store. The security chapter makes the
+          general version of this argument.
+        -->
+        <profile>
+            <id>flyway</id>
+
+            <properties>
+                <flyway.url>jdbc:postgresql://localhost:55433/enrollment</flyway.url>
+                <flyway.user>enrollment</flyway.user>
+                <flyway.password>enrollment</flyway.password>
+                <!--
+                  Where the migration files live. This is Flyway's default, but
+                  stating it makes the convention visible to a reader who has
+                  never used the tool.
+                -->
+                <flyway.locations>filesystem:src/main/resources/db/migration</flyway.locations>
+            </properties>
+
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-maven-plugin</artifactId>
+                        <version>${version.plugin.flyway}</version>
+                        <dependencies>
+                            <!--
+                              The JDBC driver is a dependency of the PLUGIN, not
+                              of the application. WildFly supplies the driver at
+                              runtime as a server module, which is why it appears
+                              nowhere else in this file.
+                            -->
+                            <dependency>
+                                <groupId>org.postgresql</groupId>
+                                <artifactId>postgresql</artifactId>
+                                <version>${version.postgresql.driver}</version>
+                            </dependency>
+                            <!--
+                              Flyway 10+ only: the PostgreSQL dialect itself.
+                              The driver above lets Flyway CONNECT; this lets it
+                              understand what it connected to. Both are required.
+                            -->
+                            <dependency>
+                                <groupId>org.flywaydb</groupId>
+                                <artifactId>flyway-database-postgresql</artifactId>
+                                <version>${version.plugin.flyway}</version>
+                            </dependency>
+                        </dependencies>
                     </plugin>
                 </plugins>
             </build>

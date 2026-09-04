@@ -1,0 +1,118 @@
+# =============================================================================
+# Caddy - the only thing on this server the internet can talk to
+# =============================================================================
+# Caddy's job here is small and worth stating precisely, because a reverse
+# proxy accumulates responsibilities if you let it:
+#
+#   1. Terminate TLS, with a certificate it obtains and renews by itself.
+#   2. Compress responses.
+#   3. Set a handful of response headers WildFly does not set.
+#   4. Hand everything else, unmodified, to the application.
+#
+# It does NOT route, rewrite paths, serve files, or know anything about the
+# application's URLs. That is the design: the WAR is deployed as ROOT.war (see
+# configure-prod.cli, section 6) so there is no path prefix to translate. Every
+# rule you do not write here is a rule that cannot disagree with the
+# application later.
+#
+# {$SITE_DOMAIN} and {$ACME_EMAIL} are environment variables, substituted when
+# Caddy loads this file. docker-compose.prod.yml passes them through from
+# .env.prod.
+# =============================================================================
+{
+	# The address Let's Encrypt uses to warn you about expiring certificates.
+	# Renewal is automatic and these mails normally never arrive - which is
+	# exactly why the address should be one you actually read, since if one
+	# does arrive, something has been broken for weeks.
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	# ---------------------------------------------------------------------
+	# Compression
+	# ---------------------------------------------------------------------
+	# Not a micro-optimisation in this application: tutorial.html - the
+	# fieldbook - is about 1.2 MB of self-contained HTML, and gzip takes it
+	# to roughly a fifth of that. Caddy negotiates per request and skips
+	# already-compressed types (images, fonts) on its own.
+	#
+	# zstd first because it is listed in preference order and compresses
+	# better; gzip is the fallback for anything that does not accept it.
+	encode zstd gzip
+
+	# ---------------------------------------------------------------------
+	# Response headers
+	# ---------------------------------------------------------------------
+	header {
+		# Tell the browser to use HTTPS for this host for a year, without
+		# asking. This is what closes the gap the very first plain-HTTP
+		# request opens - the one where a redirect to HTTPS is itself
+		# interceptable.
+		#
+		# NOT `preload`. Preloading ships your domain in browsers' built-in
+		# lists, where removal takes months. Add it only once the site has
+		# run on HTTPS long enough that you are certain, and never on a
+		# domain you might want to serve something else from.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Stop the browser from second-guessing Content-Type. Without it, a
+		# response the server labelled text/plain can be sniffed as HTML and
+		# executed - the classic route from "user-supplied file" to stored
+		# XSS.
+		X-Content-Type-Options "nosniff"
+
+		# No framing, from anywhere. The session cookie is SameSite=Strict
+		# (SessionCookies), so it would not be sent in a frame anyway, but
+		# clickjacking does not need the cookie to be useful - it needs the
+		# page to be visible under an overlay.
+		X-Frame-Options "DENY"
+
+		# Send the full referrer within the site, only the origin when
+		# leaving it over HTTPS, and nothing at all when downgrading. Keeps
+		# paths - which in this application can identify a student - out of
+		# other people's logs.
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Remove the Server header. It buys an attacker a little
+		# reconnaissance and buys you nothing. Note this hides *Caddy* -
+		# WildFly's own headers are removed by it not sending any.
+		-Server
+	}
+
+	# ---------------------------------------------------------------------
+	# Request size limit
+	# ---------------------------------------------------------------------
+	# Every endpoint in this application takes a small JSON body. 1 MB is
+	# several hundred times the largest legitimate request, and it means a
+	# client cannot make the server buffer arbitrary amounts of memory by
+	# opening a request and never finishing it.
+	request_body {
+		max_size 1MB
+	}
+
+	# ---------------------------------------------------------------------
+	# The application
+	# ---------------------------------------------------------------------
+	# `wildfly` is the service name from docker-compose.prod.yml, resolved by
+	# Docker's embedded DNS on the internal network - the same mechanism that
+	# lets the datasource say `postgres`. 8080 is the CONTAINER's port; there
+	# is no published port to speak of.
+	#
+	# Caddy adds X-Forwarded-For, X-Forwarded-Proto and X-Forwarded-Host by
+	# default. WildFly is configured to trust them (configure-prod.cli,
+	# section 5), which is what makes the session cookie come back marked
+	# Secure and the login throttle see real client IPs. The two settings are
+	# a pair: neither is correct without the other.
+	reverse_proxy wildfly:8080
+
+	# ---------------------------------------------------------------------
+	# Access log
+	# ---------------------------------------------------------------------
+	# To stdout, so `docker compose logs caddy` shows it and the size limit
+	# in the compose file's logging block applies. A log file inside the
+	# container would grow without bound and be invisible.
+	log {
+		output stdout
+		format console
+	}
+}

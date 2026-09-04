@@ -58,7 +58,7 @@ public class ApplicationBootstrap {
     public void onStartup() {
         LOG.info("=======================================================");
         LOG.info(" UNICAM Course Enrollment Service - starting up");
-        LOG.info(" Jakarta EE 10 / JPA / CDI / JAX-RS");
+        LOG.info(" Jakarta EE 11 / JPA / CDI / JAX-RS");
         LOG.info("=======================================================");
 
         // Calling ACROSS a bean boundary, so DataSeeder's @Transactional

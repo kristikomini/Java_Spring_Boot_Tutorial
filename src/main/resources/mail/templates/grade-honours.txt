@@ -1,0 +1,17 @@
+Subject: Exam result for ${courseCode}: 30 e lode
+
+Dear ${studentName},
+
+Congratulations. Your result for ${courseCode} has been registered as
+30 e lode - the highest mark the Italian system awards, and one your examiner
+had to argue for.
+
+  Grade:    30 e lode
+  Student:  ${studentNumber}
+  Recorded: ${recordedOn}
+
+This message was sent automatically. Please do not reply to it.
+
+--
+Segreteria Studenti
+Universita di Camerino - Scuola di Scienze e Tecnologie

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Area riservata &middot; Fieldbook</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/account.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">EE 10</span>
+      <span class="brand-name">Fieldbook</span>
+    </a>
+    <div class="crumb">account &middot; <b>area riservata</b></div>
+    <a class="btn" href="tutorial.html">the course</a>
+    <button type="button" class="btn" id="signout">sign out</button>
+  </div>
+</header>
+
+<main class="res-wrap">
+
+  <!-- Shown while auth/me is in flight, so the page never flashes a signed-in
+       shell it may be about to replace with a redirect. -->
+  <p class="msg info" id="loading">Checking your session&hellip;</p>
+
+  <p class="msg" id="msg" role="status" hidden></p>
+
+  <div id="body" hidden>
+
+    <div class="res-head">
+      <div class="res-id">
+        <p class="eyebrow">Area riservata</p>
+        <h1 id="hello">&nbsp;</h1>
+        <p class="res-mail" id="mail"></p>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------------------------
+         MASTERY
+         ------------------------------------------------------------------ -->
+    <section class="section">
+      <h2>Where you are</h2>
+
+      <div class="ring-row" id="ring-row" hidden>
+        <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="track" cx="50" cy="50" r="45"></circle>
+          <circle class="fill" cx="50" cy="50" r="45" id="ring-fill"
+                  stroke-dasharray="0 283"></circle>
+        </svg>
+        <div>
+          <div class="ring-num" id="pct">0%</div>
+          <p class="ring-cap" id="pct-cap"></p>
+        </div>
+      </div>
+
+      <p class="msg info" id="no-catalogue" hidden>
+        The course-wide percentage is missing because this browser has not
+        opened <a href="tutorial.html">the fieldbook</a> yet. The server keeps
+        your progress but deliberately keeps no copy of the course structure
+        &mdash; the chapters live in one HTML file, and a second copy on the
+        server would drift. Open the course once and this fills in.
+      </p>
+
+      <div class="stats" id="stats" style="margin-top:16px"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         STREAK
+         ------------------------------------------------------------------ -->
+    <section class="section">
+      <h2>Days you turned up</h2>
+      <p class="hint" id="days-cap" style="margin:0 0 10px"></p>
+      <div class="days" id="days"></div>
+      <p class="hint" style="margin-top:11px">
+        Twelve weeks, one square per day, one column per week with Monday at
+        the top, on your own calendar rather than the server's. The current
+        streak is worked out from these rows every time it is asked for, never
+        stored &mdash; a stored counter is wrong for anyone who studies at
+        23:59 and cannot be repaired once it drifts.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         CHAPTERS
+         ------------------------------------------------------------------ -->
+    <section class="section">
+      <h2>Chapter by chapter</h2>
+      <div class="scroll-x">
+        <table class="tbl" id="chapters">
+          <thead>
+            <tr>
+              <th>Chapter</th>
+              <th class="num">Read</th>
+              <th class="num">Best</th>
+              <th class="num">Tries</th>
+              <th class="num">Passed</th>
+              <th class="num">Cards</th>
+            </tr>
+          </thead>
+          <tbody id="chapter-rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="chapters-empty" hidden>
+        Nothing recorded yet. Read a chapter and take its checkpoint, and the
+        rows appear here.
+      </p>
+      <p class="hint" style="margin-top:11px">
+        The pass mark is 75%, which on a four-question checkpoint is exactly
+        &ldquo;at most one wrong&rdquo;. A pass mark is a decision about the
+        number of questions; the two have to be chosen together.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         NOTES
+         ------------------------------------------------------------------ -->
+    <section class="section">
+      <h2>Your notes</h2>
+      <div class="note-list" id="notes"></div>
+      <p class="empty" id="notes-empty" hidden>
+        No notes yet. Select any text in the course and choose
+        &ldquo;Note this&rdquo;.
+      </p>
+      <p class="hint" style="margin-top:11px">
+        Stored and shown as plain text, never rendered as HTML or Markdown.
+        That removes stored cross-site scripting by construction: a note
+        reading <code>&lt;img onerror=&hellip;&gt;</code> is a note about an img
+        tag.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         THE ACCOUNT ITSELF
+         ------------------------------------------------------------------ -->
+    <section class="section">
+      <h2>This account</h2>
+      <div class="rows">
+
+        <div class="row">
+          <div class="txt">
+            <b>Change password</b>
+            <span>Every session is signed out afterwards, this one included.
+              A password change that leaves old sessions alive has not
+              actually revoked anything.</span>
+          </div>
+          <button type="button" class="btn" id="pw-toggle">Change</button>
+
+          <form class="inline-form" id="pw-form" hidden>
+            <label class="field">
+              <span>Current password</span>
+              <input type="password" id="pw-old" autocomplete="current-password" required>
+            </label>
+            <label class="field">
+              <span>New password</span>
+              <input type="password" id="pw-new" autocomplete="new-password" required>
+              <p class="hint">At least 12 characters.</p>
+            </label>
+            <label class="field">
+              <span>New password again</span>
+              <input type="password" id="pw-new2" autocomplete="new-password" required>
+            </label>
+            <p class="msg" id="pw-msg" role="status" hidden></p>
+            <button type="submit" class="btn primary" id="pw-go">Change password</button>
+            <button type="button" class="btn" id="pw-cancel">Cancel</button>
+          </form>
+        </div>
+
+        <div class="row">
+          <div class="txt">
+            <b>Sign out everywhere</b>
+            <span>Deletes every session row for this account, not only this
+              browser's. The one to reach for when a laptop is out of your
+              hands.</span>
+          </div>
+          <button type="button" class="btn" id="logout-all">Sign out everywhere</button>
+        </div>
+
+        <div class="row">
+          <div class="txt">
+            <b>Start the course again</b>
+            <span>Clears the server's copy of your chapter and card progress.
+              Your notes are kept, and this browser's own local copy is left
+              alone &mdash; it will re-upload on the next sync unless you clear
+              it in the course as well.</span>
+          </div>
+          <button type="button" class="btn" id="reset">Reset progress</button>
+        </div>
+
+        <div class="row perilous">
+          <div class="txt">
+            <b>Delete this account</b>
+            <span>Account, sessions, progress, study days and notes, in one
+              transaction. There is no undo and no backup. Type your email
+              address to confirm.</span>
+          </div>
+          <button type="button" class="btn danger" id="del-toggle">Delete</button>
+
+          <form class="inline-form" id="del-form" hidden>
+            <label class="field">
+              <span>Type your email address</span>
+              <input type="text" id="del-confirm" autocomplete="off"
+                     autocapitalize="off" spellcheck="false">
+            </label>
+            <p class="msg" id="del-msg" role="status" hidden></p>
+            <button type="submit" class="btn danger" id="del-go">Delete everything</button>
+            <button type="button" class="btn" id="del-cancel">Cancel</button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+    <p class="hint">
+      What this page shows, and every decision behind it, is written up in
+      <code>docs/ACCOUNTS.md</code> and dissected in chapter 15 of
+      <a href="tutorial.html">the fieldbook</a>.
+    </p>
+
+  </div>
+</main>
+
+<script src="assets/account.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var F   = window.Fieldbook;
+  var msg = document.getElementById("msg");
+  var me  = null;
+
+  var HERE = "area-riservata.html";
+
+  /* Any 401 from here on means the session went away while the page was open -
+     revoked from another tab, expired, or swept by the maintenance job. Back
+     to the sign-in page, saying why, and with somewhere to return to. */
+  function expired() {
+    window.location.replace("signin.html?reason=expired&next=" +
+                            encodeURIComponent(HERE));
+  }
+
+  function offline() {
+    document.getElementById("loading").hidden = true;
+    F.say(msg, "bad", F.OFFLINE);
+  }
+
+  /* ====================================================================
+     1. WHO IS THIS
+     ==================================================================== */
+  F.call("auth/me").then(function (r) {
+    if (r.status === 401) { expired(); return; }
+    if (r.status !== 200 || !r.json) { offline(); return; }
+
+    me = r.json;
+    document.getElementById("loading").hidden = true;
+    document.getElementById("body").hidden = false;
+    paintIdentity(me);
+
+    loadProgress();
+    loadNotes();
+  }).catch(offline);
+
+  function paintIdentity(a) {
+    F.text(document.getElementById("hello"),
+           a.displayName ? a.displayName : a.email);
+    F.text(document.getElementById("mail"), a.email);
+
+    var chips = document.getElementById("chips");
+    chips.textContent = "";
+    (a.roles || []).forEach(function (role) {
+      chips.appendChild(chip(role, false));
+    });
+    chips.appendChild(chip("member since " + F.whenever(a.createdAt), true));
+    if (a.lastSeenAt) {
+      chips.appendChild(chip("last seen " + F.whenever(a.lastSeenAt), true));
+    }
+  }
+
+  function chip(label, quiet) {
+    var el = document.createElement("span");
+    el.className = quiet ? "chip quiet" : "chip";
+    el.textContent = label;            /* never innerHTML - see account.js */
+    return el;
+  }
+
+  /* ====================================================================
+     2. PROGRESS
+
+     The catalogue is sent by the client because the server does not keep
+     one - the chapters live in tutorial.html, which is what lets the course
+     work with no server at all. Without it the request still returns every
+     stored row; only the course-wide percentage is unavailable, because a
+     percentage of an unknown number of chapters is not a number.
+     ==================================================================== */
+  function loadProgress() {
+    var cat = F.catalogue();
+    var path = "progress";
+
+    if (cat) {
+      var qs = new URLSearchParams();
+      cat.chapters.forEach(function (c) {
+        qs.append("chapter", c.id);
+        if (c.check) qs.append("checkpoint", c.id);
+      });
+      path += "?" + qs.toString();
+    }
+
+    F.call(path).then(function (r) {
+      if (r.status === 401) { expired(); return; }
+      if (r.status !== 200 || !r.json) {
+        F.say(msg, "bad", F.problem(r, "Your progress could not be loaded."));
+        return;
+      }
+      paintProgress(r.json, cat);
+    }).catch(function () {
+      F.say(msg, "bad", "Your progress could not be loaded. The account itself is fine.");
+    });
+  }
+
+  function paintProgress(snap, cat) {
+    var mastery = snap.mastery || {};
+
+    if (cat) {
+      document.getElementById("ring-row").hidden = false;
+      var pct = mastery.percent || 0;
+      var C = 2 * Math.PI * 45;
+      document.getElementById("ring-fill")
+              .setAttribute("stroke-dasharray", (C * pct / 100) + " " + C);
+      F.text(document.getElementById("pct"), pct + "%");
+      F.text(document.getElementById("pct-cap"),
+             "Reading a chapter is worth 15%, its checkpoint 45%, and the " +
+             "spaced cards 40%. The last part can only rise by answering the " +
+             "same material correctly days later, so this number cannot be " +
+             "finished in an afternoon.");
+    } else {
+      document.getElementById("no-catalogue").hidden = false;
+    }
+
+    var stats = document.getElementById("stats");
+    stats.textContent = "";
+    if (cat) {
+      stats.appendChild(stat(mastery.chaptersRead || 0, "chapters read", "accent"));
+      stats.appendChild(stat(mastery.chaptersPassed || 0, "checkpoints passed", "runtime"));
+      stats.appendChild(stat(mastery.chaptersTotal || 0, "chapters in all"));
+    }
+    stats.appendChild(stat(snap.streak || 0, "day streak", "runtime"));
+    stats.appendChild(stat(snap.bestStreak || 0, "best streak"));
+    stats.appendChild(stat((snap.cards || []).length, "cards in review"));
+
+    paintDays(snap.studyDays || [], snap.streak || 0);
+    paintChapters(snap, mastery, cat);
+  }
+
+  function stat(n, label, kind) {
+    var box = document.createElement("div");
+    box.className = "stat" + (kind ? " " + kind : "");
+    var num = document.createElement("span");
+    num.className = "n";
+    num.textContent = String(n);
+    var lab = document.createElement("span");
+    lab.className = "l";
+    lab.textContent = label;
+    box.appendChild(num);
+    box.appendChild(lab);
+    return box;
+  }
+
+  /* Twelve weeks of squares, one column per week, Monday at the top.
+
+     Built from local date arithmetic rather than from UTC, so this agrees with
+     the server's per-account time zone about which day a given square is - the
+     same reason the study days are stored as DATE and not TIMESTAMP.
+
+     The window is widened backwards to the Monday before it starts. Without
+     that the columns are only weeks by accident, on the one day of the year
+     when 84 days happens to end on a week boundary. */
+  function paintDays(days, streak) {
+    var seen = {};
+    days.forEach(function (d) { seen[d] = true; });
+
+    var box = document.getElementById("days");
+    box.textContent = "";
+
+    var today = new Date();
+    var start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 83);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));   // back to Monday
+
+    for (var d = start; d <= today; d.setDate(d.getDate() + 1)) {
+      var key = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+      var cell = document.createElement("span");
+      cell.className = seen[key] ? "day on" : "day";
+      cell.title = key + (seen[key] ? " - studied" : "");
+      box.appendChild(cell);
+    }
+
+    F.text(document.getElementById("days-cap"),
+           streak === 0
+             ? "No streak running. Yesterday still counts as unbroken, so one session today starts it again."
+             : streak + (streak === 1 ? " day" : " consecutive days") +
+               " - alive until midnight in your own time zone.");
+  }
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  /* Chapter rows. The catalogue supplies the human titles and the order; the
+     ids alone are all the server has, so without it the rows are ordered by
+     id and the label is the id prettified. */
+  function paintChapters(snap, mastery, cat) {
+    var rows = document.getElementById("chapter-rows");
+    rows.textContent = "";
+
+    var byId = {};
+    (snap.chapters || []).forEach(function (c) { byId[c.chapterId] = c; });
+
+    var cardsById = {};
+    (mastery.chapters || []).forEach(function (c) { cardsById[c.chapterId] = c; });
+
+    var order;
+    if (cat) {
+      order = cat.chapters.filter(function (c) { return byId[c.id]; });
+    } else {
+      order = Object.keys(byId).sort().map(function (id) {
+        return { id: id, title: prettify(id) };
+      });
+    }
+
+    if (!order.length) {
+      document.getElementById("chapters").hidden = true;
+      document.getElementById("chapters-empty").hidden = false;
+      return;
+    }
+
+    order.forEach(function (chapter) {
+      var state = byId[chapter.id];
+      var cards = cardsById[chapter.id];
+      var tr = document.createElement("tr");
+
+      tr.appendChild(cell(chapter.title || prettify(chapter.id)));
+      tr.appendChild(mark(!!state.readAt));
+      tr.appendChild(num(state.bestScore ? state.bestScore + "%" : "—"));
+      tr.appendChild(num(state.attempts || "—"));
+      tr.appendChild(mark(!!state.passedAt));
+      tr.appendChild(num(cards && cards.cardsSeen
+                           ? cards.cardsKnown + "/" + cards.cardsSeen
+                           : "—"));
+      rows.appendChild(tr);
+    });
+  }
+
+  function prettify(id) {
+    return id.replace(/^ch-/, "").replace(/-/g, " ");
+  }
+
+  function cell(value) {
+    var td = document.createElement("td");
+    td.textContent = value;
+    return td;
+  }
+
+  function num(value) {
+    var td = document.createElement("td");
+    td.className = "num";
+    td.textContent = String(value);
+    return td;
+  }
+
+  function mark(on) {
+    var td = document.createElement("td");
+    td.className = "num " + (on ? "tick" : "cross");
+    td.textContent = on ? "✓" : "—";
+    return td;
+  }
+
+  /* ====================================================================
+     3. NOTES
+     ==================================================================== */
+  function loadNotes() {
+    F.call("notes").then(function (r) {
+      if (r.status === 401) { expired(); return; }
+      if (r.status !== 200 || !Array.isArray(r.json)) return;
+
+      var list = document.getElementById("notes");
+      list.textContent = "";
+
+      if (!r.json.length) {
+        document.getElementById("notes-empty").hidden = false;
+        return;
+      }
+
+      r.json.forEach(function (n) {
+        var card = document.createElement("div");
+        card.className = "note";
+
+        var p = document.createElement("p");
+        p.textContent = n.body || "";      /* plain text, always */
+        card.appendChild(p);
+
+        var meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = (n.pinned ? "pinned · " : "") +
+                           prettify(n.chapterId || "") + " · " +
+                           F.whenever(n.updatedAt || n.createdAt);
+        card.appendChild(meta);
+
+        list.appendChild(card);
+      });
+    }).catch(function () { /* the notes are the least of it - stay quiet */ });
+  }
+
+  /* ====================================================================
+     4. THE ACCOUNT ITSELF
+     ==================================================================== */
+
+  /* ---- sign out ---- */
+  document.getElementById("signout").addEventListener("click", function () {
+    F.call("auth/logout", "POST").then(function () {
+      window.location.replace("signin.html");
+    }).catch(offline);
+  });
+
+  document.getElementById("logout-all").addEventListener("click", function () {
+    if (!window.confirm("Sign out of every browser signed in to this account?")) return;
+    F.call("auth/logout-all", "POST").then(function (r) {
+      if (r.status === 401) { expired(); return; }
+      window.location.replace("signin.html");
+    }).catch(offline);
+  });
+
+  /* ---- change password ---- */
+  var pwForm   = document.getElementById("pw-form");
+  var pwMsg    = document.getElementById("pw-msg");
+  var pwOld    = document.getElementById("pw-old");
+  var pwNew    = document.getElementById("pw-new");
+  var pwNew2   = document.getElementById("pw-new2");
+  var pwGo     = document.getElementById("pw-go");
+
+  document.getElementById("pw-toggle").addEventListener("click", function () {
+    pwForm.hidden = !pwForm.hidden;
+    if (!pwForm.hidden) pwOld.focus();
+  });
+  document.getElementById("pw-cancel").addEventListener("click", function () {
+    pwForm.hidden = true;
+    F.hush(pwMsg);
+    pwOld.value = pwNew.value = pwNew2.value = "";
+  });
+
+  pwForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    F.hush(pwMsg);
+
+    if (pwNew.value.length < F.MIN_PASSWORD) {
+      F.say(pwMsg, "bad", "The new password must be at least " +
+                          F.MIN_PASSWORD + " characters long.");
+      return;
+    }
+    if (pwNew.value !== pwNew2.value) {
+      F.say(pwMsg, "bad", "The two new passwords are not the same.");
+      return;
+    }
+
+    pwGo.disabled = true;
+    pwGo.textContent = "Changing...";
+
+    F.call("auth/password", "POST", {
+      currentPassword: pwOld.value,
+      newPassword: pwNew.value
+    }).then(function (r) {
+      pwGo.disabled = false;
+      pwGo.textContent = "Change password";
+
+      if (r.status === 204) {
+        /* Every session was just revoked, this one included, so staying on
+           this page would mean a 401 on the next request. Go and sign in. */
+        window.location.replace("signin.html?reason=password");
+        return;
+      }
+      pwOld.value = "";
+      if (r.status === 401) {
+        F.say(pwMsg, "bad", "The current password was not correct.");
+      } else {
+        F.say(pwMsg, "bad", F.problem(r, "The password was not changed."));
+      }
+    }).catch(function () {
+      pwGo.disabled = false;
+      pwGo.textContent = "Change password";
+      F.say(pwMsg, "bad", F.OFFLINE);
+    });
+  });
+
+  /* ---- reset progress ---- */
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm(
+          "Clear the server's copy of your chapter and card progress?\n\n" +
+          "Your notes are kept. There is no undo.")) return;
+
+    F.call("progress", "DELETE").then(function (r) {
+      if (r.status === 401) { expired(); return; }
+      if (r.status !== 200) {
+        F.say(msg, "bad", F.problem(r, "The progress was not reset."));
+        return;
+      }
+      var removed = (r.json && r.json.removed) || 0;
+      F.say(msg, "good", removed + " rows removed. Reload the course to see it.");
+      loadProgress();
+    }).catch(offline);
+  });
+
+  /* ---- delete the account ---- */
+  var delForm = document.getElementById("del-form");
+  var delMsg  = document.getElementById("del-msg");
+  var delWhat = document.getElementById("del-confirm");
+  var delGo   = document.getElementById("del-go");
+
+  document.getElementById("del-toggle").addEventListener("click", function () {
+    delForm.hidden = !delForm.hidden;
+    if (!delForm.hidden) delWhat.focus();
+  });
+  document.getElementById("del-cancel").addEventListener("click", function () {
+    delForm.hidden = true;
+    delWhat.value = "";
+    F.hush(delMsg);
+  });
+
+  delForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    F.hush(delMsg);
+
+    /* Typing the address is the confirmation. A dialog with an OK button is
+       dismissed by reflex; retyping the thing being destroyed is not. */
+    if (!me || delWhat.value.trim().toLowerCase() !== me.email.toLowerCase()) {
+      F.say(delMsg, "bad", "That is not the address on this account.");
+      return;
+    }
+
+    delGo.disabled = true;
+    delGo.textContent = "Deleting...";
+
+    F.call("auth/me", "DELETE").then(function (r) {
+      if (r.status === 204 || r.status === 200) {
+        window.location.replace("index.html");
+        return;
+      }
+      delGo.disabled = false;
+      delGo.textContent = "Delete everything";
+      if (r.status === 401) { expired(); return; }
+      F.say(delMsg, "bad", F.problem(r, "The account was not deleted."));
+    }).catch(function () {
+      delGo.disabled = false;
+      delGo.textContent = "Delete everything";
+      F.say(delMsg, "bad", F.OFFLINE);
+    });
+  });
+})();
+</script>
+</body>
+</html>

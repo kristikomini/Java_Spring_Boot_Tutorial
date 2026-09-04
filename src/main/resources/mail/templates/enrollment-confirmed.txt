@@ -1,0 +1,19 @@
+Subject: You are enrolled in ${courseCode}
+
+Dear ${studentName},
+
+Your enrolment has been registered.
+
+  Course:   ${courseCode} - ${courseTitle}
+  Student:  ${studentNumber}
+  Date:     ${enrolledOn}
+
+You can see your full study plan in the student area. If you need to withdraw,
+do it before the examination window opens so that your seat can be offered to
+someone else.
+
+This message was sent automatically. Please do not reply to it.
+
+--
+Segreteria Studenti
+Universita di Camerino - Scuola di Scienze e Tecnologie

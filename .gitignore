@@ -31,6 +31,14 @@ nbproject/private/
 # a .env.example with placeholder values instead.
 # ---------------------------------------------------------------------------
 .env
+# .env alone does not match .env.prod - a gitignore pattern is a filename, not
+# a prefix. The production secrets file is the one that would actually hurt,
+# so match every variant and then un-ignore the committed examples. The
+# negation must come after the pattern it exempts from; the order here is not
+# stylistic.
+.env.*
+!.env.example
+!.env.prod.example
 *.local
 
 # ---------------------------------------------------------------------------

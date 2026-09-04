@@ -308,12 +308,95 @@ This trap is identical in Spring, and it is asked about in interviews constantly
 
 ---
 
+## 7b. The second bounded context
+
+`it.unicam.cs.enrollment.fieldbook` is a separate model in the same deployable:
+the accounts, study progress and sticky notes behind the fieldbook page. It
+repeats the same four layers, with its own `domain/`, `repository/`, `service/`
+and `api/`, plus a `security/` package.
+
+It is separate on purpose. A learner is not a student, even when they are the
+same person — one has a matriculation number and a registrar, the other has a
+password and a reading streak. The two share only `BaseEntity`, `Email` and
+`AbstractJpaRepository`: a deliberately tiny **shared kernel**. No foreign key
+crosses between the two groups of tables and no query joins them, which is
+precisely what would make this splittable into two deployables later.
+
+It is also where authentication actually exists in this codebase, so it is the
+place to read after fieldbook chapter 15. The design decisions, the trade-offs
+each one cost, and the list of what is still missing are in
+[ACCOUNTS.md](ACCOUNTS.md).
+
+---
+
+## 7c. The mailing system
+
+`it.unicam.cs.enrollment.mail` sends the confirmation and exam-result emails. It
+is worth reading as a unit, because it is the one part of this codebase that has
+to reconcile a database transaction with something outside the database — and
+that is a genuinely hard problem with a standard answer.
+
+### The shape
+
+```
+EnrollmentService.enroll()                        [transaction begins]
+   └─ fires EnrollmentCreatedEvent
+        └─ EnrollmentMailListener  (@Observes, IN_PROGRESS)
+             └─ MailService.enqueue()  ──► INSERT INTO mail_outbox
+                                                   [transaction commits]
+
+MailDispatcher  (@Schedule, every 30s)
+   ├─ [tx] find due ids
+   ├─ [tx] claim one: PENDING → SENDING
+   │   ...  transport.send()   ← no transaction open
+   └─ [tx] record outcome: SENT, or PENDING with a backoff, or DEAD
+```
+
+### Why the row, and not a `Transport.send` in the service
+
+Sending inside the transaction gives you two failure modes and no way to avoid
+both: commit first and the process can die before the email is sent (lost mail),
+or send first and the transaction can roll back (an email about an enrollment
+that does not exist). Writing the message to a table *in the same transaction*
+as the enrollment removes the choice — the row and the seat are one atomic fact
+— and moves delivery to a process that can retry. This is the **transactional
+outbox** pattern, and the same shape solves the same problem for webhooks and
+for publishing to a broker.
+
+The cost is honest and worth stating: delivery becomes **at-least-once**. A
+crash between "the server accepted it" and "we wrote that down" sends a
+duplicate. That is a deliberate choice of which way to fail, and the right one
+for a confirmation email.
+
+### The four decisions to look at
+
+| Decision | Where | Why |
+|---|---|---|
+| Observer runs `IN_PROGRESS`, not `AFTER_SUCCESS` | `EnrollmentMailListener` | It only writes a row, so it *should* be atomic with the enrollment. The usual advice applies to observers with external side effects — compare `EnrollmentNotificationListener`, which defers |
+| Claim and send are in different beans | `OutboxProcessor` / `MailDispatcher` | Self-invocation bypasses the proxy, so `@Transactional(REQUIRES_NEW)` on a method called via `this` does nothing at all. See §7's self-invocation trap — this is that trap, avoided on purpose |
+| No transaction across the network call | `MailDispatcher.dispatchOne` | A transaction holds a pooled connection. One slow relay would otherwise drain the pool and take the whole application down |
+| Transport is an interface with two implementations | `mail/transport/` | Log-only lets the whole pipeline run with no mail server; SMTP is selected by config, and a producer method picks between them at startup because the choice depends on whether a JNDI session exists |
+
+### Running it
+
+`docker compose up -d` now also starts **Mailpit**, a fake SMTP server with a
+web inbox at <http://localhost:8225>. Every message the application sends lands
+there and goes no further. Without it — a native WildFly, say — the transport
+falls back to writing the rendered email into the server log, says so at WARN,
+and reports itself as `log only` at `GET /api/mail/status`.
+
+The operational endpoints are under `/api/mail` and require a signed-in
+fieldbook account (the outbox contains addresses and message bodies, so it is
+not public). See [ACCOUNTS.md](ACCOUNTS.md) for the session mechanics.
+
+---
+
 ## 8. What a production version would add
 
 | Gap | What you would use |
 |---|---|
 | Schema management | Flyway or Liquibase instead of `hbm2ddl.auto` |
-| Authentication | `@RolesAllowed` + JWT / OIDC (Keycloak) |
+| Authentication *(enrollment API)* | `@RolesAllowed` + JWT / OIDC (Keycloak). Already done for `/api/fieldbook/**` — see [ACCOUNTS.md](ACCOUNTS.md) |
 | API documentation | MicroProfile OpenAPI → live Swagger UI |
 | Health & metrics | MicroProfile Health + Metrics → Prometheus |
 | Resilience | MicroProfile Fault Tolerance (retry, circuit breaker) |
@@ -323,6 +406,9 @@ This trap is identical in Spring, and it is asked about in interviews constantly
 | API versioning | `/api/v1`, plus a deprecation policy |
 | Secrets | Vault / cloud secret manager, never a file in git |
 | Cluster-safe scheduling | Distributed lock, Quartz clustered, or a K8s CronJob |
+| Cluster-safe outbox claim | `SELECT … FOR UPDATE SKIP LOCKED`, or a broker that hands each message to one consumer |
+| Mail bounces and complaints | A provider webhook (SES / SendGrid) feeding back into `mail_outbox`, plus a suppression list |
+| Mail deliverability | SPF, DKIM and DMARC records for the sending domain — without them a correctly built sender still lands in spam |
 
 Each is a reasonable next exercise, and each maps onto a concept already present
 here.

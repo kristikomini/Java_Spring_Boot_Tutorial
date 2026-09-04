@@ -166,4 +166,51 @@ data-source add \
     name=auto-deploy-zipped, \
     value=false)
 
+# -----------------------------------------------------------------------------
+# 6. A mail session, pointing at the Mailpit container
+# -----------------------------------------------------------------------------
+# Exactly the same idea as the datasource in §2, for exactly the same reason:
+# the application asks for "java:jboss/mail/Enrollment" and never learns a host
+# name, a port or a password. Moving from Mailpit to a real university relay is
+# then a change to this file and a redeploy of nothing.
+#
+# It takes two resources, and the split confuses people the first time:
+#
+#   a REMOTE-DESTINATION OUTBOUND SOCKET BINDING
+#       says WHERE. Host and port, named once, in the socket-binding group with
+#       every other address the server knows. WildFly keeps all networking
+#       endpoints in one place so an operator can see, and change, every
+#       destination a server talks to without reading application config.
+#
+#   a MAIL SESSION
+#       says WHAT: a jakarta.mail.Session, bound into JNDI, referring to the
+#       binding above for its address. Credentials and TLS settings live here.
+#
+# `mailpit` is a DNS name inside the Docker network, resolved to the container
+# of that name by Docker's embedded resolver - the same mechanism that lets the
+# datasource say `postgres`. Port 1025 is the CONTAINER's port, not the shifted
+# host port in docker-compose.yml, because this connection never leaves the
+# Docker network.
+#
+# The stock configuration already ships a `default` mail session pointing at
+# localhost:25. It is left alone: adding our own named session, rather than
+# editing theirs, means an upgrade of the base image cannot silently change what
+# our application connects to.
+/socket-binding-group=standard-sockets/remote-destination-outbound-socket-binding=mail-smtp-enrollment:add( \
+    host=mailpit, \
+    port=1025)
+
+/subsystem=mail/mail-session=enrollment:add( \
+    jndi-name=java:jboss/mail/Enrollment, \
+    from=no-reply@enrollment.unicam.test)
+
+# ssl=false, tls=false because Mailpit speaks plain SMTP on 1025 and nothing
+# leaves this machine. Against any real relay both of those become true and a
+# username/password (or, better, credential-reference to a secret store) is
+# added here - and note that this is the ONE place it would have to change.
+/subsystem=mail/mail-session=enrollment/server=smtp:add( \
+    outbound-socket-binding-ref=mail-smtp-enrollment, \
+    ssl=false, \
+    tls=false)
+
 stop-embedded-server

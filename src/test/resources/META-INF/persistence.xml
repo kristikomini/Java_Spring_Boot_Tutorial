@@ -43,8 +43,8 @@
 <persistence xmlns="https://jakarta.ee/xml/ns/persistence"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence
-                                 https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
-             version="3.0">
+                                 https://jakarta.ee/xml/ns/persistence/persistence_3_2.xsd"
+             version="3.2">
 
     <persistence-unit name="enrollmentTestPU" transaction-type="RESOURCE_LOCAL">
 
@@ -54,6 +54,21 @@
         <class>it.unicam.cs.enrollment.domain.model.Professor</class>
         <class>it.unicam.cs.enrollment.domain.model.Course</class>
         <class>it.unicam.cs.enrollment.domain.model.Enrollment</class>
+
+        <!-- The fieldbook bounded context. Listed separately so it is obvious
+             at a glance that these are a different group of tables serving a
+             different model - see V3__fieldbook_accounts.sql. -->
+        <class>it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount</class>
+        <class>it.unicam.cs.enrollment.fieldbook.domain.AuthSession</class>
+        <class>it.unicam.cs.enrollment.fieldbook.domain.CardProgress</class>
+        <class>it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress</class>
+        <class>it.unicam.cs.enrollment.fieldbook.domain.StickyNote</class>
+
+        <!-- The mail outbox. A third group again: it belongs to neither the
+             registrar nor the fieldbook, and nothing joins to it - see
+             V4__mail_outbox.sql for why an outbox row deliberately has no
+             foreign key back to whatever caused it. -->
+        <class>it.unicam.cs.enrollment.mail.domain.OutboxMessage</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 

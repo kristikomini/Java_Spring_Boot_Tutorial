@@ -70,15 +70,19 @@ public abstract class AbstractJpaRepository<T extends BaseEntity> {
     }
 
     /**
-     * Package-private seam for tests. An integration test creates a
-     * RESOURCE_LOCAL EntityManager itself and injects it here, so the repository
-     * can be exercised against H2 without an application server.
+     * Test seam. An integration test creates a RESOURCE_LOCAL EntityManager
+     * itself and injects it here, so the repository can be exercised against H2
+     * without an application server.
      *
-     * <p>Package-private rather than public: the test lives in the same package,
-     * so it has access, while application code outside this package does not.
-     * Visibility is a design tool, not an afterthought.
+     * <p>{@code protected} rather than {@code public}: subclasses need it -
+     * including the fieldbook repositories, which live in another package - and
+     * nothing else does. It was package-private until a subclass outside this
+     * package needed the same seam, which is the ordinary reason visibility
+     * widens. Widen it one step, when something real requires it, and no
+     * further; {@code public} here would advertise a way for application code
+     * to swap the persistence context at runtime.
      */
-    void setEntityManager(EntityManager entityManager) {
+    protected void setEntityManager(EntityManager entityManager) {
         this.entityManager = entityManager;
     }
 

@@ -33,6 +33,16 @@
         <dependencies>
             <!-- The SLF4J facade we compile against. -->
             <module name="org.slf4j"/>
+
+            <!-- Jakarta Mail, used by the mail package's SMTP transport.
+                 WildFly adds this one implicitly too, for the same reason it
+                 adds JPA and CDI: it is part of the EE platform. Declaring it
+                 anyway follows the rule above - a dependency you can read is
+                 worth more than a default you have to remember. If it ever
+                 vanishes from the implicit set, the failure without this line
+                 is a NoClassDefFoundError for jakarta.mail.Session at the first
+                 send, long after deployment reported success. -->
+            <module name="jakarta.mail.api"/>
         </dependencies>
     </deployment>
 </jboss-deployment-structure>

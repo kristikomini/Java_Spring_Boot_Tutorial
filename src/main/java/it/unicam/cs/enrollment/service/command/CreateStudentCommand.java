@@ -24,11 +24,14 @@ import java.time.LocalDate;
  * where the boundary conversion (raw String to {@code Email} value object) has a
  * natural home.
  *
- * <p>On Java 17+ this entire class collapses to a single line:
+ * <p>This entire class collapses to a single line:
  * <pre>
  *   public record CreateStudentCommand(String studentNumber, ...) {}
  * </pre>
- * This project targets Java 11, so it is written out longhand.
+ * The project now targets Java 21, so that IS available - this class is left
+ * longhand deliberately, as the side-by-side a record is measured against.
+ * Chapter 30 of the fieldbook makes that comparison; converting the DTOs and
+ * commands to records is left as an exercise, and the diff is the argument.
  */
 public final class CreateStudentCommand {
 

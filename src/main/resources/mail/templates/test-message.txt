@@ -1,0 +1,13 @@
+Subject: Enrollment service mail test
+
+This is a test message from the enrollment service.
+
+  Requested by: ${sentBy}
+  Transport:    ${transport}
+  Note:         ${note}
+
+If you are reading this, the whole path works: an outbox row was written, the
+dispatcher picked it up, and the transport delivered it.
+
+--
+UNICAM Enrollment Service

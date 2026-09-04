@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fieldbook-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8931", "--directory", "src/main/webapp"],
+      "port": 8931
+    }
+  ]
+}

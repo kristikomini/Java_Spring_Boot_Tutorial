@@ -1,0 +1,255 @@
+# =============================================================================
+# The production stack: Caddy + WildFly + PostgreSQL
+# =============================================================================
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml down
+#
+# Full walkthrough, from an empty Hetzner account to a working URL:
+#   docs/DEPLOY-HETZNER.md
+#
+# -----------------------------------------------------------------------------
+# WHY THIS IS A SEPARATE FILE AND NOT AN OVERRIDE
+# -----------------------------------------------------------------------------
+# Compose can merge files - `-f docker-compose.yml -f docker-compose.prod.yml`
+# - and that is the usual advice. It is the wrong tool here, for one specific
+# reason: when Compose merges two services, LIST-valued keys are APPENDED, not
+# replaced. `ports` is a list. So an override file cannot remove
+#
+#     - "9990:9990"   # the admin console
+#
+# from the development stack. It can only add more ports. Every hardening step
+# in this file that consists of *taking something away* - the admin console,
+# the exposed database, the mail catcher - is a step an override file is
+# structurally incapable of performing.
+#
+# That is worth internalising beyond this repository: "production is
+# development plus an override" is a pattern that silently fails open. The
+# things that make an environment safe are usually subtractions.
+#
+# -----------------------------------------------------------------------------
+# WHAT IS DIFFERENT, IN ONE LIST
+# -----------------------------------------------------------------------------
+#   - Caddy sits in front and is the only service with published ports.
+#   - WildFly publishes NOTHING. Not 8080, and emphatically not 9990.
+#   - PostgreSQL publishes NOTHING. It is reachable only by WildFly, over the
+#     internal Docker network, by the name `postgres`.
+#   - Mailpit is gone. A mail catcher that accepts any credentials and shows
+#     every message in an unauthenticated web inbox is a development tool; on a
+#     public address it is a public archive of your users' password-reset
+#     links.
+#   - Every secret comes from .env.prod, which is not in git.
+#   - There is no hot-deploy bind mount. The WAR is inside the image.
+# =============================================================================
+
+# An explicit project name. Compose otherwise derives one from the directory,
+# which is how you end up with two stacks quietly sharing a volume - or, worse,
+# a `down -v` in the wrong directory deleting the other one's database.
+name: enrollment-prod
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Caddy - TLS termination and reverse proxy
+  # ---------------------------------------------------------------------------
+  # The only service the internet can reach. It obtains and renews a Let's
+  # Encrypt certificate on its own, with no cron job and no certbot: that is
+  # the entire reason to prefer it to nginx here.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: enrollment-caddy
+
+    ports:
+      # Note the shape: "80:80", not "8280:8080". On a server there is no
+      # reason to shift ports - the whole point of the local file's odd numbers
+      # was to coexist with other projects on one laptop.
+      - "80:80"     # redirects to 443, and serves the ACME HTTP challenge
+      - "443:443"   # the site
+      - "443:443/udp"   # HTTP/3. Harmless if unused; the browser negotiates.
+
+    volumes:
+      # :ro - Caddy has no business writing to its own configuration.
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # THE IMPORTANT VOLUME. /data holds the issued certificates and the ACME
+      # account key. Lose it and every restart re-requests certificates, which
+      # runs into Let's Encrypt's rate limit (5 per domain per week) and leaves
+      # the site without TLS until it expires.
+      - caddy-data:/data
+      - caddy-config:/config
+
+    environment:
+      # Read by the Caddyfile as {$SITE_DOMAIN}. Certificates are issued for
+      # this name, so it must resolve to this server's IP before first start.
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
+
+    depends_on:
+      # Ordering only, no health condition. If WildFly is slow to boot Caddy
+      # should still come up and answer with a 502 - a 502 is a diagnosable
+      # answer, whereas a connection refused because Caddy never started is
+      # indistinguishable from a DNS or firewall problem.
+      - wildfly
+
+    restart: unless-stopped
+
+    logging: &log-rotation
+      # Docker's default json-file driver has NO size limit. On a 40 GB disk,
+      # an application logging steadily will eventually fill it, and a full
+      # disk takes PostgreSQL down with it. Three files of 10 MB is a hard
+      # 30 MB ceiling per service.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # WildFly - the application server
+  # ---------------------------------------------------------------------------
+  wildfly:
+    build:
+      # Context is the REPOSITORY ROOT, not docker/wildfly: the first stage of
+      # Dockerfile.prod needs pom.xml and src/ to build the WAR.
+      context: .
+      dockerfile: docker/wildfly/Dockerfile.prod
+    container_name: enrollment-wildfly
+
+    # NO `ports:` KEY. Not commented out - absent.
+    #
+    # This is what makes proxy-address-forwarding safe in configure-prod.cli
+    # (section 5): the forwarded headers can only come from Caddy, because
+    # nothing else can open a connection to port 8080. Adding a mapping here
+    # "just to check something" re-opens that, and the site keeps working, so
+    # nothing tells you.
+
+    environment:
+      JAVA_OPTS: >-
+        -Xms256m
+        -Xmx768m
+        -Djava.net.preferIPv4Stack=true
+        -Djboss.as.management.blocking.timeout=600
+
+      # -------------------------------------------------------------------
+      # DATABASE
+      # -------------------------------------------------------------------
+      # These three are the expressions configure-prod.cli left unresolved.
+      # The host is the SERVICE NAME on the Docker network, and the port is
+      # the container's 5432 - neither is affected by the fact that nothing
+      # is published to the host.
+      ENROLLMENT_DB_URL: jdbc:postgresql://postgres:5432/enrollment
+      ENROLLMENT_DB_USER: enrollment
+      # No default. A missing password stops the deploy here, at `up`, with a
+      # readable message - rather than at boot with a JNDI stack trace.
+      ENROLLMENT_DB_PASSWORD: ${ENROLLMENT_DB_PASSWORD:?set ENROLLMENT_DB_PASSWORD in .env.prod}
+
+      # -------------------------------------------------------------------
+      # MAIL
+      # -------------------------------------------------------------------
+      # The default transport here is `log`, not `smtp`. That is deliberate:
+      # the first deploy of anything that can send email should not be able
+      # to send email. Messages are written to the log, the outbox and the
+      # retry logic all still exercise, and nothing reaches a real inbox
+      # while you are still finding out what this thing does in public.
+      #
+      # When a relay is configured and tested, set ENROLLMENT_MAIL_TRANSPORT
+      # to `smtp` in .env.prod. `smtp` fails loudly at startup if the mail
+      # session is missing, which is the behaviour you want once you have
+      # decided mail matters.
+      ENROLLMENT_MAIL_TRANSPORT: ${ENROLLMENT_MAIL_TRANSPORT:-log}
+
+      # The SMTP_* values below are consumed by configure-prod.cli at BOOT,
+      # not by the application - the mail session resource has to resolve
+      # even when the transport is `log`, so they carry harmless defaults.
+      ENROLLMENT_SMTP_HOST: ${ENROLLMENT_SMTP_HOST:-localhost}
+      ENROLLMENT_SMTP_PORT: ${ENROLLMENT_SMTP_PORT:-587}
+      ENROLLMENT_SMTP_SSL: ${ENROLLMENT_SMTP_SSL:-false}
+      ENROLLMENT_SMTP_TLS: ${ENROLLMENT_SMTP_TLS:-true}
+      ENROLLMENT_SMTP_USER: ${ENROLLMENT_SMTP_USER:-}
+      ENROLLMENT_SMTP_PASSWORD: ${ENROLLMENT_SMTP_PASSWORD:-}
+
+      ENROLLMENT_MAIL_FROM: ${ENROLLMENT_MAIL_FROM:-no-reply@localhost}
+      ENROLLMENT_MAIL_FROM_NAME: ${ENROLLMENT_MAIL_FROM_NAME:-UNICAM Enrollment}
+
+      # Kept, and kept honest. This is a teaching deployment of a fictional
+      # registrar; every message it sends says so in the subject line, so it
+      # can never be mistaken for correspondence from a real university.
+      ENROLLMENT_MAIL_SUBJECT_PREFIX: ${ENROLLMENT_MAIL_SUBJECT_PREFIX:-[DEMO]}
+
+      # Uncomment to force every message to one address regardless of its
+      # recipient. If you ever restore a dump with real addresses in it onto
+      # this server, set this FIRST.
+      # ENROLLMENT_MAIL_REDIRECT_TO: you@example.com
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      # Bash's /dev/tcp is a built-in, so this needs nothing installed in the
+      # image. Be clear about what it proves: the port is accepting
+      # connections. It does NOT prove the WAR deployed - a server whose
+      # deployment failed still listens on 8080 and returns 404. Caddy
+      # returning 502 means this failed; Caddy returning 404 on every path
+      # means this passed and the deployment did not.
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      # WildFly plus a first-boot schema update takes a while. The container
+      # is not reported unhealthy during this window.
+      start_period: 90s
+
+    restart: unless-stopped
+
+    # The YAML anchor defined on the caddy service above, reused verbatim.
+    logging: *log-rotation
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: enrollment-postgres
+
+    environment:
+      POSTGRES_DB: enrollment
+      POSTGRES_USER: enrollment
+      # The same variable the datasource uses. One secret, one place.
+      POSTGRES_PASSWORD: ${ENROLLMENT_DB_PASSWORD:?set ENROLLMENT_DB_PASSWORD in .env.prod}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+
+    # NO `ports:` KEY - see the note on the wildfly service.
+    #
+    # If you need psql, you do not need a published port: run it inside the
+    # container, where the connection never touches the network at all.
+    #     docker compose ... exec postgres psql -U enrollment enrollment
+    #
+    # If you want a GUI client on your laptop, tunnel it over SSH rather than
+    # opening 5432 to the internet:
+    #     ssh -L 55433:localhost:5432 deploy@your.server
+    # Note that this reaches the port on the SERVER's localhost, so it only
+    # works if you also publish "127.0.0.1:5432:5432" here - which binds to
+    # the loopback interface only, and is the one port mapping that is
+    # defensible on a public machine.
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enrollment -d enrollment"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+    restart: unless-stopped
+
+    logging: *log-rotation
+
+volumes:
+  postgres-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local

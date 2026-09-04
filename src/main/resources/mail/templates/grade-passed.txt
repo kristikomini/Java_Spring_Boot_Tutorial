@@ -1,0 +1,18 @@
+Subject: Exam result for ${courseCode}: ${grade}
+
+Dear ${studentName},
+
+Your result for ${courseCode} has been registered.
+
+  Grade:    ${grade}/30
+  Student:  ${studentNumber}
+  Recorded: ${recordedOn}
+
+The mark is now part of your official transcript and counts towards your
+weighted average.
+
+This message was sent automatically. Please do not reply to it.
+
+--
+Segreteria Studenti
+Universita di Camerino - Scuola di Scienze e Tecnologie

@@ -9,8 +9,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Reacts to domain events. In a real system this is where the confirmation
- * email would be sent; here it logs, so you can watch the mechanism work.
+ * Reacts to domain events by logging them, so the mechanism can be watched.
+ *
+ * <h2>Read this alongside {@code EnrollmentMailListener}</h2>
+ * Confirmation email is no longer hypothetical: the {@code mail} package
+ * observes these same two events and queues a real message. This class stays
+ * because it is the SIMPLE version of the same idea, and because the contrast
+ * between the two is the lesson.
+ *
+ * <p>Both classes observe {@code EnrollmentCreatedEvent}. Neither knows the
+ * other exists. {@code EnrollmentService} knows about neither. Adding the
+ * entire mailing system required no change to the code that enrolls a student -
+ * which is the claim the "observers are pluggable" paragraph below makes, now
+ * demonstrated rather than asserted.
+ *
+ * <p>Note also that the two use DIFFERENT transaction phases, for a reason
+ * spelled out in {@code EnrollmentMailListener}: this one has a genuine
+ * external side effect (a log line cannot be un-written) and defers to
+ * {@code AFTER_SUCCESS}; the mail listener only writes a database row, so it
+ * runs inside the transaction on purpose. The phase follows the work, not the
+ * habit.
  *
  * <h2>The point of this class</h2>
  * {@link EnrollmentService} does not import it, does not know it exists, and

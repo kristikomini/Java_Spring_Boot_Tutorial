@@ -24,7 +24,7 @@ discard your own work.
 ## The four breaks
 
 All of the numbers below were measured against this application running on
-WildFly 31 with the seeded dataset. You should see the same.
+WildFly 41 with the seeded dataset. You should see the same.
 
 ### `fetch-plan` — fails loudly
 

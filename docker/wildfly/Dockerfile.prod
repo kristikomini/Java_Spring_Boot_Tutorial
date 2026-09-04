@@ -1,0 +1,133 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# The production image: the same server, with none of the development doors
+# =============================================================================
+# Differences from docker/wildfly/Dockerfile, which builds the local image:
+#
+#   1. IT BUILDS THE WAR ITSELF, in a first stage, from the sources in this
+#      repository. The development image expects a WAR to appear in a
+#      bind-mounted directory, because that is what makes `mvn package` a
+#      one-second redeploy loop. Here there is no loop: an image is built once
+#      and then run, unchanged, until the next deploy. Baking the artifact in
+#      is what makes it IMMUTABLE - the running container cannot drift away
+#      from the thing you tested, because there is nowhere for it to drift to.
+#
+#      It also means the server needs nothing installed but Docker. No JDK, no
+#      Maven, no matching versions of either.
+#
+#   2. IT DEPLOYS AS ROOT.war, so the application owns "/" and the reverse
+#      proxy in front of it needs no path rewriting. See configure-prod.cli, 6.
+#
+#   3. IT CREATES NO MANAGEMENT USER and exposes no management port.
+#
+#   4. IT RUNS configure-prod.cli instead of configure.cli.
+#
+# Build it with the REPOSITORY ROOT as context, not this directory:
+#     docker build -f docker/wildfly/Dockerfile.prod -t enrollment:prod .
+# docker-compose.prod.yml already does that. The first stage needs pom.xml and
+# src/, which are not visible from inside docker/wildfly.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# STAGE 1 - build the WAR
+# -----------------------------------------------------------------------------
+# A "multi-stage build": this whole stage, with its JDK and its several hundred
+# megabytes of downloaded dependencies, is thrown away. Only the file named in
+# the COPY --from at the bottom survives into the final image. That is how you
+# get a build-from-source image that is not also a shipping build toolchain.
+# -----------------------------------------------------------------------------
+FROM maven:3.9-eclipse-temurin-21 AS build
+
+WORKDIR /build
+
+# Sources first, then one Maven invocation. The more usual trick - copy pom.xml
+# alone, run dependency:go-offline, then copy sources - exists to keep the
+# downloaded dependencies in a Docker layer that a source change does not
+# invalidate. The cache mount below does that job better: it is a real cache
+# that persists across builds and is shared between them, rather than a layer
+# that is invalidated the moment pom.xml changes. It also does not fail the
+# build when a plugin resolves something go-offline did not anticipate, which
+# is the usual reason that trick stops working.
+COPY pom.xml ./
+COPY src ./src
+
+# Tests belong in CI and on your machine, not in a deploy. A test suite inside
+# an image build means a flaky test is an outage, and it means the server is
+# running unit tests on 2 vCPUs while users wait.
+#
+# The two ways to say that are not the same, and the difference is worth
+# knowing:
+#   -DskipTests            compiles the tests, does not run them.
+#   -Dmaven.test.skip=true compiles nothing under src/test at all.
+# The second is used here because it is meaningfully faster on a small server
+# and this build has no interest in whether the tests compile. Use the first
+# when you want compilation errors in tests to still fail a build.
+#
+# -Ddeployment.directory overrides the property in pom.xml that normally sends
+# the WAR into docker/deployments for the local hot-deploy mount. Here it goes
+# somewhere the next stage can find it.
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -Dmaven.test.skip=true -Ddeployment.directory=/build/out package
+
+
+# -----------------------------------------------------------------------------
+# STAGE 2 - the server
+# -----------------------------------------------------------------------------
+# The same pinned base image as development. The whole point of pinning is that
+# development and production are the same server; a floating tag here would
+# mean the thing you tested and the thing you deployed differ by whatever was
+# published in between.
+#
+# ON ARM (Hetzner CAX servers): check this tag has a linux/arm64 manifest
+# before choosing an ARM machine -
+#     docker buildx imagetools inspect quay.io/wildfly/wildfly:41.0.1.Final-jdk21
+# If it does not, take an x86 CX server instead. Nothing else in this file
+# cares: the JDBC driver is pure Java and Maven emits the same bytecode.
+# -----------------------------------------------------------------------------
+FROM quay.io/wildfly/wildfly:41.0.1.Final-jdk21
+
+ARG POSTGRES_JDBC_VERSION=42.7.13
+
+ENV JBOSS_HOME=/opt/jboss/wildfly
+
+USER root
+RUN mkdir -p ${JBOSS_HOME}/customization && \
+    chown -R jboss:root ${JBOSS_HOME}/customization
+
+ADD --chown=jboss:root \
+    https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_JDBC_VERSION}/postgresql-${POSTGRES_JDBC_VERSION}.jar \
+    ${JBOSS_HOME}/customization/postgresql.jar
+
+# Note the path. Every COPY source in this file is relative to the BUILD
+# CONTEXT, which is the repository root here - not to the directory the
+# Dockerfile lives in. The development Dockerfile, built with docker/wildfly as
+# its context, says just `configure.cli`; copying that line across is how you
+# get "failed to compute cache key: not found".
+COPY --chown=jboss:root docker/wildfly/configure-prod.cli ${JBOSS_HOME}/customization/configure-prod.cli
+
+USER jboss
+
+RUN ${JBOSS_HOME}/bin/jboss-cli.sh --file=${JBOSS_HOME}/customization/configure-prod.cli && \
+    rm -rf ${JBOSS_HOME}/standalone/configuration/standalone_xml_history/current
+
+# The artifact, and the marker that asks the scanner to deploy it.
+#
+# The marker is required because configure-prod.cli turns auto-deploy off (4).
+# Without it the WAR sits in the directory and is never deployed, and the only
+# symptom is a 404 on every path - so if you ever see that after a change here,
+# this is the line to look at.
+COPY --from=build --chown=jboss:root /build/out/enrollment.war \
+     ${JBOSS_HOME}/standalone/deployments/ROOT.war
+RUN touch ${JBOSS_HOME}/standalone/deployments/ROOT.war.dodeploy
+
+# 8080 only. There is deliberately no 9990 here: the management interface is
+# not bound to a public interface below, and compose publishes no port for it.
+EXPOSE 8080
+
+# -b 0.0.0.0 so the container's port 8080 is reachable from the Docker network
+# (Caddy needs to reach it). NOT -bmanagement 0.0.0.0 - the management
+# interface keeps its default 127.0.0.1 bind, which inside a container means
+# "this container only". Two independent things have to go wrong before it is
+# reachable: this line, and a port mapping in compose.
+CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]

@@ -23,8 +23,8 @@
 <persistence xmlns="https://jakarta.ee/xml/ns/persistence"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
              xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence
-                                 https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
-             version="3.0">
+                                 https://jakarta.ee/xml/ns/persistence/persistence_3_2.xsd"
+             version="3.2">
 
     <!--
       transaction-type="JTA" means the *container* owns the transactions.
@@ -150,6 +150,44 @@
               the common choice.
             -->
             <property name="hibernate.jpa.compliance.query" value="false"/>
+
+            <!--
+              ==================================================================
+              GLOBAL ID GENERATORS - the second strict-compliance switch
+              ==================================================================
+              Deploying without this fails at startup with:
+
+                  IllegalArgumentException: Duplicate generator name
+                  app_id_generator
+
+              BaseEntity declares @SequenceGenerator(name = "app_id_generator")
+              once, on a @MappedSuperclass. Every entity that extends it
+              therefore inherits that declaration - which is the entire point of
+              putting it there, and how the quartet of id/version/createdAt/
+              updatedAt stays written once instead of ten times.
+
+              Jakarta Persistence 3.2 tightened the rule that generator names
+              live in a GLOBAL namespace, and Hibernate 7 enforces it: ten
+              entities inheriting one declaration now look like ten entities
+              REGISTERING the same name, and the tenth is rejected as a
+              duplicate. Hibernate's own message suggests this property, which
+              restores the previous behaviour of resolving generator names per
+              entity.
+
+              The spec-pure alternative is to move the @SequenceGenerator off
+              the mapped superclass and repeat it - with a distinct name - on
+              every entity. That is more faithful to the letter of the spec and
+              strictly worse code: ten copies of one decision, and a new entity
+              that silently gets its own sequence the day someone forgets.
+
+              Note again that the H2 test persistence unit bootstraps Hibernate
+              directly and never enables strict compliance, so the whole suite
+              passes with this property absent. The same lesson as the fetch-join
+              switch above: a test that runs against a different configuration
+              from production can only tell you about the configuration it ran
+              against.
+            -->
+            <property name="hibernate.jpa.compliance.global_id_generators" value="false"/>
 
         </properties>
     </persistence-unit>

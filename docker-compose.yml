@@ -9,6 +9,8 @@
 # NOTE ON PORTS: this machine already runs other projects on 8080, 5432 and
 # 55432, so the HOST ports here are 8280 (application) and 55433 (database).
 # The application is at http://localhost:8280/enrollment
+# The mail inbox (Mailpit)  is at http://localhost:8225 - every message the
+# application sends lands there and goes no further.
 #
 # The development loop once this is running:
 #   mvn package   ->  the WAR lands in ./docker/deployments
@@ -81,13 +83,6 @@ services:
       dockerfile: Dockerfile
     container_name: enrollment-wildfly
 
-    depends_on:
-      postgres:
-        # Waits for the HEALTHCHECK above to pass, not merely for the container
-        # to exist. `depends_on` without a condition only orders startup, which
-        # is almost never what you actually want.
-        condition: service_healthy
-
     ports:
       # Host port 8280, because 8080 on this machine is already taken by another
       # project. The container still serves on 8080 internally.
@@ -115,6 +110,83 @@ services:
         -Xmx768m
         -Djava.net.preferIPv4Stack=true
         -Djboss.as.management.blocking.timeout=600
+
+      # ---------------------------------------------------------------------
+      # MAIL
+      # ---------------------------------------------------------------------
+      # Read by MailConfig, which looks for a system property first and then an
+      # environment variable - so every one of these can be overridden for a
+      # single run with -Denrollment.mail.xxx without editing this file.
+      #
+      # transport=smtp rather than the `auto` default, deliberately: the mail
+      # session is baked into this image by configure.cli, so if it is missing
+      # something is wrong with the build and the deployment SHOULD fail loudly
+      # rather than quietly degrade to writing emails into the log. `auto` is
+      # the right default for a laptop running WildFly natively, where there may
+      # genuinely be no mail server; it is the wrong one here.
+      ENROLLMENT_MAIL_TRANSPORT: smtp
+      ENROLLMENT_MAIL_FROM: no-reply@enrollment.unicam.test
+      ENROLLMENT_MAIL_FROM_NAME: UNICAM Enrollment
+
+      # Every subject is marked, so a message from this stack can never be
+      # mistaken for one from a real registrar.
+      ENROLLMENT_MAIL_SUBJECT_PREFIX: "[DEV]"
+
+      # Worth knowing about even though it is commented out. It forces EVERY
+      # message to one address regardless of its recipient - the standard
+      # protection for a staging environment restored from a production
+      # database, where the addresses in the data belong to real people.
+      # ENROLLMENT_MAIL_REDIRECT_TO: you@example.com
+
+    depends_on:
+      postgres:
+        # Waits for the HEALTHCHECK above to pass, not merely for the container
+        # to exist. `depends_on` without a condition only orders startup, which
+        # is almost never what you actually want.
+        condition: service_healthy
+      mailpit:
+        # No health condition: unlike the database, a missing mail server does
+        # not stop the application from starting. Messages stay in the outbox
+        # and the dispatcher retries them, which is the entire point of having
+        # an outbox. Ordering alone is enough here.
+        condition: service_started
+
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Mailpit - a fake SMTP server with a web inbox
+  # ---------------------------------------------------------------------------
+  # It accepts every message, delivers none of them, and shows them all at
+  # http://localhost:8225 - so you can watch a real SMTP conversation happen and
+  # read the result, without a single email reaching a real person.
+  #
+  # This is the standard way to develop against mail, and it is worth insisting
+  # on: the alternative is either a transport that only pretends (which hides
+  # every encoding, header and address bug until production) or a real relay
+  # (which sooner or later mails an actual student from someone's laptop).
+  # Mailpit is the same shape as MailHog, which you will meet in older projects.
+  mailpit:
+    image: axllent/mailpit:v1.21
+
+    container_name: enrollment-mailpit
+
+    ports:
+      # Shifted off the defaults (8025 / 1025) for the same reason as 8280 and
+      # 55433 above: this machine runs other projects. Only the HOST side moves -
+      # inside the Docker network WildFly still reaches `mailpit:1025`, which is
+      # what configure.cli refers to.
+      - "8225:8025"   # the web inbox: http://localhost:8225
+      - "1225:1025"   # SMTP, exposed only so you can point another tool at it
+
+    environment:
+      # A development server: accept any credentials, and do not insist on TLS.
+      # Both of these would be indefensible on anything reachable from outside
+      # this machine, which is exactly why they are written down here rather
+      # than being defaults nobody notices.
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      # Keep the inbox from growing without bound across weeks of use.
+      MP_MAX_MESSAGES: "500"
 
     restart: unless-stopped
 

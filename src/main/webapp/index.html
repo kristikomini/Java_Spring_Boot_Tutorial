@@ -69,12 +69,31 @@
 <body>
 <main>
     <h1>UNICAM Course Enrollment Service</h1>
-    <p class="sub">Jakarta EE 10 &middot; JPA &middot; CDI &middot; JAX-RS &middot; Bean Validation &middot; JTA</p>
+    <p class="sub">Jakarta EE 11 &middot; JPA &middot; CDI &middot; JAX-RS &middot; Bean Validation &middot; JTA</p>
 
     <p class="note">
         This is a study project. Every class is commented to explain what it does,
         why it is built that way, and what the industry term for it is.
         Start with <code>README.md</code>, then <code>docs/ARCHITECTURE.md</code>.
+    </p>
+
+    <h2>Pages</h2>
+    <table>
+        <tr><td class="p"><a href="tutorial.html">tutorial.html</a></td>
+            <td class="d">The fieldbook &mdash; the 30-chapter course this project is built around</td></tr>
+        <tr><td class="p"><a href="signin.html">signin.html</a></td>
+            <td class="d">Sign in, so your progress follows you between machines</td></tr>
+        <tr><td class="p"><a href="register.html">register.html</a></td>
+            <td class="d">Create an account</td></tr>
+        <tr><td class="p"><a href="area-riservata.html">area-riservata.html</a></td>
+            <td class="d">Area riservata &mdash; mastery, streak, chapters, notes, and the account itself</td></tr>
+    </table>
+
+    <p class="note">
+        Those four are the fieldbook's own multi-user layer, and they are the
+        only authenticated thing here. The enrollment API below is deliberately
+        left open, because it is the specimen chapter 15 dissects.
+        See <code>docs/ACCOUNTS.md</code>.
     </p>
 
     <h2>Courses</h2>
@@ -115,6 +134,29 @@
     <table>
         <tr><td class="m GET">GET</td><td class="p">/api/professors</td><td class="d">All teaching staff</td></tr>
         <tr><td class="m GET">GET</td><td class="p">/api/professors/{id}</td><td class="d">One professor</td></tr>
+    </table>
+
+    <h2>Mail</h2>
+    <p>
+        Enrolling a student queues a confirmation; recording a grade queues the
+        result. The messages are written to an outbox table inside the same
+        transaction and delivered by a scheduled dispatcher &mdash; see
+        <code>docs/ARCHITECTURE.md</code> §7c. In the Docker stack they land in
+        <a href="http://localhost:8225">Mailpit</a> and go no further.
+    </p>
+    <p>
+        These endpoints need a signed-in fieldbook account, because the outbox
+        holds real addresses and message bodies. Sending anything needs the
+        <code>author</code> role.
+    </p>
+    <table>
+        <tr><td class="m GET">GET</td><td class="p">/api/mail/status</td><td class="d">Live transport, configuration, and the count in every state</td></tr>
+        <tr><td class="m GET">GET</td><td class="p">/api/mail/outbox?status=PENDING</td><td class="d">The queue, newest first</td></tr>
+        <tr><td class="m GET">GET</td><td class="p">/api/mail/outbox/{id}</td><td class="d">One message, with the body that was rendered</td></tr>
+        <tr><td class="m POST">POST</td><td class="p">/api/mail/outbox/{id}/requeue</td><td class="d">Try a dead message again <em>(author)</em></td></tr>
+        <tr><td class="m POST">POST</td><td class="p">/api/mail/outbox/{id}/cancel</td><td class="d">Stop one that has not gone yet <em>(author)</em></td></tr>
+        <tr><td class="m POST">POST</td><td class="p">/api/mail/dispatch</td><td class="d">Run a dispatch pass now instead of waiting <em>(author)</em></td></tr>
+        <tr><td class="m POST">POST</td><td class="p">/api/mail/test</td><td class="d">Queue one test message <em>(author)</em></td></tr>
     </table>
 
     <h2>Try it</h2>

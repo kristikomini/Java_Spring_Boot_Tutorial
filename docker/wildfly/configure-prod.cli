@@ -1,0 +1,214 @@
+# =============================================================================
+# WildFly configuration for a PUBLIC server
+# =============================================================================
+# Read docker/wildfly/configure.cli first: this file is that one, with every
+# development convenience taken back out. The two are kept as separate files
+# rather than one file with conditionals, because the whole value of this
+# script is that you can read it top to bottom and see exactly what the server
+# will be. A script with branches in it is a script you have to execute in your
+# head.
+#
+# What changes, and why:
+#
+#   1. THE DATABASE CREDENTIALS ARE NOT IN THIS FILE.
+#      They arrive as ${env.X} expressions, resolved by the server when it
+#      boots, from environment variables supplied by docker-compose.prod.yml.
+#      A password baked into an image is a password in every layer, every
+#      registry copy and every `docker history` output, forever.
+#
+#   2. THERE IS NO MANAGEMENT USER, and standalone.sh is not given
+#      -bmanagement 0.0.0.0. The management interface stays on 127.0.0.1
+#      INSIDE the container, which - since compose publishes no port for it -
+#      means it is reachable from nowhere at all.
+#
+#   3. LOGGING IS AT INFO. DEBUG on a public server writes every SQL statement
+#      and every interceptor timing to disk at the rate of your traffic.
+#
+#   4. THE PROXY HEADER IS TRUSTED. Explained at section 5 - it is the one
+#      setting here that would be a vulnerability in a different topology.
+#
+# NOTE ON SYNTAX: this file uses raw management OPERATIONS
+# (/subsystem=.../resource:add(...)) where configure.cli uses the friendlier
+# CLI COMMANDS (data-source add ...). The commands are sugar that builds an
+# operation for you, and some of them validate their arguments client-side -
+# which means they can reject an unresolved ${env.X} expression as "not a valid
+# URL". The raw operation stores whatever you give it and lets the server
+# resolve it at boot, which is precisely what we need.
+# =============================================================================
+
+embed-server --server-config=standalone.xml --std-out=echo
+
+# -----------------------------------------------------------------------------
+# 1. The PostgreSQL driver - identical to development
+# -----------------------------------------------------------------------------
+module add \
+    --name=org.postgresql \
+    --resources=/opt/jboss/wildfly/customization/postgresql.jar \
+    --dependencies=java.sql,jakarta.transaction.api
+
+/subsystem=datasources/jdbc-driver=postgresql:add( \
+    driver-name=postgresql, \
+    driver-module-name=org.postgresql, \
+    driver-class-name=org.postgresql.Driver, \
+    driver-xa-datasource-class-name=org.postgresql.xa.PGXADataSource)
+
+# -----------------------------------------------------------------------------
+# 2. The datasource, with its address and credentials left as expressions
+# -----------------------------------------------------------------------------
+# ${env.ENROLLMENT_DB_PASSWORD} is a WildFly EXPRESSION. It is stored verbatim
+# in standalone.xml and resolved when the attribute is first read, at boot. If
+# the variable is missing the server fails to start with a message naming it -
+# which is the correct behaviour. A datasource that silently falls back to a
+# default password is worse than one that refuses to start.
+#
+# Expressions can also read a system property (${my.prop}) or carry a default
+# (${env.PORT:5432}). Deliberately no defaults here: every one of these must be
+# supplied, and the boot failure is the reminder.
+#
+# The next step up from this is a credential-reference pointing at an Elytron
+# credential store - an encrypted keystore on disk, so the secret is not even
+# in the process environment. Worth knowing it exists; overkill for one VPS.
+# -----------------------------------------------------------------------------
+/subsystem=datasources/data-source=EnrollmentDS:add( \
+    jndi-name=java:jboss/datasources/EnrollmentDS, \
+    driver-name=postgresql, \
+    connection-url="${env.ENROLLMENT_DB_URL}", \
+    user-name="${env.ENROLLMENT_DB_USER}", \
+    password="${env.ENROLLMENT_DB_PASSWORD}", \
+    jta=true, \
+    use-java-context=true, \
+    enabled=true, \
+    min-pool-size=5, \
+    max-pool-size=25, \
+    pool-prefill=true, \
+    blocking-timeout-wait-millis=5000, \
+    idle-timeout-minutes=5, \
+    background-validation=true, \
+    background-validation-millis=60000, \
+    check-valid-connection-sql="SELECT 1")
+
+# -----------------------------------------------------------------------------
+# 3. Logging: the same patterns, at a sane level
+# -----------------------------------------------------------------------------
+# The correlation id stays in the pattern - it is worth more in production than
+# in development, because it is how you follow one request through a log with
+# everybody else's requests interleaved.
+# -----------------------------------------------------------------------------
+/subsystem=logging/pattern-formatter=COLOR-PATTERN:write-attribute( \
+    name=pattern, \
+    value="%K{level}%d{HH:mm:ss,SSS} %-5p [%c{1.}] [%X{correlationId}] %s%e%n")
+
+/subsystem=logging/pattern-formatter=PATTERN:write-attribute( \
+    name=pattern, \
+    value="%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] [%X{correlationId}] %s%e%n")
+
+# INFO, not DEBUG. And no org.hibernate.SQL logger at all.
+/subsystem=logging/console-handler=CONSOLE:write-attribute(name=level,value=INFO)
+/subsystem=logging/logger=it.unicam.cs.enrollment:add(level=INFO)
+
+# -----------------------------------------------------------------------------
+# 4. The deployment scanner - marker-driven, same as development
+# -----------------------------------------------------------------------------
+# There is no bind mount here (the WAR is baked into the image), so the
+# timestamp problem that motivated this in development does not arise. It is
+# kept anyway so that the two environments deploy by the same mechanism: an
+# environment that differs from development in ways nobody can list is an
+# environment where "works locally" stops meaning anything.
+#
+# The image ships ROOT.war together with a ROOT.war.dodeploy marker, so the
+# scanner deploys it once, on first boot.
+# -----------------------------------------------------------------------------
+/subsystem=deployment-scanner/scanner=default:write-attribute( \
+    name=auto-deploy-zipped, \
+    value=false)
+
+# -----------------------------------------------------------------------------
+# 5. Trust the proxy's forwarded headers
+# -----------------------------------------------------------------------------
+# THIS IS THE SETTING TO UNDERSTAND BEFORE COPYING THIS FILE ANYWHERE ELSE.
+#
+# Caddy terminates TLS and forwards a plain HTTP request to this server, adding
+# X-Forwarded-Proto: https and X-Forwarded-For: <the real client IP>. Without
+# the line below, Undertow ignores both, and so:
+#
+#   - SessionCookies.isSecure() asks the request for its scheme, is told
+#     "http", and issues the session cookie WITHOUT the Secure flag. The cookie
+#     then travels over any plain-HTTP request to the same host - exactly the
+#     interception that flag exists to prevent. The bug is silent: sign-in
+#     works perfectly, and the protection is simply absent.
+#   - Every log line, and every rate-limit decision in LoginThrottle, sees the
+#     proxy's container IP instead of the client's - so one abusive client is
+#     indistinguishable from all of them.
+#
+# The reason this is not the default is that a forwarded header is just a
+# header: anyone who can reach this listener directly can claim any scheme and
+# any client IP they like. Turning it on is only safe when the listener is
+# unreachable except through the proxy. That is true here - docker-compose.prod.yml
+# publishes NO port for the wildfly service, so 8080 exists only on the
+# internal Docker network. If you ever add a port mapping to that service, this
+# line becomes a vulnerability on the same day.
+# -----------------------------------------------------------------------------
+/subsystem=undertow/server=default-server/http-listener=default:write-attribute( \
+    name=proxy-address-forwarding, \
+    value=true)
+
+# -----------------------------------------------------------------------------
+# 6. Remove the welcome page
+# -----------------------------------------------------------------------------
+# WildFly's default host serves its own splash page at "/". The application is
+# deployed as ROOT.war so that it owns "/" itself - two handlers cannot both
+# have it, and the welcome page is the one to lose.
+#
+# Deploying at the root, rather than under /enrollment, is what keeps the
+# reverse proxy a plain pass-through with no path rewriting. Rewriting a prefix
+# in a proxy is always possible and always leaks eventually: a redirect, a
+# cookie path, an absolute URL in an error page. Not having a prefix cannot
+# leak one.
+#
+# The application does not care either way - account.js resolves the API
+# relative to the page it was loaded from, and SessionCookies derives the
+# cookie path from UriInfo. Both were written to be mounted anywhere.
+# -----------------------------------------------------------------------------
+/subsystem=undertow/server=default-server/host=default-host/location=\/:remove
+
+# -----------------------------------------------------------------------------
+# 7. Remove the HTTP invoker
+# -----------------------------------------------------------------------------
+# The default host ships an "http-invoker" endpoint under /wildfly-services,
+# which exposes remote EJB and JNDI operations over HTTP. This application does
+# not use it. An unused endpoint that can invoke server internals is pure
+# attack surface, and removing what you do not use is cheaper than defending
+# it.
+# -----------------------------------------------------------------------------
+/subsystem=undertow/server=default-server/host=default-host/setting=http-invoker:remove
+
+# -----------------------------------------------------------------------------
+# 8. The mail session, pointing at a real relay
+# -----------------------------------------------------------------------------
+# The same two resources as in development - an outbound socket binding for
+# WHERE, a mail session for WHAT - with three differences: the host and port
+# are expressions, TLS is on, and there are credentials.
+#
+# ssl vs tls, since the names are unhelpful:
+#   ssl=true  - implicit TLS: the connection is encrypted from the first byte,
+#               usually port 465. Sometimes called SMTPS.
+#   tls=true  - opportunistic TLS: connect in plain text, usually on port 587,
+#               then issue STARTTLS to upgrade. This is what most relays want.
+# Set the one your provider documents, not both.
+# -----------------------------------------------------------------------------
+/socket-binding-group=standard-sockets/remote-destination-outbound-socket-binding=mail-smtp-enrollment:add( \
+    host="${env.ENROLLMENT_SMTP_HOST}", \
+    port="${env.ENROLLMENT_SMTP_PORT}")
+
+/subsystem=mail/mail-session=enrollment:add( \
+    jndi-name=java:jboss/mail/Enrollment, \
+    from="${env.ENROLLMENT_MAIL_FROM}")
+
+/subsystem=mail/mail-session=enrollment/server=smtp:add( \
+    outbound-socket-binding-ref=mail-smtp-enrollment, \
+    ssl="${env.ENROLLMENT_SMTP_SSL}", \
+    tls="${env.ENROLLMENT_SMTP_TLS}", \
+    username="${env.ENROLLMENT_SMTP_USER}", \
+    password="${env.ENROLLMENT_SMTP_PASSWORD}")
+
+stop-embedded-server

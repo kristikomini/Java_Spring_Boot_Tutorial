@@ -1,0 +1,18 @@
+Subject: Exam result for ${courseCode}
+
+Dear ${studentName},
+
+Your attempt at ${courseCode} on ${recordedOn} was not successful.
+
+Your enrolment stays open, so you keep your seat and can sit the exam again in
+the next examination window. Nothing is recorded on your transcript: in the
+Italian system a failed attempt leaves no mark.
+
+Your lecturer's office hours are the right place to work out what to change
+before the next attempt.
+
+This message was sent automatically. Please do not reply to it.
+
+--
+Segreteria Studenti
+Universita di Camerino - Scuola di Scienze e Tecnologie
