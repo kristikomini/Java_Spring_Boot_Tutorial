@@ -1,0 +1,201 @@
+# =============================================================================
+# The Coolify stack: WildFly + PostgreSQL, with Coolify's Traefik in front
+# =============================================================================
+# This is docker-compose.prod.yml adapted to a server that already runs
+# Coolify. It is not deployed by hand - Coolify reads it out of the git
+# repository and runs it. See docs/DEPLOY-COOLIFY.md for the click path.
+#
+# -----------------------------------------------------------------------------
+# WHAT CHANGED FROM docker-compose.prod.yml, AND WHY
+# -----------------------------------------------------------------------------
+#   1. CADDY IS GONE. Coolify installs Traefik as its ingress proxy, and Traefik
+#      already holds ports 80 and 443. Two proxies cannot both bind them. TLS,
+#      certificate renewal and HTTP-to-HTTPS redirection all become Coolify's
+#      job, and it does them the same way Caddy would.
+#
+#      What does NOT change is the reason any of that mattered: Traefik
+#      terminates TLS and forwards plain HTTP to WildFly with an
+#      X-Forwarded-Proto header, exactly as Caddy would have. So
+#      configure-prod.cli section 5 - proxy-address-forwarding - is still what
+#      makes the session cookie come back marked Secure and the login throttle
+#      see real client IPs. Changing the proxy did not change that requirement.
+#
+#   2. THERE IS NO `networks:` KEY, deliberately. Coolify puts each stack on a
+#      network it names after the resource UUID, and its documentation is
+#      explicit that a compose file defining its own networks causes
+#      intermittent outages, because Traefik then cannot reliably reach the
+#      containers. Adding a network here to "be tidy" is the one edit most
+#      likely to produce a site that works and then does not.
+#
+#   3. THERE ARE NO `container_name:` KEYS. Coolify derives container names
+#      from the resource, and a hard-coded name collides the moment you deploy
+#      a second environment - or redeploy while the old container is still
+#      shutting down.
+#
+#   4. THE SECRETS ARE GENERATED, NOT SUPPLIED. ${SERVICE_PASSWORD_DB} is a
+#      Coolify "magic variable": on first deploy it generates a random password,
+#      stores it, and injects the same value everywhere the name appears. There
+#      is no .env.prod on this path, and no password anywhere in git.
+#
+#   5. THE PROXY IS TOLD WHERE TO GO by SERVICE_FQDN_WILDFLY_8080 below.
+#
+# -----------------------------------------------------------------------------
+# WHAT DID NOT CHANGE
+# -----------------------------------------------------------------------------
+# Dockerfile.prod and configure-prod.cli are used unmodified. The application
+# server is configured identically whether it sits behind Caddy or Traefik,
+# which is the whole point of having written the configuration down rather than
+# clicked it into a console.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # WildFly - the application
+  # ---------------------------------------------------------------------------
+  wildfly:
+    build:
+      # Relative to the Base Directory configured in Coolify, which is the
+      # repository root. The first stage of Dockerfile.prod compiles the WAR
+      # from src/, so the build happens ON THE SERVER - nothing is uploaded.
+      context: .
+      dockerfile: docker/wildfly/Dockerfile.prod
+
+    # NOTE THE LIST FORM. `environment:` can be written as a map (KEY: value)
+    # or a list (- KEY=value). It has to be a list here, because Coolify's
+    # magic variables are declared as a NAME WITH NO VALUE - and a YAML map
+    # entry without a value is null, not a declaration.
+    environment:
+      # ---------------------------------------------------------------------
+      # THE LINE THAT PUBLISHES THIS SERVICE
+      # ---------------------------------------------------------------------
+      # Reads as: "give the compose service named `wildfly` a domain, and point
+      # the proxy at its port 8080". Coolify generates the Traefik router,
+      # service and TLS certificate from it. The actual hostname is whatever
+      # you set in the Coolify UI - java.testdemo.it - or an auto-generated one
+      # if you set nothing.
+      #
+      # Two rules about the name, both of which produce silent no-ops rather
+      # than errors when broken:
+      #   - the identifier must be the COMPOSE SERVICE NAME, upper-cased.
+      #     `wildfly` -> WILDFLY. Rename the service, rename this.
+      #   - an identifier containing an underscore cannot carry a port suffix;
+      #     use hyphens if you ever need a multi-word service name.
+      #
+      # This is also why there is no `ports:` key: publishing 8080 to the host
+      # would put the application server directly on the internet, next to the
+      # proxy rather than behind it, and would defeat
+      # proxy-address-forwarding exactly as described in configure-prod.cli.
+      - SERVICE_FQDN_WILDFLY_8080
+
+      - JAVA_OPTS=-Xms256m -Xmx768m -Djava.net.preferIPv4Stack=true -Djboss.as.management.blocking.timeout=600
+
+      # ---------------------------------------------------------------------
+      # DATABASE
+      # ---------------------------------------------------------------------
+      # `postgres` is the compose service name below, resolved on the network
+      # Coolify created for this stack. 5432 is the container's port; nothing
+      # is published.
+      - ENROLLMENT_DB_URL=jdbc:postgresql://postgres:5432/enrollment
+      - ENROLLMENT_DB_USER=enrollment
+      # Generated by Coolify on first deploy and reused thereafter. The same
+      # reference appears on the postgres service, which is what keeps the two
+      # in agreement without either of them being written down.
+      - ENROLLMENT_DB_PASSWORD=${SERVICE_PASSWORD_DB}
+
+      # ---------------------------------------------------------------------
+      # MAIL
+      # ---------------------------------------------------------------------
+      # Defaults to `log`: messages are written to the application log and
+      # delivered nowhere. The first deploy of anything that can send email
+      # should not be able to send email - on this application, anyone who can
+      # reach the registration page can trigger a send to any address they
+      # type.
+      #
+      # The ${VAR:-default} form is ordinary Compose interpolation. It gives a
+      # working default AND surfaces the name in Coolify's environment-variable
+      # editor, so switching to a real relay is a UI change and a redeploy
+      # rather than a commit.
+      - ENROLLMENT_MAIL_TRANSPORT=${ENROLLMENT_MAIL_TRANSPORT:-log}
+
+      # Read by configure-prod.cli at BOOT, not by the application, so they
+      # must resolve to something valid even when the transport is `log`.
+      - ENROLLMENT_SMTP_HOST=${ENROLLMENT_SMTP_HOST:-localhost}
+      - ENROLLMENT_SMTP_PORT=${ENROLLMENT_SMTP_PORT:-587}
+      - ENROLLMENT_SMTP_SSL=${ENROLLMENT_SMTP_SSL:-false}
+      - ENROLLMENT_SMTP_TLS=${ENROLLMENT_SMTP_TLS:-true}
+      - ENROLLMENT_SMTP_USER=${ENROLLMENT_SMTP_USER:-}
+      - ENROLLMENT_SMTP_PASSWORD=${ENROLLMENT_SMTP_PASSWORD:-}
+
+      - ENROLLMENT_MAIL_FROM=${ENROLLMENT_MAIL_FROM:-no-reply@localhost}
+      - ENROLLMENT_MAIL_FROM_NAME=${ENROLLMENT_MAIL_FROM_NAME:-UNICAM Enrollment}
+
+      # This is a teaching deployment of a fictional registrar. The prefix is
+      # what stops one of its messages being mistaken for correspondence from a
+      # real university. Keep it.
+      - ENROLLMENT_MAIL_SUBJECT_PREFIX=${ENROLLMENT_MAIL_SUBJECT_PREFIX:-[DEMO]}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      # Bash's /dev/tcp is a shell built-in, so this needs nothing installed.
+      # Be clear about what it proves: the port accepts connections. It does
+      # NOT prove the WAR deployed - a server whose deployment failed still
+      # listens on 8080 and answers 404. Traefik returning 502 means this
+      # failed; a 404 on every path means this passed and the deployment did
+      # not.
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      # WildFly plus a first-boot schema update takes a while, and Coolify
+      # waits for health before it considers the deploy successful.
+      start_period: 120s
+
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL
+  # ---------------------------------------------------------------------------
+  # Deliberately part of this stack rather than a separate Coolify database
+  # resource. Both work. This way the database is described in the same file as
+  # the thing that uses it, in git, and the two cannot drift apart - which is
+  # the same argument as configuration-as-code everywhere else in this
+  # repository.
+  #
+  # The trade-off, and it is a real one: Coolify's managed database resources
+  # get its scheduled-backup feature, and this does not. See
+  # docs/DEPLOY-COOLIFY.md for the backup that replaces it.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+
+    environment:
+      - POSTGRES_DB=enrollment
+      - POSTGRES_USER=enrollment
+      # The same magic variable as above. One secret, generated once, injected
+      # into both containers.
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_DB}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8
+
+    # No `ports:`. To get a psql prompt, use Coolify's terminal for this
+    # container, or `docker exec` on the server - neither of which requires the
+    # port to be reachable from anywhere.
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enrollment -d enrollment"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+    driver: local

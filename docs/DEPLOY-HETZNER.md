@@ -8,6 +8,13 @@ to be understood: every step that could be done a different way says why it is
 done this way, because a deployment you cannot reason about is a deployment you
 cannot fix at nine on a Sunday evening.
 
+> **If the server already runs Coolify, read [DEPLOY-COOLIFY.md](DEPLOY-COOLIFY.md)
+> instead.** Coolify installs Traefik on ports 80 and 443, so the Caddy service
+> in [`docker-compose.prod.yml`](../docker-compose.prod.yml) cannot bind them.
+> The application image and the WildFly configuration are identical on both
+> paths; only the proxy and the deploy mechanism differ. Sections 3, 4 and 13 of
+> this file — the server, the firewall and backups — still apply.
+
 ---
 
 ## 1. What you are building

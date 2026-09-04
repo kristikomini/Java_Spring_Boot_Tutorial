@@ -1,0 +1,58 @@
+# =============================================================================
+# What NOT to send to the Docker daemon as build context
+# =============================================================================
+# Before a build starts, Docker packs up the entire build context - here, the
+# whole repository - and ships it to the daemon. On Coolify that daemon is on
+# the server, so every excluded megabyte is a megabyte not transferred and not
+# hashed on every build.
+#
+# There is a second, better reason. A file that reaches the daemon can be
+# COPY'd into an image by accident, and an image is a thing you push to a
+# registry and share. .env.prod is in .gitignore, which stops it reaching
+# GitHub - it does nothing to stop it reaching an image layer. This file is the
+# equivalent barrier for builds.
+#
+# A negation (!pattern) re-includes something an earlier line excluded. Order
+# matters: the last matching line wins.
+# =============================================================================
+
+# Build output. The image builds the WAR itself in its first stage; a WAR built
+# on someone's laptop must never be what ships.
+target/
+docker/deployments/
+
+# Secrets. Belt and braces with .gitignore - see above.
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# Version control and CI metadata. Nothing in the build reads them, and .git in
+# particular is pure weight.
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# IDE and OS noise.
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Agent and tooling state.
+.claude/
+.mvn/
+
+# Documentation. Read on GitHub, not needed to compile anything.
+docs/
+README.md
+scripts/
+
+# The other compose files. The build does not read them, and leaving them out
+# means editing one cannot invalidate a build cache layer.
+docker-compose.yml
+docker-compose.prod.yml
+docker-compose.coolify.yml

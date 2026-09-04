@@ -156,6 +156,7 @@ JavaEE/
 ├── pom.xml                       The build. Read this first.
 ├── docker-compose.yml            PostgreSQL + WildFly + Mailpit
 ├── docker-compose.prod.yml       Caddy + WildFly + PostgreSQL, nothing else exposed
+├── docker-compose.coolify.yml    The same, for a server already running Coolify
 ├── docker/wildfly/
 │   ├── Dockerfile                WildFly + PostgreSQL driver
 │   ├── Dockerfile.prod           The same, building the WAR in and locking it down
@@ -169,6 +170,7 @@ JavaEE/
 ├── docs/BREAKING.md              Introduce classic bugs on purpose, and observe them
 ├── docs/DEBUGGING.md             Attach a debugger to WildFly
 ├── docs/DEPLOY-HETZNER.md        Put it on a public HTTPS URL for about €5/month
+├── docs/DEPLOY-COOLIFY.md        The same, when the server already runs Coolify
 ├── scripts/break.sh              The break-it tool
 │
 └── src/
