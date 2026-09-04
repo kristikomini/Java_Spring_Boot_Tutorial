@@ -52,7 +52,7 @@ try{var t=localStorage.getItem("fieldbook.theme");
 
   --font:"Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
   --mono:"Cascadia Mono", "JetBrains Mono", Consolas, "SF Mono", Menlo, monospace;
-  --font-size:16.5px;
+  --font-size:17.4px;
   --line-height:1.68;
 
   --ease:cubic-bezier(0.22, 1, 0.36, 1);
@@ -76,7 +76,13 @@ try{var t=localStorage.getItem("fieldbook.theme");
   --code-key:#a5b4fc;
   --code-str:#8fc49b;
   --code-num:#e0b872;
-  --maxw:1240px;
+  /* The page is full-bleed. The chapter list hugs the left edge of the
+     window, the reading column is capped at a comfortable measure, and
+     everything left over becomes the right-hand lane the stuck notes
+     stack in - so the lane is real space now, not a guess at one. */
+  --rail:274px;
+  --measure:790px;
+  --gutter:24px;
   --topbar-h:66px;
 }
 @media (prefers-color-scheme: dark){
@@ -145,7 +151,7 @@ a{color:var(--accent)}
   border-bottom:1px solid var(--rule);
 }
 .topbar-inner{
-  max-width:var(--maxw);margin:0 auto;padding:0 22px;
+  max-width:none;margin:0;padding:0 var(--gutter);
   display:flex;align-items:center;gap:10px;min-height:var(--topbar-h);
 }
 .brand{display:flex;align-items:center;gap:10px;flex:none;min-width:0}
@@ -207,10 +213,9 @@ a{color:var(--accent)}
 
 /* What the bar drops as it narrows, least useful first: the breadcrumb
    (the chapter list says the same thing), then the subtitle, then the API
-   pill, then the HUD. The burger and the pin swap at 900px — below it
-   there is a drawer to open, above it a column to fold. */
-@media(min-width:901px){.burger{display:none}}
-@media(max-width:900px){#pin-btn{display:none}}
+   pill, then the HUD. The burger is the only control that never goes:
+   above 900px it folds the column away and gives the width back, below
+   it slides the same list in over the page as a drawer. */
 @media(max-width:1080px){.crumb{display:none}.brand{margin-right:auto}}
 @media(max-width:860px){.brand-sub{display:none}}
 @media(max-width:700px){.topbar-inner .pill{display:none}}
@@ -218,46 +223,70 @@ a{color:var(--accent)}
 
 /* ============================================================
    LAYOUT — sidebar / content / sticky lane
-   The third column holds nothing. It is deliberate empty space: the
-   right-hand edge is where stuck notes stack, and a reading column that
-   ran under them would be covered by your own handwriting.
+   Three columns, and only the middle one is bounded. The rail is pushed
+   right out to the left edge of the window; the reading column is held to
+   --measure whatever the monitor does, because a line of prose 1400px
+   wide is unreadable; the third column takes all the slack. It holds
+   nothing on purpose - the right-hand edge is where stuck notes stack,
+   and a reading column that ran under them would be covered by your own
+   handwriting.
    ============================================================ */
 .layout{
-  max-width:var(--maxw);margin:0 auto;padding:0 22px;
-  display:grid;grid-template-columns:256px minmax(0,1fr) 194px;
-  gap:32px;align-items:start;
+  max-width:none;margin:0;padding:0 var(--gutter);
+  display:grid;grid-template-columns:var(--rail) minmax(0,var(--measure)) minmax(194px,1fr);
+  gap:34px;align-items:start;
 }
 .sidebar{
   position:sticky;top:var(--topbar-h);align-self:start;
   height:calc(100vh - var(--topbar-h));overflow-y:auto;overscroll-behavior:contain;
-  padding:18px 15px 70px 0;border-right:1px solid var(--rule);
+  padding:13px 18px 70px 0;border-right:1px solid var(--rule);
   scrollbar-width:thin;
 }
 .sidebar::-webkit-scrollbar{width:8px}
 .sidebar::-webkit-scrollbar-thumb{background:var(--rule-strong);border-radius:var(--radius)}
+
+/* The list also closes from inside itself. Someone who wants the width
+   back reaches for the thing in the way, not for a button in the top bar,
+   so the same fold() hangs off an X at the head of the rail. */
+.rail-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:0 0 13px;padding-bottom:9px;border-bottom:1px solid var(--rule);
+}
+.rail-title{
+  font-family:var(--mono);font-size:10.2px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-faint);
+}
+.rail-close{
+  flex:none;display:grid;place-items:center;width:27px;height:27px;
+  background:none;border:1px solid transparent;border-radius:var(--radius-btn);
+  color:var(--ink-faint);font-family:var(--font);font-size:17px;line-height:1;cursor:pointer;
+  transition:color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),
+             background var(--t-fast) var(--ease);
+}
+.rail-close:hover{background:var(--surface-2);border-color:var(--rule-strong);color:var(--ink)}
 
 /* ============================================================
    THE STUDY RAIL — the six places that are not chapters
    ============================================================ */
 .study{margin-bottom:16px}
 .study-label{
-  font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.16em;
+  font-family:var(--mono);font-size:10.2px;font-weight:600;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-faint);
   margin:0 0 7px;padding-bottom:5px;border-bottom:1px solid var(--rule);
 }
 .study ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
 .study a,.study button{
   width:100%;display:flex;align-items:center;gap:9px;
-  font:inherit;font-size:13.2px;line-height:1.34;text-align:left;
+  font:inherit;font-size:14.3px;line-height:1.35;text-align:left;
   color:var(--ink-soft);text-decoration:none;background:none;border:0;
   padding:6px 9px;border-radius:var(--radius);cursor:pointer;
   transition:background var(--t-fast) var(--ease),color var(--t-fast) var(--ease);
 }
 .study a:hover,.study button:hover{background:var(--surface-2);color:var(--ink)}
 .study a[aria-current="true"]{background:var(--accent);color:var(--accent-ink);font-weight:500}
-.study .ic{flex:none;width:17px;text-align:center;font-size:13px;line-height:1}
+.study .ic{flex:none;width:18px;text-align:center;font-size:14px;line-height:1}
 .study .badge{
-  margin-left:auto;font-family:var(--mono);font-size:9.5px;font-weight:600;
+  margin-left:auto;font-family:var(--mono);font-size:10.2px;font-weight:600;
   background:var(--accent-wash);color:var(--accent);
   border-radius:var(--radius-pill);padding:1px 6px;font-variant-numeric:tabular-nums;
 }
@@ -268,7 +297,7 @@ a{color:var(--accent)}
 
 .finder{position:relative;margin-bottom:15px}
 .finder input{
-  width:100%;font-family:var(--mono);font-size:12px;
+  width:100%;font-family:var(--mono);font-size:13px;
   background:var(--surface);border:1px solid var(--rule-strong);border-radius:var(--radius);
   padding:7px 10px 7px 28px;color:var(--ink);
 }
@@ -276,19 +305,19 @@ a{color:var(--accent)}
 .finder input:focus{border-color:var(--accent);outline:none}
 .finder .mag{
   position:absolute;left:9px;top:50%;transform:translateY(-50%);
-  font-family:var(--mono);font-size:11px;color:var(--ink-faint);pointer-events:none;
+  font-family:var(--mono);font-size:12px;color:var(--ink-faint);pointer-events:none;
 }
 
 .progress-wrap{margin-bottom:17px}
 .progress-line{
-  font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;
+  font-family:var(--mono);font-size:10.2px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px;
 }
 .progress-bar{height:3px;background:var(--surface-2);border-radius:var(--radius-sm);overflow:hidden}
 .progress-bar i{display:block;height:100%;background:var(--accent);width:0;transition:width var(--t-slow) var(--ease)}
 
 .part-label{
-  font-family:var(--mono);font-size:9.5px;font-weight:600;
+  font-family:var(--mono);font-size:10.2px;font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);
   margin:19px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--rule);
 }
@@ -296,11 +325,11 @@ a{color:var(--accent)}
 .toc{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
 .toc a{
   display:grid;grid-template-columns:21px minmax(0,1fr);gap:8px;align-items:baseline;
-  text-decoration:none;color:var(--ink-soft);font-size:13.2px;line-height:1.34;
+  text-decoration:none;color:var(--ink-soft);font-size:14.3px;line-height:1.35;
   padding:6px 9px;border-radius:var(--radius);transition:background var(--t-fast) var(--ease),color var(--t-fast) var(--ease);
 }
 .toc a .no{
-  font-family:var(--mono);font-size:10px;color:var(--ink-faint);
+  font-family:var(--mono);font-size:10.8px;color:var(--ink-faint);
   font-variant-numeric:tabular-nums;
 }
 .toc a:hover{background:var(--surface-2);color:var(--ink)}
@@ -308,17 +337,19 @@ a{color:var(--accent)}
 .toc a[aria-current="true"] .no{color:var(--accent-ink);opacity:.7}
 .toc a.hide{display:none}
 .part-label.hide{display:none}
-.no-hits{font-size:12.5px;color:var(--ink-faint);padding:10px 9px;margin:0;font-style:italic}
+.no-hits{font-size:13.3px;color:var(--ink-faint);padding:10px 9px;margin:0;font-style:italic}
 
 main{padding:30px 0 110px;min-width:0}
 
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:95;border:0;padding:0;cursor:pointer}
 
-/* Folded away, the chapter list gives its 256px back to the page. Only on
-   wide screens: below 900px the same burger opens the drawer instead, and
-   the sidebar has to stay displayable for that. */
+/* Folded away, the chapter list gives its column back to the page - and
+   with nothing pinned to the left edge any more, the reading column stops
+   being left-aligned and centres instead, or it would sit alone against
+   one wall of a very wide window. Only on wide screens: below 900px the
+   same burger opens the drawer, and the sidebar has to stay displayable. */
 @media(min-width:901px){
-  .layout.shut{grid-template-columns:minmax(0,1fr) 194px}
+  .layout.shut{grid-template-columns:minmax(0,var(--measure)) 194px;justify-content:center}
   .layout.shut .sidebar{display:none}
 }
 @media(min-width:901px) and (max-width:1160px){
@@ -326,7 +357,7 @@ main{padding:30px 0 110px;min-width:0}
 }
 
 @media(max-width:1160px){
-  .layout{grid-template-columns:248px minmax(0,1fr);gap:28px}
+  .layout{grid-template-columns:var(--rail) minmax(0,1fr);gap:28px}
 }
 @media(max-width:900px){
   .layout{grid-template-columns:1fr;gap:0;padding:0 18px}
@@ -338,9 +369,9 @@ main{padding:30px 0 110px;min-width:0}
     box-shadow:0 0 40px rgba(0,0,0,.3);
   }
   .sidebar.open{transform:none}
-  .toc a{padding:10px 9px;font-size:14.5px}
-  .study a,.study button{padding:10px 9px;font-size:14.5px}
-  .finder input{padding:10px 10px 10px 30px;font-size:13.5px}
+  .toc a{padding:10px 9px;font-size:15.4px}
+  .study a,.study button{padding:10px 9px;font-size:15.4px}
+  .finder input{padding:10px 10px 10px 30px;font-size:14.4px}
   .btn,.switch button,.sm button,.req{padding-top:10px;padding-bottom:10px}
   section.sub{padding:36px 0}
 }
@@ -1606,7 +1637,6 @@ figcaption{
       </span>
     </div>
 
-    <button class="icon-btn" id="pin-btn" aria-pressed="true" aria-label="Pin the chapter list">&#128204;</button>
     <button class="icon-btn" id="theme-btn" aria-label="Theme">&#9728;</button>
 
     <div class="acct-group">
@@ -1634,6 +1664,12 @@ figcaption{
 
 <div class="layout">
   <aside class="sidebar" id="sidebar" aria-label="Course contents">
+    <div class="rail-head">
+      <span class="rail-title">Contents</span>
+      <button type="button" class="rail-close" id="rail-close"
+              aria-label="Close the chapter list" title="Close the chapter list">&times;</button>
+    </div>
+
     <nav class="study" aria-label="Your study">
       <div class="study-label">Your study</div>
       <ul>
@@ -9954,7 +9990,10 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
      Wide: it folds the chapter list away and the page takes the width
      back. Narrow: the same button slides the list in over the page as a
      drawer. The button reports whichever of the two is currently open,
-     so a screen reader is never told the opposite of what is on screen. */
+     so a screen reader is never told the opposite of what is on screen.
+     The X at the head of the rail is the same two behaviours in the
+     closing direction only, so both routes end in fold()/closeDrawer()
+     and the burger's label stays true either way. */
   var WIDE = 900;
   function wide(){ return window.innerWidth > WIDE; }
   function shut(){ return layoutEl.classList.contains("shut"); }
@@ -9963,7 +10002,6 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     var open = wide() ? !shut() : sidebar.classList.contains("open");
     burger.setAttribute("aria-expanded", open ? "true" : "false");
     burger.setAttribute("aria-label", open ? "Hide the chapter list" : "Show the chapter list");
-    syncPin();
   }
   function fold(yes){
     layoutEl.classList.toggle("shut", yes);
@@ -9984,6 +10022,11 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     if (wide()) fold(!shut());
     else if (sidebar.classList.contains("open")) closeDrawer();
     else openDrawer();
+  });
+  var railClose = document.getElementById("rail-close");
+  if (railClose) railClose.addEventListener("click", function(){
+    if (wide()) fold(true);
+    else closeDrawer();
   });
   scrim.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", function(e){
@@ -10034,21 +10077,6 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     if (fab) fab.click();                         /* the tray owns its own state */
   });
 
-  /* ---------- the pin: the wide-screen half of the burger ----------
-     Above 900px the burger is hidden and this holds the chapter list open
-     or folds it away; below 900px it is hidden and the burger opens the
-     drawer instead. Both drive the same fold(), so the two never disagree. */
-  var pinBtn = document.getElementById("pin-btn");
-
-  function syncPin(){
-    if (!pinBtn) return;
-    var pinned = !shut();
-    pinBtn.setAttribute("aria-pressed", pinned ? "true" : "false");
-    pinBtn.setAttribute("aria-label", pinned ? "Fold the chapter list away" : "Pin the chapter list open");
-    pinBtn.title = pinned ? "Chapter list pinned" : "Chapter list folded away";
-  }
-  if (pinBtn) pinBtn.addEventListener("click", function(){ fold(!shut()); });
-
   /* ---------- the theme: system, then light, then dark, then back ----
      The bare :root is light and the dark tokens are guarded with
      :not([data-theme="light"]), so removing the attribute is what "follow
@@ -10076,7 +10104,6 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     paintTheme();
   });
   paintTheme();
-  syncPin();
 
   /* ---------- where do we start? the hash wins, then the last visit ---------- */
   function indexFor(hash){
