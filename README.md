@@ -414,9 +414,9 @@ practise, roughly in the order worth doing them:
 | **[docs/EXERCISES.md](docs/EXERCISES.md)** | Four stubs and 31 failing tests that specify them: a JPQL query, a domain rule with exacting boundaries, an atomic transfer use case, and the endpoint that exposes it. `mvn test -Pexercises` |
 | **[docs/BREAKING.md](docs/BREAKING.md)** | `./scripts/break.sh` introduces one classic bug at a time — a broken fetch plan, a silent N+1, a missing row lock, a test that lies — and puts it back. |
 | **[docs/DEBUGGING.md](docs/DEBUGGING.md)** | Attach to WildFly on port 8787 and step over the closing brace of `enroll()` to watch entities detach. |
-| **[The fieldbook](src/main/webapp/tutorial.html)** | 20 chapters at `/enrollment/tutorial.html`, from the language contracts underneath Java to the deployment sequence above it — with ten new hands-on labs among them: a lost-update race, a HashMap bucket visualiser, a lazy-stream stepper, an entity-state explorer, a cascade explorer and a connection-pool simulator. |
-| **The fieldbook's Cheat sheet** | 94 golden rules, grouped by chapter. Each reason is hidden until you tap it, and the page prints as a revision sheet. |
-| **The fieldbook's Self-test** | 60 retrieval-practice questions. Answer before revealing. |
+| **[The fieldbook](src/main/webapp/tutorial.html)** | A 30-chapter course at `/enrollment/tutorial.html`, with a sidebar that groups the chapters into nine parts and a plain-language box beside every hard idea. It runs from the language contracts underneath Java, through SQL, JPA, CDI and REST, into Spring Boot, and out the other side into Git, CI, Agile and the English you need to work in a team — with ten hands-on labs among them: a lost-update race, a HashMap bucket visualiser, a lazy-stream stepper, an entity-state explorer, a cascade explorer and a connection-pool simulator. |
+| **The fieldbook's Cheat sheet** | 150 golden rules, grouped by chapter. Each reason is hidden until you tap it, and the page prints as a revision sheet. |
+| **The fieldbook's Self-test** | 91 retrieval-practice questions. Answer before revealing. |
 
 The exercise tests are excluded from the normal build, so `mvn verify` stays an
 honest 60/60 signal about the application itself.
