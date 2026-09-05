@@ -1,0 +1,409 @@
+# ===========================================================================
+# CONFIGURATION - and where it actually comes from
+# ===========================================================================
+# The Jakarta EE equivalent of this file is docker/wildfly/configure.cli: a
+# script of JBoss CLI commands that configures the SERVER, baked into the image
+# at build time. The datasource, the connection pool and the mail session all
+# live there, and the application only ever refers to them by JNDI name.
+# 
+# Here, all of it belongs to the application. That is the trade Boot makes:
+# nothing to install and nothing to configure out of band, at the cost of the
+# application knowing its own infrastructure.
+# 
+# THE ORDER THAT DECIDES WHO WINS, highest priority first. It is worth
+# memorising, because "my property is being ignored" is answered by it every
+# time:
+# 
+#   1. command line arguments        --server.port=9000
+#   2. SPRING_APPLICATION_JSON       a JSON blob in one env var
+#   3. OS environment variables      SPRING_DATASOURCE_PASSWORD
+#   4. application-{profile}.yml     profile-specific, e.g. -test
+#   5. application.yml               this file
+#   6. @PropertySource
+#   7. defaults set in code
+# 
+# Rule 3 is the one that matters in production: RELAXED BINDING means
+# spring.datasource.password is settable as SPRING_DATASOURCE_PASSWORD, so every
+# secret below can be replaced by an environment variable with no file edit and
+# no rebuild. That is why Kubernetes Secrets work with Spring Boot without any
+# adapter, and it is the answer to "how would you inject the database password
+# in production?".
+# ===========================================================================
+
+spring:
+  application:
+    name: enrollment-spring
+
+  # ==========================================================================
+  # MONGODB IS OFF BY DEFAULT - and that is the architectural statement
+  # ==========================================================================
+  # spring-boot-starter-data-mongodb is on the classpath, so Boot would
+  # normally auto-configure a MongoClient, a MongoTemplate and every
+  # MongoRepository - and then fail to start if no MongoDB is listening.
+  #
+  # Excluding it makes the document store OPT-IN:
+  #
+  #     mvn spring-boot:run -Dspring-boot.run.profiles=demo,mongo
+  #
+  # That is the right default for this application, and the reason is not
+  # convenience. PostgreSQL is the system of record; MongoDB is a derived read
+  # model that can be rebuilt from it at any time. The service must start and
+  # serve enrollments whether or not the document store is available, because a
+  # read model being down is not a reason to stop taking enrollments.
+  #
+  # An application that cannot start without its cache has made the cache a
+  # dependency rather than an optimisation - which is the same mistake as
+  # letting a notification failure roll back an enrollment.
+  #
+  # It is also a small demonstration of what auto-configuration actually is:
+  # conditional configuration you can switch off, not magic. See the --debug
+  # conditions report described on EnrollmentSpringApplication.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
+
+  datasource:
+    # THE SAME DATABASE THE WAR USES. Not a copy, not a second schema - the same
+    # rows. Start the stack with `docker compose up -d postgres` in the repo root
+    # and both applications read and write these tables.
+    #
+    # Port 55433 because that is the HOST port docker-compose.yml publishes; see
+    # the long comment there about why it is not 5432.
+    url: jdbc:postgresql://localhost:55433/enrollment
+    username: enrollment
+    password: enrollment
+
+    # HIKARICP - the connection pool, and your real concurrency limit.
+    #
+    # Fieldbook chapter 25 makes the argument: the pool size, not the CPU count,
+    # is what decides how many requests can be in the database at once. Ten
+    # connections and an average query of 50ms is a ceiling of roughly 200
+    # requests per second, no matter how many threads the server has.
+    #
+    # Bigger is NOT better. Every pooled connection is a backend process in
+    # PostgreSQL with its own memory, and a pool larger than the database can
+    # serve simply moves the queue from your application to the database, where
+    # it is harder to see. This is where you would act on that reasoning; in the
+    # Jakarta EE application the same numbers live in configure.cli.
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000      # fail fast rather than pile up waiting
+      pool-name: enrollment-pool
+
+  jpa:
+    # VALIDATE, NOT UPDATE, AND THIS IS THE MOST IMPORTANT LINE IN THE FILE.
+    #
+    # This application does NOT own the schema. Flyway does, from the root
+    # project (src/main/resources/db/migration), and the Jakarta EE application
+    # created the tables before that. So on startup Hibernate compares every
+    # mapping in this module against the real database and REFUSES TO START if
+    # they disagree.
+    #
+    # That refusal is a feature, and it is what makes this module honest: if the
+    # entity classes here had drifted from the ones across the repository, you
+    # would find out at boot rather than at the first query.
+    #
+    # `update` - which the Jakarta EE application uses for convenience - is the
+    # setting to be careful with. It adds missing columns and never removes or
+    # narrows anything, so it silently accumulates dead columns and cannot
+    # express a rename. Two applications both running `update` against one
+    # database is a genuinely bad idea, which is a second reason for `validate`
+    # here. Fieldbook chapter 29 has the full argument for migrations over
+    # hbm2ddl; `none` plus Flyway is the production answer.
+    hibernate:
+      ddl-auto: validate
+
+    properties:
+      hibernate:
+        # Explicit rather than inferred. Boot detects the dialect from the JDBC
+        # metadata, which requires a live connection at startup; naming it saves
+        # a round trip and makes the choice visible.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+        # BATCHING. Without these three, saving 100 entities is 100 round trips.
+        # With them, four. It costs nothing and most projects never switch it on.
+        #
+        # order_inserts matters because batching only groups CONSECUTIVE
+        # statements against the same table - unordered inserts interleave and
+        # each batch closes after one row.
+        jdbc:
+          batch_size: 30
+        order_inserts: true
+        order_updates: true
+
+        # Format the SQL that show-sql prints below.
+        format_sql: true
+
+    # SQL in the log, for a learning stack. Turn this OFF in production: it is
+    # slow, it doubles the log volume, and parameter values can end up in it.
+    show-sql: true
+
+    # OPEN SESSION IN VIEW - OFF, deliberately, and this deserves the space.
+    #
+    # Boot enables it by DEFAULT and warns about it at startup. It holds the
+    # Hibernate session open until the HTTP response is written, so a lazy
+    # association touched in a controller or during JSON serialisation quietly
+    # works instead of throwing LazyInitializationException.
+    #
+    # That sounds helpful and is a trap. It means a database connection is held
+    # for the whole response, including serialisation - so the pool limit above
+    # is now shared with Jackson. And it hides N+1 problems completely: the
+    # queries still happen, one per lazy access, but nothing ever fails, so
+    # nobody notices until production.
+    #
+    # Off, the rule is the same one the Jakarta EE application already enforces:
+    # fetch what the projection needs, in the query. If something throws
+    # LazyInitializationException, that is the design working - it found a
+    # missing JOIN FETCH. See CourseRepository.
+    open-in-view: false
+
+  # ==========================================================================
+  # VIRTUAL THREADS  (Java 21, Boot 3.2+)
+  # ==========================================================================
+  # One line, and Tomcat stops using a fixed pool of ~200 platform threads and
+  # starts giving every request a virtual thread instead.
+  #
+  # WHY IT MATTERS HERE. Fieldbook chapter 06 explains the classic model: a
+  # thread per request, a bounded pool, and a request that blocks on the
+  # database holding a whole OS thread while it waits. That is exactly what
+  # this application does - every endpoint blocks on JDBC. A virtual thread
+  # that blocks parks itself and releases the carrier thread, so the ceiling
+  # moves from "how many OS threads can I afford" to "how many can the database
+  # serve".
+  #
+  # WHICH IS THE HONEST CAVEAT: it does NOT make this application faster. The
+  # connection pool above is still 10, so ten queries still run at a time. What
+  # changes is that the eleventh request waits on a cheap virtual thread rather
+  # than exhausting an expensive pool. Virtual threads move the bottleneck; they
+  # do not remove it. Saying that in an interview is worth more than saying
+  # "Loom is faster".
+  #
+  # THE TRAP: synchronized blocks used to PIN a virtual thread to its carrier,
+  # undoing the benefit. JDK 21 had this problem and JDK 24 fixed it (JEP 491).
+  # On 21, a library that synchronizes around I/O - some older drivers do - can
+  # quietly serialise everything. Worth knowing which JDK you are on.
+  threads:
+    virtual:
+      enabled: true
+
+  jackson:
+    # MATCH JSON-B. Yasson omits null fields by default; Jackson includes them.
+    # Without this line the same DTO serialises differently on the two services -
+    # "violations": null appearing here and nowhere there - and the two APIs stop
+    # being comparable. One line, set once, instead of @JsonInclude on every DTO.
+    default-property-inclusion: non_null
+
+    serialization:
+      # ISO-8601 strings ("2026-09-05T10:15:30Z") rather than epoch numbers.
+      # Boot already defaults this off; stating it makes the wire format a
+      # decision rather than an inherited default, and it is what the Jakarta EE
+      # application emits.
+      write-dates-as-timestamps: false
+
+server:
+  # 8281. The WAR is on 8280 and WildFly admin is on 9990, so both applications
+  # can run at once and be compared with two curl commands.
+  port: 8281
+
+  error:
+    # DEFENCE IN DEPTH behind RestExceptionHandler.
+    #
+    # Some failures never reach an @ExceptionHandler - a filter throwing before
+    # the dispatcher servlet, or a request that matches no handler at all - and
+    # those fall through to Boot BasicErrorController instead. These three
+    # settings make sure that fallback also says nothing useful to an attacker.
+    # Fieldbook chapter 15 counts a leaked stack trace as a real finding.
+    include-stacktrace: never
+    include-message: never
+    include-exception: false
+
+management:
+  # Micrometer publishes at /actuator/prometheus in the text format Prometheus
+  # scrapes. Actuator already tracks JVM memory, GC pauses, thread counts, HTTP
+  # timings per endpoint and status, HikariCP pool usage, and - because
+  # CacheConfig calls recordStats() - the cache hit ratio.
+  #
+  # hikaricp.connections.pending is the one metric worth knowing by name: it is
+  # the number of threads waiting for a connection, and it going above zero is
+  # the earliest signal that the pool is your bottleneck.
+  endpoints:
+    web:
+      exposure:
+        # ONLY these three over HTTP. The default is health alone; the tempting
+        # mistake is `include: "*"`, which publishes /actuator/env and
+        # /actuator/configprops - and those contain your datasource URL, your
+        # username, and every environment variable the process can see. It is a
+        # real finding in real penetration tests. Expose what you need, and put
+        # authentication in front of anything more.
+        include: health,info,metrics,prometheus
+
+  endpoint:
+    health:
+      # Show the individual checks (database, disk) rather than a bare "UP".
+      # Fine here; on a public endpoint it tells a stranger which dependencies
+      # you have, so production usually sets this to when-authorized.
+      show-details: always
+
+      # LIVENESS AND READINESS, split - the distinction fieldbook chapter 33
+      # spends a page on and previously had no endpoint to demonstrate.
+      #
+      #   /actuator/health/liveness   "am I wedged?"    - process only, no DB
+      #   /actuator/health/readiness  "can I serve?"    - includes the DB
+      #
+      # Point a Kubernetes liveness probe at the readiness endpoint and a slow
+      # database restarts the whole fleet: the probe times out, Kubernetes kills
+      # the pod, the connections drop, everything gets slower, the next probe
+      # fails. A self-inflicted outage that looks like a mysterious crash.
+      probes:
+        enabled: true
+
+  # Tag every metric with the application name, so one Prometheus scraping
+  # several services can tell them apart. Without this, two services publishing
+  # http_server_requests_seconds are indistinguishable on the graph.
+  metrics:
+    tags:
+      application: enrollment-spring
+
+  # Percentiles for HTTP timings, published per endpoint.
+  #
+  # THE POINT OF THE PERCENTILES, and it is fieldbook chapter 25 in one line:
+  # the AVERAGE response time is nearly useless. If 95% of requests take 20ms
+  # and 5% take four seconds, the mean is 220ms and looks healthy while one user
+  # in twenty is having a terrible time. p95 and p99 are what you alert on.
+  #
+  # histogram=true also enables a heat map in Grafana, at the cost of more
+  # series; on a service with hundreds of endpoints that cost is real and you
+  # would restrict it by URI.
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    it.unicam.cs.enrollment.spring: DEBUG
+
+    # UNCOMMENT TO SEE THE N+1 PROBLEM HAPPEN.
+    #
+    # The second line logs the bound parameters, so you see the same SELECT
+    # repeated with a different id - which is what an N+1 actually looks like in
+    # a log. Try it with open-in-view set back to true and no JOIN FETCH, and the
+    # difference is not subtle. This is the experiment fieldbook chapter 08 asks
+    # you to run.
+    #
+    # org.hibernate.SQL: DEBUG
+    # org.hibernate.orm.jdbc.bind: TRACE
+
+  pattern:
+    # The correlation id, in every line. %X is the MDC lookup - see
+    # CorrelationIdFilter. This is what makes one id greppable across a whole
+    # request, and it is the reason the error response carries it.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-........}] %logger{36} - %msg%n"
+
+# ===========================================================================
+# OPENAPI / SWAGGER UI
+# ===========================================================================
+# See OpenApiConfig for the metadata and for the code-first vs design-first
+# argument.
+#
+# NOT FOR PRODUCTION AS CONFIGURED. An interactive console that enumerates
+# every endpoint and its parameters is a gift to whoever is scanning you. The
+# usual answer is a production profile that sets swagger-ui.enabled: false, or
+# authentication in front of both paths.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    # Group endpoints by their @Tag rather than by controller class name, and
+    # sort them, so the console reads like documentation instead of like a
+    # package listing.
+    tags-sorter: alpha
+    operations-sorter: method
+    # Collapse everything on load. A console that opens with forty expanded
+    # endpoints is unreadable.
+    doc-expansion: none
+
+# ===========================================================================
+# THE NOTIFICATION SERVICE - and the resilience policies around it
+# ===========================================================================
+# See NotificationClient for what each of these buys, and why a method call that
+# became a network call needs all of them.
+enrollment:
+  notifications:
+    base-url: http://localhost:8282
+    # Could I open a socket? Host down, DNS wrong, firewall.
+    connect-timeout-ms: 1000
+    # Did bytes arrive in time? Service alive but wedged. This is the one people
+    # forget, and it is the worse of the two failures.
+    read-timeout-ms: 2000
+
+resilience4j:
+  retry:
+    instances:
+      notifications:
+        # THREE attempts in total, not three retries on top of the first. The
+        # off-by-one here is common and quietly doubles your load on a
+        # dependency that is already struggling.
+        max-attempts: 3
+
+        # EXPONENTIAL BACKOFF, and this is the setting that prevents a RETRY
+        # STORM. Retrying immediately, three times, from every instance at once
+        # is a denial-of-service attack on a service that was merely slow - and
+        # it is how a small incident becomes a large one.
+        #
+        # 200ms, then 400ms, then give up.
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+
+        # RETRY ONLY WHAT IS WORTH RETRYING. A connection failure or a timeout is
+        # transient and deserves another go. A 400 will be a 400 every time, and
+        # retrying it wastes capacity and delays the inevitable.
+        #
+        # Retrying at all is safe here ONLY because the receiver deduplicates on
+        # eventId. Without that, three attempts would mean three emails.
+        retry-exceptions:
+          - java.io.IOException
+          - java.net.SocketTimeoutException
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+
+  circuitbreaker:
+    instances:
+      notifications:
+        # COUNT_BASED over the last 10 calls: if half fail, open. TIME_BASED is
+        # the alternative and is better for a low-traffic service, where 10 calls
+        # might span an hour and the window says nothing about what is happening
+        # now.
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+
+        # Do not judge until there is evidence. Without this the FIRST failed
+        # call is a 100% failure rate and the breaker opens on one bad packet.
+        minimum-number-of-calls: 5
+
+        # OPEN for 10 seconds, then HALF_OPEN and let 3 calls through to test the
+        # water. Succeed and it closes; fail and it opens again. That three-state
+        # machine is the whole pattern, and drawing it is a common whiteboard
+        # question.
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+
+        # A 4xx is the CALLER fault and must not count towards opening the
+        # breaker - otherwise sending bad requests trips a breaker on a service
+        # that is perfectly healthy.
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+
+        # Publish the state to /actuator/prometheus, so "the breaker is open" is
+        # a metric you can alert on rather than a line somebody notices in a log.
+        register-health-indicator: true

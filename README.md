@@ -663,9 +663,11 @@ teaches the wrong lesson.
 
   The *fieldbook* endpoints under `/api/fieldbook/**` are a different matter —
   those are authenticated, and are the worked example of what chapter 15 asks
-  for. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md). What they still lack is listed
-  there rather than here: no email verification, no password reset, no MFA, and
-  a rate limiter that is per node and in memory.
+  for. You sign in with a **username**; the address on the account is only used
+  to send a password reset link, which goes out through the mail outbox as a
+  single-use token good for an hour. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
+  What they still lack is listed there rather than here: no email verification,
+  no MFA, and a rate limiter that is per node and in memory.
 - **`hbm2ddl.auto=update`** still generates the schema, though the replacement
   is now half built: `src/main/resources/db/migration` holds a Flyway baseline
   and the index migration, and `mvn -Pflyway flyway:info` reads the database
@@ -684,3 +686,45 @@ teaches the wrong lesson.
   you picked is the point. See `ProgressService`.
 
 Each of these is a good next exercise.
+
+---
+
+## Repository layout
+
+Four independent projects, one repository. Every existing build command still
+works unchanged — none of the new projects is a Maven module of the root POM.
+
+| Project | What it is | Build | Port |
+|---|---|---|---|
+| *(root)* | The Jakarta EE application on WildFly | `mvn package` | 8280 |
+| `spring-service/` | The same API on Spring Boot, same PostgreSQL schema | `mvn package -f spring-service/pom.xml` | 8281 |
+| `notification-service/` | The notification listener, extracted | `mvn package -f notification-service/pom.xml` | 8282 |
+| `angular-client/` | An Angular front end for the API | `npm --prefix angular-client run build` | 4280 |
+
+### See it all running, with nothing installed
+
+```bash
+mvn spring-boot:run -f notification-service/pom.xml
+```
+```bash
+mvn spring-boot:run -f spring-service/pom.xml -Dspring-boot.run.profiles=demo
+```
+```bash
+npm --prefix angular-client start
+```
+
+No PostgreSQL, no MongoDB, no Docker. The `demo` profile runs on in-memory H2
+with seed data, including a course deliberately one seat from full so the 409
+path is reachable. Then <http://localhost:4280>, or
+<http://localhost:8281/swagger-ui.html>.
+
+### The documents
+
+| | |
+|---|---|
+| [BACKLOG-FULLSTACK.md](docs/BACKLOG-FULLSTACK.md) | The gap audit against two real job adverts, and what has been closed |
+| [CLOUD.md](docs/CLOUD.md) | Managed services, object storage, IAM, and the eight things this codebase would need |
+| [DESIGN-LIFECYCLE.md](docs/DESIGN-LIFECYCLE.md) | Requirement → design → code, the four diagrams, ADRs |
+| [CERTIFICATIONS.md](docs/CERTIFICATIONS.md) | OCP, Spring, AWS, CKAD — cost, time, and honest value |
+| [ADJACENT-TECH.md](docs/ADJACENT-TECH.md) | AI/ML, blockchain, mobile, IoT, the analytics vocabulary, SOAP |
+| [READING-ADVERTS.md](docs/READING-ADVERTS.md) | Filter adverts versus brochure adverts |

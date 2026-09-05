@@ -1,0 +1,633 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  THE SAME APPLICATION, BUILT THE OTHER WAY
+  ============================================================================
+  Read this file next to ../pom.xml. They produce comparable programs against
+  the SAME PostgreSQL database, and almost nothing in the two build files
+  looks alike. That difference is the lesson; fieldbook chapters 16-18 are the
+  prose version of it.
+
+  Three things to notice before anything else.
+
+  1. THIS IS NOT A MODULE OF THE ROOT POM.
+     The root project is `packaging>war` and builds on its own. Making it an
+     aggregator (`packaging>pom` + `<modules>`) would have changed what
+     `mvn package` does at the top level, and the whole point of this exercise
+     is that the Jakarta EE build keeps working untouched. So this is a
+     separate, independent Maven project that happens to live in the same
+     repository:
+
+         mvn package              (in the repo root)  -> enrollment.war
+         mvn package -f spring-service/pom.xml        -> enrollment-spring.jar
+
+     One repository, two deployables. That is also, not by coincidence, the
+     shape a team is in on the first day of a "we are moving to microservices"
+     project.
+
+  2. THE PARENT REPLACES ~200 LINES OF VERSION MANAGEMENT.
+     ../pom.xml declares a version property for every single dependency, and a
+     long comment explaining which of them are allowed to move independently
+     (they mirror what WildFly ships) and which are free (they are build-local).
+     Here, `spring-boot-starter-parent` has already made every one of those
+     decisions and tested the combination. Look below: almost no <version> tags.
+     That is not magic, it is a curated BOM - and it is the single biggest
+     day-to-day difference between the two ecosystems.
+
+  3. `provided` IS GONE.
+     Over there, the Jakarta EE API is `provided` because WildFly owns the
+     implementation at runtime - see the long comment in ../pom.xml about why
+     shipping your own copy causes LinkageErrors. Here there is no server to
+     provide anything: `spring-boot-starter-web` PACKAGES an embedded Tomcat
+     into the jar. The application server stopped being infrastructure you
+     install and became a library you depend on. Everything else about Spring
+     Boot follows from that one decision.
+  ============================================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      THE PARENT.
+
+      A Maven parent is ordinary inheritance: this POM inherits that POM's
+      properties, dependencyManagement, pluginManagement and build settings.
+      `spring-boot-starter-parent` is doing four jobs at once, and it is worth
+      being able to name them in an interview:
+
+        1. dependencyManagement for ~2000 artifacts (the spring-boot-dependencies
+           BOM). This is why <dependency> blocks below carry no <version>.
+        2. Sensible plugin configuration - the compiler release, the resource
+           filtering, UTF-8 encoding, and the repackage goal.
+        3. A `java.version` property that sets the compiler release.
+        4. Defaults such as `maven.compiler.parameters=true`, which the root
+           POM has to ask for by hand with <arg>-parameters</arg>.
+
+      THE TRAP: inheriting a parent is not the only way to get the BOM. If your
+      company already has a corporate parent POM (very common in Italian
+      enterprise shops), you import the BOM in <dependencyManagement> with
+      <scope>import</scope> instead. Knowing both forms is a real interview
+      question, and the answer "you can only have one parent, but you can import
+      as many BOMs as you like" is the whole of it.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.0</version>
+        <relativePath/> <!-- empty: look the parent up in the repository, not on disk -->
+    </parent>
+
+    <groupId>it.unicam.cs.enrollment</groupId>
+    <artifactId>enrollment-spring</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+
+    <!--
+      `jar`, not `war`. The output is an executable "fat jar": your classes,
+      your dependencies, and a launcher, all in one file that `java -jar` runs.
+      There is no deployment step and nothing to install first. Compare with
+      ../pom.xml, where the WAR is deliberately almost empty because everything
+      it needs is already inside WildFly.
+    -->
+    <packaging>jar</packaging>
+
+    <name>UNICAM Course Enrollment Service (Spring Boot)</name>
+    <description>
+        The enrollment domain from the Jakarta EE application, re-implemented on
+        Spring Boot against the same PostgreSQL schema. Built to be diffed
+        against ../src/main/java, not to replace it.
+    </description>
+
+    <properties>
+        <!--
+          Inherited from the parent, overridden here to match the root project.
+          Both applications compile for Java 21, so a comparison between them is
+          about the framework and nothing else.
+        -->
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!--
+          THE THREE VERSIONS THE BOOT BOM DOES NOT MANAGE.
+
+          Everything else in this file is versionless because
+          spring-boot-dependencies has already picked a tested combination.
+          These three are outside it, so they are pinned here - and the fact
+          that there are only three is the point of the parent.
+
+          springdoc in particular is version-sensitive: 2.x is for Boot 3.x and
+          1.x is for Boot 2.x, and mixing them produces a startup failure about
+          a missing class rather than anything mentioning versions.
+        -->
+        <version.springdoc>2.8.5</version.springdoc>
+        <version.mapstruct>1.6.3</version.mapstruct>
+        <version.resilience4j>2.3.0</version.resilience4j>
+        <version.flapdoodle>4.20.0</version.flapdoodle>
+    </properties>
+
+    <dependencies>
+
+        <!-- ================================================================
+             THE WEB LAYER
+             ================================================================
+             Brings in Spring MVC, Jackson (JSON), and an embedded Tomcat.
+
+             The Jakarta EE equivalent of this line is: install WildFly.
+
+             Note which JSON library arrives. Over there it is JSON-B (Yasson),
+             the Jakarta standard; here it is Jackson, a de-facto standard that
+             predates it. They disagree about several defaults - see the
+             comments on ProblemDetail and application.yml - and "why is my
+             field missing from the JSON" is the same question with two
+             different answers depending on which side of the wire you are on.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             PERSISTENCE
+             ================================================================
+             Spring Data JPA, which brings Hibernate, the Jakarta Persistence
+             API, spring-tx, and HikariCP (the connection pool).
+
+             The pool matters more than it looks. In the Jakarta EE application
+             the datasource and its pool are configured INSIDE the server
+             (docker/wildfly/configure.cli) and the application only ever sees a
+             JNDI name. Here the pool is a library, configured in
+             application.yml, and it is your problem. Fieldbook chapter 25 makes
+             the argument that the pool - not the CPU - is your real concurrency
+             limit; this is where you would act on it.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             BEAN VALIDATION
+             ================================================================
+             NOT included by starter-web since Boot 2.3. Forgetting this
+             dependency is the classic silent failure: @Valid on a controller
+             method compiles perfectly and then does absolutely nothing at
+             runtime, because there is no validator on the classpath to run it.
+             Every invalid request sails through to the service layer.
+
+             Over in the Jakarta EE application this cannot happen: Bean
+             Validation is part of the platform, so it is in
+             jakarta.jakartaee-api whether you think about it or not.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             ACTUATOR - health, info and metrics without writing any
+             ================================================================
+             Fieldbook chapter 33 explains liveness and readiness probes and
+             then has no endpoint to point at, because the Jakarta EE
+             application does not have one. This dependency is that endpoint:
+
+                 /actuator/health/liveness    "am I wedged?"   - must NOT touch the DB
+                 /actuator/health/readiness   "can I serve?"   - SHOULD touch the DB
+
+             Boot separates those two for you, correctly, out of the box. Getting
+             them the wrong way round is one of the most common production
+             incidents in the industry, and this starter is the reason most
+             Spring teams never have to think about it.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             OPENAPI / SWAGGER UI
+             ================================================================
+             Zero mentions in the fieldbook, on a large share of Java adverts,
+             and roughly fifteen minutes of work. springdoc reads the
+             annotations that are ALREADY on the controllers - @GetMapping,
+             @PathVariable, @Valid, the Bean Validation constraints, the record
+             components - and produces an OpenAPI 3 document from them.
+
+                 http://localhost:8281/v3/api-docs     the JSON specification
+                 http://localhost:8281/swagger-ui.html an interactive console
+
+             THE ARGUMENT WORTH HAVING: a specification generated from the code
+             cannot drift from the code, which is the failure mode of every
+             hand-written API document. The counter-argument - design-first,
+             where the YAML is written before the code and the server is
+             generated from it - is what large organisations with many teams
+             actually do, because it lets the contract be agreed before either
+             side is built. Knowing that both exist, and why a five-team company
+             picks the second, is the interview answer.
+
+             The Jakarta EE equivalent is MicroProfile OpenAPI, which WildFly
+             ships and this project does not switch on. That is a gap on the
+             other side, recorded in the backlog.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${version.springdoc}</version>
+        </dependency>
+
+        <!-- ================================================================
+             CACHING
+             ================================================================
+             starter-cache is the ABSTRACTION - @Cacheable, @CacheEvict and a
+             CacheManager interface. Caffeine is one implementation of it.
+
+             That separation is the whole design, and it is why the annotations
+             below never mention Caffeine: swap this dependency for
+             spring-boot-starter-data-redis and the same annotated methods start
+             using a shared network cache instead of a local in-memory one, with
+             no code change. Local first is also the right default - a cache that
+             does not survive a restart is much harder to get wrong than one
+             that does.
+
+             Caffeine rather than Redis here so the cache is testable with no
+             Docker daemon. The Redis configuration is written out in
+             application.yml, commented, next to the reason you would move.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             METRICS - Micrometer to Prometheus
+             ================================================================
+             Micrometer is to metrics what SLF4J is to logging: a facade. Your
+             code calls Micrometer; this artifact decides that the numbers come
+             out in Prometheus format at /actuator/prometheus. Swap it for the
+             Datadog or CloudWatch registry and nothing you wrote changes.
+
+             Actuator already publishes JVM memory, GC pauses, thread counts,
+             HTTP request timings per endpoint and status, and HikariCP pool
+             usage - that last one being the metric fieldbook chapter 25 argues
+             is your real concurrency limit. Adding one line of dependency
+             turns "the application feels slow" into a graph.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ================================================================
+             MAPSTRUCT - the mapper you do not write
+             ================================================================
+             An ANNOTATION PROCESSOR, not a runtime library. At compile time it
+             reads an annotated interface and generates a plain Java class that
+             implements it, field by field. You can read the output in
+             target/generated-sources/annotations - and reading it once is the
+             fastest way to stop thinking of it as magic.
+
+             No reflection, no proxies, no startup cost: the generated code is
+             the same assignments you would have typed.
+
+             CourseMapper is left hand-written and EnrollmentMapper is generated,
+             deliberately, so the two can be compared side by side. See the
+             comment on EnrollmentMapper for which one each situation deserves.
+
+             The processor has to be declared in annotationProcessorPaths below
+             as well as here, and forgetting that produces the single most
+             confusing MapStruct error: the interface compiles, the
+             implementation class is never generated, and Spring fails at
+             startup saying no bean of that type exists.
+        -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${version.mapstruct}</version>
+        </dependency>
+
+        <!-- ================================================================
+             MONGODB - the document store, as a read model
+             ================================================================
+             NoSQL is on the advert and appears in the fieldbook as one
+             paragraph. This is it made concrete, and the shape matters more
+             than the dependency: MongoDB is used here as a READ MODEL beside
+             PostgreSQL, not instead of it.
+
+             That is the honest architecture and it is what the chapter 33
+             answer already implies. The enrollment path needs a unique
+             constraint on (student, course) and a transaction that counts seats
+             under a lock; a document store makes both materially harder. The
+             reporting path needs flexible, denormalised documents that a
+             dashboard reads whole. Different jobs, different tools, and using
+             both is far more common in industry than picking one.
+
+             POLYGLOT PERSISTENCE is the name for it, and the caveat worth
+             stating alongside: two databases is two things to operate, back up,
+             monitor and keep consistent. It is a real cost, and "the relational
+             database is the default and the burden of proof is on the
+             alternative" is still the right instinct.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             RESILIENCE4J - circuit breaker, retry, time limiter
+             ================================================================
+             Needed the moment a method call became a network call. Fieldbook
+             chapter 33 names the circuit breaker and never shows one; this is
+             the dependency that lets NotificationClient have one.
+
+             THE PATTERN IN ONE SENTENCE: a circuit breaker stops calling a
+             service that is already failing, so your threads are not all
+             blocked waiting on a timeout for a dependency you know is down.
+             Without it, one slow downstream service exhausts your thread pool
+             and takes YOUR service down with it - which is how a single failure
+             becomes an outage across five services.
+
+             Spring Cloud Circuit Breaker is the other artifact you will see
+             named. It is a thin abstraction OVER Resilience4j, useful if you
+             might swap implementations, and one more layer to explain if you
+             will not. Using Resilience4j directly is the common choice.
+
+             Hystrix is the name in older material. It has been end-of-life
+             since 2018 and Resilience4j is its replacement - saying that when
+             an interviewer mentions Hystrix is a small, real signal.
+        -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${version.resilience4j}</version>
+        </dependency>
+        <!-- The AOP support the annotations need. Without it @CircuitBreaker
+             and @Retry compile and do absolutely nothing - the same silent
+             failure as forgetting starter-validation. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- ================================================================
+             THE POSTGRESQL DRIVER  -  scope: runtime
+             ================================================================
+             `runtime` means: not on the compile classpath, but present when the
+             program runs. Correct, because no line of your code names a
+             PostgreSQL class - you talk to java.sql / JPA interfaces and the
+             driver registers itself. If you can `import org.postgresql.*` you
+             have almost certainly made a mistake.
+
+             Compare ../pom.xml, where this same driver appears only as a
+             dependency of the Flyway PLUGIN, because WildFly supplies it at
+             runtime as a server module. Same jar, three different scopes,
+             depending on who owns the runtime.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ================================================================
+             TESTS
+             ================================================================
+             ONE dependency replaces the six the root POM declares by hand
+             (JUnit, Mockito, AssertJ, the JAX-RS implementation, Hibernate
+             Validator, an SLF4J binding). starter-test brings JUnit 5, Mockito,
+             AssertJ, Hamcrest, JSONPath, and Spring's own test support.
+
+             Note what is NOT needed here: the root POM has a long comment about
+             adding resteasy-core to tests because `Response.ok(...)` throws
+             without a JAX-RS implementation on the classpath, and another about
+             adding Yasson so Hibernate can find a JSON-B provider. Both of those
+             are the `provided` scope biting back - an annotation-only classpath
+             cannot execute anything. Boot never has that problem because nothing
+             here is `provided` in the first place.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          H2, for the repository tests.
+
+          Same choice, and the same caveat, as the root project: an in-memory
+          database makes @DataJpaTest run in milliseconds with no Docker, and it
+          IS NOT PostgreSQL. Fieldbook chapter 20 calls this "the test that
+          lies", and the honest answer is to have both - H2 for the fast loop,
+          Testcontainers for the truth. Both are below.
+        -->
+        <!--
+          H2 at RUNTIME, not test, for one specific reason.
+
+          Scope `test` would be correct for a production service. It is `runtime`
+          here so that the `demo` profile can start the whole application with no
+          PostgreSQL, no Docker and no setup at all:
+
+              mvn spring-boot:run -Dspring-boot.run.profiles=demo
+
+          That matters for a teaching repository: somebody reading chapter 16
+          should be able to see the API answer without first debugging a
+          container runtime. The cost is about 2.5 MB of driver in the jar that
+          production never loads, and the honest note that a real service would
+          not ship it.
+
+          The default profile still points at PostgreSQL. Nothing about the
+          normal path changed.
+        -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          Testcontainers: a REAL PostgreSQL 16, started by the test, thrown away
+          afterwards. This is what makes an integration test honest - the same
+          engine, the same dialect, the same behaviour for the pessimistic lock
+          that H2 fakes.
+
+          No <version> on any of these: spring-boot-dependencies manages the
+          Testcontainers BOM too.
+
+          `spring-boot-testcontainers` is the Boot 3.1+ glue that provides
+          @ServiceConnection, which wires the container's random port and
+          credentials into the DataSource with no property plumbing at all.
+          Before it existed, every project hand-wrote a
+          @DynamicPropertySource block; you will still meet that in older code.
+
+          These tests SKIP when there is no Docker daemon, rather than failing -
+          see AbstractPostgresIT. A test that cannot run is not a test that
+          failed, and pretending otherwise trains people to ignore red builds.
+        -->
+        <!--
+          AN EMBEDDED MongoDB for tests - a real mongod binary, downloaded once
+          and run as a child process. No Docker.
+
+          Chosen deliberately over a Testcontainers Mongo so the document tests
+          run in the SAME fast loop as everything else, on a machine with no
+          container runtime. The trade is the usual one: it is a real MongoDB,
+          so the queries are genuinely executed, but it is a single node - no
+          replica set, and therefore no multi-document transactions, which
+          MongoDB only supports on a replica set.
+
+          That limitation is not an inconvenience here. It is the lesson: if
+          your design needs a transaction across documents, the document store
+          is fighting you, and the relational database was the right answer.
+        -->
+        <dependency>
+            <groupId>de.flapdoodle.embed</groupId>
+            <artifactId>de.flapdoodle.embed.mongo.spring3x</artifactId>
+            <version>${version.flapdoodle}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          FLYWAY, test-scoped only.
+
+          This is what makes EnrollmentApiIT genuinely honest rather than merely
+          slow. Without it the container would get a schema Hibernate invented
+          from the entity classes in THIS module - so the test would prove that
+          the mappings agree with themselves, which is not a claim worth making.
+
+          With it, the migrations in ../src/main/resources/db/migration run
+          against the container first, and then `ddl-auto: validate` checks these
+          entities against the schema the OTHER application actually deploys. If
+          someone adds a column here and forgets the migration, this test fails.
+          That is the only mechanism in the repository that can catch the two
+          projects drifting apart.
+
+          `test` scope, so nothing Flyway-related is packaged. The root project
+          makes the same choice for the same reason and explains it at length:
+          migrating at application startup races when there is more than one
+          instance. See the flyway profile in ../pom.xml.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <finalName>enrollment-spring</finalName>
+
+        <plugins>
+            <!--
+              THE REPACKAGE PLUGIN.
+
+              `mvn package` normally produces a plain jar containing only your
+              classes - which cannot run, because nothing tells the JVM where
+              Spring is. This plugin runs afterwards and rewrites it into an
+              executable "fat jar": your classes under BOOT-INF/classes, every
+              dependency under BOOT-INF/lib, and a small launcher in the root
+              that builds a classloader over them.
+
+              It also renames the original to enrollment-spring.jar.original,
+              which is a useful thing to have seen once - it is the ordinary jar
+              Maven built before Boot got hold of it.
+
+              Version and configuration both come from the parent. Declaring the
+              plugin at all is the only part that is ours.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+              THE ANNOTATION PROCESSOR PATH, for MapStruct.
+
+              An annotation processor has to be on a separate classpath from the
+              dependencies, so declaring mapstruct-processor as an ordinary
+              <dependency> does NOT work reliably - it may run, it may not,
+              depending on the compiler plugin version. This is the supported way.
+
+              The two compiler arguments are worth setting from the start:
+
+                unmappedTargetPolicy=ERROR turns "you forgot to map a field" from
+                a warning nobody reads into a build failure. Without it, adding a
+                component to a DTO silently leaves it null in every response - a
+                real bug that ships regularly.
+
+                componentModel=spring makes the generated class a @Component, so
+                Spring can inject it like any other bean. Without it you would
+                have to call Mappers.getMapper() by hand.
+
+              Note the -parameters argument is NOT here: the Spring Boot parent
+              already sets it, which is why the record DTOs deserialise without
+              @JsonProperty. The root POM has to ask for it explicitly.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${version.mapstruct}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <compilerArgs>
+                        <arg>-Amapstruct.unmappedTargetPolicy=ERROR</arg>
+                        <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!--
+              Failsafe, for *IT classes - exactly the same split as the root
+              project. Surefire runs unit tests on `mvn test`; Failsafe runs
+              integration tests on `mvn verify`, after packaging. Developers run
+              the first all day, CI runs the second.
+
+              Unlike the root POM this does not need a <version>: the parent
+              manages it.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,72 @@
+# ===========================================================================
+# INTEGRATION TEST PROFILE
+# ===========================================================================
+# Used by EnrollmentApiIT only. The datasource is NOT configured here: the
+# Testcontainers @ServiceConnection supplies the URL, username and password at
+# runtime, because the container port is random and cannot be written down in
+# advance.
+#
+# The two settings below are the whole point of this file, and together they are
+# what makes the integration test prove something the other tests cannot.
+# ===========================================================================
+
+spring:
+  flyway:
+    # RUN THE REAL MIGRATIONS.
+    #
+    # Not a schema Hibernate invented from the entity classes in this module -
+    # the actual SQL files the Jakarta EE application deploys, from the root
+    # project. A relative filesystem: location, because these files live outside
+    # this module and are deliberately not copied.
+    #
+    # Flyway is test-scoped in pom.xml, so nothing here reaches production. The
+    # root project runs the same files through its `flyway` Maven profile.
+    enabled: true
+    locations: filesystem:../src/main/resources/db/migration
+
+  datasource:
+    hikari:
+      # BIGGER THAN PRODUCTION, on purpose.
+      #
+      # concurrentEnrollmentsDoNotOversell fires 10 simultaneous requests, and
+      # each one holds a connection for the whole transaction while it waits on
+      # SELECT ... FOR UPDATE. At the production size of 10 that is exactly the
+      # ceiling, and any request needing a second connection would wait for the
+      # 20-second timeout and fail the test for a reason that has nothing to do
+      # with the seat rule.
+      #
+      # Worth noticing what this demonstrates rather than just working around: a
+      # pessimistic lock does not only serialise the ROWS, it pins a connection
+      # for the duration. That is the real cost of the lock, and the reason
+      # fieldbook chapter 25 says the pool is your concurrency limit.
+      maximum-pool-size: 20
+
+  jpa:
+    hibernate:
+      # VALIDATE, exactly as in production.
+      #
+      # Flyway builds the schema above; Hibernate then checks every mapping in
+      # this module against it and refuses to start on any disagreement. So this
+      # single line turns EnrollmentApiIT into the drift detector between the two
+      # applications: add a column to an entity here without writing a migration,
+      # and the context fails to load.
+      #
+      # It is also the setting the running application uses, which means the test
+      # exercises the real startup path rather than a test-only shortcut.
+      ddl-auto: validate
+
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+    show-sql: false
+    open-in-view: false
+
+logging:
+  level:
+    root: WARN
+    it.unicam.cs.enrollment.spring: INFO
+    # Testcontainers is chatty about image pulls on a cold machine; leave this
+    # at INFO the first time you run it so you can see what is being downloaded.
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN

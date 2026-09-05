@@ -1,0 +1,87 @@
+# ===========================================================================
+# TEST OVERRIDES
+# ===========================================================================
+# A profile-specific file, so it OVERRIDES application.yml rather than
+# replacing it - profile-specific properties beat base ones, and everything not
+# mentioned here (the Jackson settings, the error settings) still applies.
+#
+# Putting a second application.yml in src/test/resources would have been the
+# other way to do this and is a trap worth naming: only ONE application.yml is
+# loaded, so the test copy would SHADOW the main one entirely and every setting
+# not repeated in it would silently revert to a Boot default. The bug that
+# follows is the worst kind - the tests pass against a configuration production
+# does not have.
+# ===========================================================================
+
+spring:
+  # THE EXCLUDE LIST IS RESTATED IN FULL, not extended.
+  #
+  # Profile-specific properties REPLACE a base list rather than merging with it,
+  # so naming only the new entry would silently drop the other three. That is a
+  # genuinely surprising binding rule and worth meeting once.
+  #
+  # The extra entry is flapdoodle. Embedded MongoDB is on the TEST classpath, so
+  # Boot auto-configures it for every @SpringBootTest and then fails because no
+  # version is set. Excluding it here keeps the fast test loop free of MongoDB
+  # entirely; CourseDocumentTest re-enables it under the `mongo` profile, which
+  # is the only place a real mongod is worth starting.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
+      - de.flapdoodle.embed.mongo.spring.autoconfigure.EmbeddedMongoAutoConfiguration
+
+  flyway:
+    # OFF for the H2 slice tests.
+    #
+    # Flyway is on the test classpath (see pom.xml) so Boot would auto-configure
+    # it, and the migrations in ../src/main/resources/db/migration are written
+    # for PostgreSQL. Hibernate builds the schema from the mappings here
+    # instead; the real migrations run only in EnrollmentApiIT, against a real
+    # PostgreSQL, which is where they belong.
+    enabled: false
+
+  jpa:
+    hibernate:
+      # create-drop, not validate.
+      #
+      # The main configuration uses `validate` because the real schema belongs to
+      # Flyway and the Jakarta EE application. An empty in-memory H2 has no
+      # tables at all, so validate would fail before the first test ran.
+      # Hibernate builds the schema from the mappings here instead - which also
+      # means these tests are exercising the MAPPINGS, not the migrations. That
+      # gap is exactly what EnrollmentApiIT closes.
+      ddl-auto: create-drop
+
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+    # Off in tests. @DataJpaTest already logs the SQL when you ask it to, and
+    # leaving this on buries an assertion failure in a screenful of formatted
+    # SELECT statements.
+    show-sql: false
+
+  datasource:
+    # H2 in PostgreSQL compatibility mode.
+    #
+    # It is closer than plain H2 and it is STILL NOT PostgreSQL. Fieldbook
+    # chapter 20 lists what MODE=PostgreSQL does not give you, and the items that
+    # matter here are real: no true SELECT ... FOR UPDATE blocking behaviour
+    # between concurrent transactions, different index planning, different
+    # sequence semantics, and different error messages for constraint
+    # violations.
+    #
+    # So the seat-counting rule can be tested for LOGIC here and for BEHAVIOUR
+    # only in EnrollmentApiIT, against a real PostgreSQL in a container. Knowing
+    # which of your tests proves which is most of what chapter 20 is about.
+    url: jdbc:h2:mem:enrollment;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+logging:
+  level:
+    root: WARN
+    it.unicam.cs.enrollment.spring: INFO

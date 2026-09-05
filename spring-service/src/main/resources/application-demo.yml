@@ -1,0 +1,69 @@
+# ===========================================================================
+# THE DEMO PROFILE - the whole application, with nothing installed
+# ===========================================================================
+#   mvn spring-boot:run -f spring-service/pom.xml -Dspring-boot.run.profiles=demo
+#
+# No PostgreSQL, no Docker, no migrations. An in-memory H2 built from the entity
+# mappings, seeded with a handful of rows, so the API answers immediately and
+# the Angular client on port 4280 has something to talk to.
+#
+# WHAT THIS IS NOT. It is not a test of anything. The schema comes from the
+# mappings rather than from the Flyway migrations, the database is not
+# PostgreSQL, and everything vanishes on restart. Every caveat fieldbook chapter
+# 20 makes about H2 applies in full - EnrollmentApiIT is what proves the
+# application works, and it needs a real PostgreSQL in a container.
+#
+# What it IS: a way to see the thing running in about twenty seconds, which for
+# a course matters more than it does for a product.
+# ===========================================================================
+
+spring:
+  flyway:
+    enabled: false
+
+  datasource:
+    url: jdbc:h2:mem:enrollment-demo;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      # create-drop, not validate: there is no schema until Hibernate makes one.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    open-in-view: false
+
+# ---------------------------------------------------------------------------
+# CORS - and the reason it exists at all
+# ---------------------------------------------------------------------------
+# The Angular client runs on http://localhost:4280 and this API on 8281.
+# Different port means different ORIGIN, so the browser refuses to hand the
+# response to JavaScript unless the server says the origin is allowed.
+#
+# Fieldbook chapter 32 has the question this answers: the request succeeds, the
+# server log shows 200, and the console says the request was blocked. CORS is
+# enforced on the CLIENT side, which is why the server log looks perfectly
+# healthy.
+#
+# NOTE WHAT IS NOT HERE: a wildcard. "*" would allow any website on the internet
+# to call this API with the user browser. Chapter 15 covers why that is the
+# wrong default even when it makes the error go away. Here the allowed origin is
+# exactly the dev server, and this block lives in the DEMO profile only - the
+# production configuration has no CORS at all, because a browser is not expected
+# to call it cross-origin.
+enrollment:
+  cors:
+    allowed-origins: http://localhost:4280,http://localhost:4200
+
+# Seed a few rows on startup so the client has something to render.
+demo:
+  seed: true
+
+logging:
+  level:
+    root: INFO
+    it.unicam.cs.enrollment.spring: INFO

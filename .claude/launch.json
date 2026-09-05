@@ -2,10 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "fieldbook-static",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8931", "--directory", "src/main/webapp"],
-      "port": 8931
+      "name": "angular-client",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["ng", "serve", "--port", "4280"],
+      "port": 4280,
+      "cwd": "angular-client"
+    },
+    {
+      "name": "fieldbook",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", "src/main/webapp", "-p", "4285", "-c-1"],
+      "port": 4285
     }
   ]
 }

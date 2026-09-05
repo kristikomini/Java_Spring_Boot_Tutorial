@@ -54,3 +54,8 @@ desktop.ini
 *.log
 *.tmp
 hs_err_pid*.log
+
+# Angular client
+angular-client/node_modules/
+angular-client/dist/
+angular-client/.angular/

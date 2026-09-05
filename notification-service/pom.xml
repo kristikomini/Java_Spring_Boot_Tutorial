@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+  THE SECOND DEPLOYABLE - THE CUT CHAPTER 33 ARGUES FOR
+  ============================================================================
+  Fieldbook chapter 33 asks where you would cut this application, and answers
+  its own question with a table. Notifications is marked "a good cut", for three
+  stated reasons:
+
+      it already listens to events
+      it never participates in the enrollment transaction
+      nobody is waiting for it - it can fail, retry and lag without
+      anyone losing a seat
+
+  This project is that cut, actually made. It is deliberately TINY: one
+  endpoint, one in-memory store, no database. A microservice that needs six
+  hundred lines to justify itself is not a microservice, it is a monolith that
+  has been split badly.
+
+  WHAT IT COSTS, which is the part chapter 33 insists on and which you can now
+  measure rather than take on trust:
+
+      a method call became a network call that can time out
+      the caller needs a timeout, a retry and a fallback
+      delivery is at-least-once, so the consumer must be idempotent
+      the correlation id has to be propagated by hand or the two logs
+        cannot be joined
+      there are now two processes to start, two ports, two logs
+
+  Every one of those is visible in the code across these two projects. That is
+  the whole point of the exercise: not to prove microservices are good, but to
+  make the price concrete.
+
+  THIRD INDEPENDENT MAVEN PROJECT in this repository. Same reasoning as
+  spring-service: no aggregator POM, so every existing build command still
+  works unchanged.
+
+      mvn package                                       -> enrollment.war
+      mvn package -f spring-service/pom.xml              -> enrollment-spring.jar
+      mvn package -f notification-service/pom.xml        -> notification-service.jar
+  ============================================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>it.unicam.cs.enrollment</groupId>
+    <artifactId>notification-service</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>UNICAM Enrollment Notifications</name>
+    <description>
+        The notification listener, extracted into its own deployable. Accepts
+        enrollment events over HTTP, deduplicates them, and pretends to send
+        mail. Exists to make the cost of a service boundary concrete.
+    </description>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          Actuator, so the CALLER can find out whether this service is healthy.
+
+          That is a new requirement that did not exist when this code was a CDI
+          observer inside the same JVM. A method call cannot be "down".
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+          NO DATABASE. The deduplication store is an in-memory map with a size
+          bound.
+
+          That is a real design decision with a stated consequence: restart this
+          service and it forgets what it has already processed, so a redelivery
+          across a restart WILL send a duplicate notification. Acceptable here
+          because the worst case is one extra email. It would not be acceptable
+          for anything that charges money, and the fix is a table with a unique
+          constraint on the event id - which is the same mechanism the
+          enrollments table already uses for the same reason.
+
+          Saying which of those two you need, and why, is the whole of
+          idempotency as a junior needs it.
+        -->
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>notification-service</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

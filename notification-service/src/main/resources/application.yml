@@ -1,0 +1,29 @@
+# The notification service. Port 8282, because 8280 is WildFly, 8281 is the
+# Spring enrollment service, and 4280 is the Angular dev server.
+server:
+  port: 8282
+
+spring:
+  application:
+    name: notification-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    root: INFO
+    it.unicam.cs.enrollment.notification: INFO
+  pattern:
+    # The SAME correlation-id pattern as the enrollment service.
+    #
+    # That is what makes the two logs joinable: one id, grepped across two
+    # files, showing the whole journey. Without it, correlating a failure across
+    # a service boundary means comparing timestamps by hand, which is exactly as
+    # bad as it sounds. The id arrives on a header - see CorrelationIdFilter
+    # here, and the RestClient interceptor in the enrollment service that sends
+    # it.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-........}] %logger{28} - %msg%n"

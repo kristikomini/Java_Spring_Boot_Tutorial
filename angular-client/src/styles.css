@@ -1,0 +1,6 @@
+:root { color-scheme: light; }
+body { margin: 0; background: #fafafa; color: #222; }
+button { padding: 6px 12px; border-radius: 6px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+input, select { padding: 6px; border: 1px solid #bbb; border-radius: 6px; }
+code { background: #eee; padding: 1px 4px; border-radius: 3px; }

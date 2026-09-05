@@ -1,0 +1,33 @@
+# ===========================================================================
+# THE mongo TEST PROFILE - a real mongod, no Docker
+# ===========================================================================
+# Used only by CourseDocumentTest, with @ActiveProfiles({"test", "mongo"}).
+#
+# This file OVERRIDES the exclusion list in application-test.yml back to empty,
+# so the MongoDB auto-configuration and flapdoodle both come back. Everything
+# else from the -test profile (H2, ddl-auto, logging) still applies, because
+# only the keys named here are replaced.
+spring:
+  autoconfigure:
+    exclude:
+
+  data:
+    mongodb:
+      # No host or port: flapdoodle starts a mongod on a free port and
+      # configures the client to point at it. That is the whole reason to use
+      # the spring3x integration rather than driving flapdoodle by hand.
+      database: enrollment-test
+      auto-index-creation: true
+
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        # The version to download and run. PINNED, for the same reason the
+        # Testcontainers image tag is pinned: "latest" means the test suite
+        # changes behaviour on a day nobody changed any code.
+        #
+        # The binary is downloaded once and cached under ~/.embedmongo, so the
+        # FIRST run of this test needs network and takes a minute. Every run
+        # after that is local.
+        version: 7.0.14

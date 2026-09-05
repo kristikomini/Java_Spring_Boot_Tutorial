@@ -132,6 +132,16 @@ services:
       # mistaken for one from a real registrar.
       ENROLLMENT_MAIL_SUBJECT_PREFIX: "[DEV]"
 
+      # Where links inside outgoing mail point - the password reset link, for
+      # now. Set explicitly rather than taken from the request, because the
+      # request's Host header is chosen by whoever sent it: a reset link built
+      # from that header can be pointed at an attacker's server by anybody who
+      # can reach the form. HOST HEADER INJECTION, and password reset is where
+      # it is nearly always found. Leave it unset and the application falls
+      # back to the request with a warning at startup, which is fine on a
+      # laptop and is not a production default.
+      ENROLLMENT_MAIL_PUBLIC_BASE_URL: http://localhost:8280/enrollment
+
       # Worth knowing about even though it is commented out. It forces EVERY
       # message to one address regardless of its recipient - the standard
       # protection for a staging environment restored from a production
@@ -190,6 +200,56 @@ services:
 
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # MongoDB - the document store, used as a READ MODEL beside PostgreSQL
+  # ---------------------------------------------------------------------------
+  # Not a replacement for PostgreSQL and not a second system of record. The
+  # Spring service projects course documents into it (see CourseProjectionService)
+  # and nothing else ever writes to it, so it can be dropped and rebuilt at any
+  # time.
+  #
+  # OPT-IN. The Spring service excludes the MongoDB auto-configuration unless the
+  # `mongo` profile is active, so this container is only useful with:
+  #
+  #     mvn spring-boot:run -f spring-service/pom.xml   #         -Dspring-boot.run.profiles=demo,mongo
+  #
+  # That default is deliberate: a read model being unavailable must not stop the
+  # application taking enrollments.
+  mongo:
+    image: mongo:7.0
+    container_name: enrollment-mongo
+
+    ports:
+      # 27117 on the host rather than the default 27017, for the same reason
+      # PostgreSQL is on 55433 and the application on 8280 - this machine runs
+      # other projects. Inside the compose network it is still `mongo:27017`.
+      - "27117:27017"
+
+    environment:
+      MONGO_INITDB_DATABASE: enrollment
+
+    volumes:
+      # A named volume, for the same reason as postgres-data: without it the
+      # data lives in the container writable layer and every `down` destroys it.
+      #
+      # Less critical here than for PostgreSQL, and that difference is the whole
+      # point of a read model: losing this volume costs one rebuild, whereas
+      # losing postgres-data costs the data.
+      - mongo-data:/data/db
+
+    healthcheck:
+      # The MongoDB shell is `mongosh` in 6.0+; older material says `mongo`,
+      # which does not exist in this image.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+    driver: local
+  mongo-data:
     driver: local

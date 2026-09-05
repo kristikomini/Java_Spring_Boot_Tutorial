@@ -1,0 +1,40 @@
+# ===========================================================================
+# THE mongo PROFILE - switch the document read model on
+# ===========================================================================
+#   mvn spring-boot:run -Dspring-boot.run.profiles=demo,mongo
+#
+# Profiles compose: `demo` gives an in-memory PostgreSQL-shaped H2 and seed
+# data, `mongo` adds the document store on top. Two orthogonal decisions,
+# expressed as two profiles rather than one combined one - which is what keeps
+# them usable independently.
+#
+# Re-including the auto-configuration is done by setting the exclude list to
+# EMPTY. Profile-specific properties replace the base value rather than merging
+# with it, which is exactly what is wanted here and is worth knowing: it is also
+# why a profile cannot add ONE item to a base list without restating all of it.
+spring:
+  autoconfigure:
+    exclude:
+
+  data:
+    mongodb:
+      # 27017 is the default MongoDB port. In docker-compose it is published on
+      # 27117 for the same reason PostgreSQL is on 55433 - this machine runs
+      # other projects.
+      uri: mongodb://localhost:27117/enrollment
+      # Create the @Indexed and @CompoundIndex definitions at startup.
+      #
+      # OFF by default in Spring Data MongoDB since 3.0, deliberately, and the
+      # reason is worth knowing: building an index on a large collection at
+      # startup locks it and can take minutes, so production index creation
+      # belongs in a migration run by a human. On for a learning stack, where
+      # the collection is empty and the convenience is worth more.
+      auto-index-creation: true
+
+management:
+  health:
+    mongo:
+      # The read model being down must not make the whole service report DOWN,
+      # because it must not stop the service taking enrollments. Same reasoning
+      # as the exclusion in application.yml.
+      enabled: false

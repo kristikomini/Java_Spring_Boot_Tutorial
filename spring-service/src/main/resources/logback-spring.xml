@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ===========================================================================
+  STRUCTURED LOGGING - the difference between a log you can read and one you
+  can query
+  ===========================================================================
+  The Jakarta EE application logs human-readable lines. So does this one, by
+  default. Both are correct on a laptop and both are close to useless once
+  there are three instances behind a load balancer and someone asks "how many
+  409s did we return for COURSE_FULL yesterday, and to which students?"
+
+  Answering that from plain text means grep and regular expressions against a
+  format nobody promised to keep stable. Answering it from JSON means a query.
+
+  The change is not the content - the same events, the same MDC - it is that
+  each line becomes an object with named fields, so a log aggregator (Loki,
+  Elasticsearch, CloudWatch, Datadog) can index and filter them.
+
+  TWO PROFILES, ON PURPOSE:
+
+    default          human-readable, coloured, for your terminal
+    -Dspring.profiles.active=json    one JSON object per line, for a container
+
+  Nobody should have to read JSON during development, and nothing should have
+  to parse a coloured console format in production. Selecting by profile is how
+  you get both, and it is the standard arrangement.
+
+  Boot 3.4+ can do this with one property (logging.structured.format.console),
+  which is the shorter answer and worth knowing. This file is written out
+  because it shows what that property is doing, and because most codebases you
+  join will have a logback-spring.xml rather than the property.
+
+  WHY logback-spring.xml AND NOT logback.xml: only the -spring variant is read
+  by Spring, which is what makes <springProfile> work at all. Naming it
+  logback.xml means Logback loads it before Spring exists, every profile block
+  is ignored, and you get the default appender with no warning.
+  ===========================================================================
+-->
+<configuration>
+
+    <!-- Boot's own defaults: the colour converters and the standard patterns. -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!--
+      DEVELOPMENT. Human first.
+
+      %X{correlationId:-........} pulls the id out of the MDC - see
+      CorrelationIdFilter - with a placeholder of dots when there is none (a
+      startup line, a scheduled job). Fixed width, so the columns line up and
+      the eye can follow one request down the page.
+    -->
+    <springProfile name="!json">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>
+                    %d{HH:mm:ss.SSS} %highlight(%-5level) [%X{correlationId:-........}] %cyan(%logger{36}) - %msg%n
+                </pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!--
+      PRODUCTION. Machine first.
+
+      One JSON object per line, which is what every aggregator expects. Note
+      what is in it beyond the message:
+
+        correlationId - the field that makes a whole request greppable across
+                        every service that touched it. This is the single most
+                        valuable field in the object, and it is the reason
+                        CorrelationIdFilter exists.
+        thread        - which is how you spot that all your work is on one.
+        application   - so several services can share an index.
+
+      NO PATTERN ESCAPING PROBLEMS, which is the practical reason to do this at
+      all: a message containing a quote, a newline or a brace breaks a
+      hand-rolled JSON pattern and produces a line the aggregator silently
+      drops. Letting a JSON encoder do the escaping is not fastidiousness, it is
+      the difference between losing log lines and not.
+
+      This uses Logback's own JsonEncoder (Logback 1.5+, which Boot 3.5 ships),
+      so there is no extra dependency. The other thing you will meet is
+      net.logstash.logback:logstash-logback-encoder, which is more configurable
+      and needs a dependency.
+    -->
+    <springProfile name="json">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="ch.qos.logback.classic.encoder.JsonEncoder">
+                <withMessage>true</withMessage>
+                <withLoggerName>true</withLoggerName>
+                <withThreadName>true</withThreadName>
+                <withLevel>true</withLevel>
+                <withMDC>true</withMDC>
+                <withThrowable>true</withThrowable>
+                <!--
+                  withFormattedMessage renders "Student {} enrolled" with its
+                  arguments substituted. withMessage keeps the template AND the
+                  arguments separately, which lets an aggregator group every
+                  occurrence of one log statement regardless of its parameters.
+                  Both on, because they answer different questions.
+                -->
+                <withFormattedMessage>true</withFormattedMessage>
+                <withContext>false</withContext>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <!--
+      Application logging stays at DEBUG in development and drops to INFO under
+      the json profile, because DEBUG in production costs money: every line is
+      ingested, indexed and stored by something you pay per gigabyte for.
+    -->
+    <springProfile name="!json">
+        <logger name="it.unicam.cs.enrollment.spring" level="DEBUG"/>
+    </springProfile>
+    <springProfile name="json">
+        <logger name="it.unicam.cs.enrollment.spring" level="INFO"/>
+    </springProfile>
+
+</configuration>

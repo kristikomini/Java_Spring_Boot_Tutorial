@@ -1325,6 +1325,17 @@ figcaption{
   font-family:var(--mono);font-size:9px;letter-spacing:.09em;
   text-transform:uppercase;opacity:.62;display:block;margin-bottom:5px;
 }
+/* A card in the tray is a search result, not a page. Clicking its body puts
+   the note back on the page, so the body - and only the body, never the tool
+   row underneath it - carries the pointer. */
+.note.pickable .note-body{cursor:pointer;border-radius:var(--radius-sm)}
+.note.pickable:hover{box-shadow:0 1px 2px rgba(0,0,0,.10),0 5px 14px rgba(0,0,0,.13)}
+.note.pickable.pinned:hover{
+  box-shadow:0 1px 2px rgba(0,0,0,.10),0 5px 14px rgba(0,0,0,.13),0 0 0 2px var(--accent);
+}
+/* Already out on the page: the copy here is a reminder, so it steps back. */
+.note.away{opacity:.72}
+.note.away:hover{opacity:1}
 .note-preview{
   margin:0;font-size:13.5px;line-height:1.5;opacity:.78;white-space:pre-line;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
@@ -1713,7 +1724,7 @@ figcaption{
     <div class="chapter-head">
       <div class="eyebrow">Chapter 01</div>
       <h1>How to read this course</h1>
-      <p>Forty-one chapters, one running application, and a job market to answer. This page tells you what the boxes mean, which chapter answers which line of that advert, and in what order to walk it.</p>
+      <p>Forty-seven chapters, four runnable projects, and a job market to answer. This page tells you what the boxes mean, which chapter answers which line of that advert, and in what order to walk it.</p>
     </div>
 
     <section class="sub" id="st-1">
@@ -1811,7 +1822,7 @@ mvn package</pre>
 
     <section class="sub" id="st-3">
       <h2>A route through it</h2>
-      <p class="lede">Forty-one chapters is six to eight focused weeks. Reading is not the work — the work is the terminal next to the browser.</p>
+      <p class="lede">Forty-seven chapters is eight to ten focused weeks &mdash; the last six are an extension, and chapters 01&ndash;41 stand on their own if you stop there. Reading is not the work — the work is the terminal next to the browser.</p>
       <div class="tw">
         <table>
           <thead><tr><th>Week</th><th>Chapters</th><th>What you should be able to do at the end of it</th></tr></thead>
@@ -4713,8 +4724,10 @@ String caller = securityContext.getCallerPrincipal().getName();</pre>
           <tr><td><b>PBKDF2, 210k iterations, per-row salt</b></td><td>Slow on purpose: you pay it once per login, an attacker pays it per guess. Argon2id is better because it is memory-hard, and would mean a third-party dependency &mdash; the JDK gives you PBKDF2 for free, so the algorithm path is readable end to end. The stored form is <code class="inline">pbkdf2-sha256$210000$salt$hash</code>, self-describing so the cost can be raised later and old rows upgraded on their next successful login.</td></tr>
           <tr><td><b>An opaque session token in a table, not a JWT</b></td><td>A JWT cannot be revoked without a denylist &mdash; at which point you have a session table again, but worse. The token is 32 random bytes; only its SHA-256 is stored, so a leaked backup yields nothing replayable. Plain SHA-256 rather than PBKDF2 here, because 256 bits of entropy has no dictionary to guess. JWT becomes the right answer when several services must verify a caller without sharing a database.</td></tr>
           <tr><td><b><code class="inline">HttpOnly</code> cookie, <code class="inline">SameSite=Strict</code></b></td><td>The trade this chapter refuses to give you a free answer to. Script cannot read the cookie, so cross-site scripting cannot exfiltrate it; the browser attaches it automatically, so cross-site request forgery becomes possible. That second risk is then paid for twice: <code class="inline">SameSite</code>, and a custom request header a cross-site form cannot set.</td></tr>
-          <tr><td><b>One error for two causes</b></td><td>Unknown address and wrong password return the same 401, and the hash runs even for an unknown address so the two take the same time. Registration does not report a duplicate either. Otherwise the form is an oracle for which addresses have accounts.</td></tr>
-          <tr><td><b>Two throttle counters</b></td><td>Per account stops a password list against one email; per source address stops credential stuffing, where no single account is tried twice and the first counter never fires. Implementing only the first is the common half-measure, and it stops the attack nobody is running.</td></tr>
+          <tr><td><b>One error for two causes</b></td><td>Unknown username and wrong password return the same 401, and the hash runs even for an unknown username so the two take the same time. A malformed handle gets that same sentence rather than a helpful description of the rule &mdash; the helpful version tells an attacker which guesses are worth making. Otherwise the form is an oracle for which accounts exist.</td></tr>
+          <tr><td><b>A username to sign in with, an address to be reached at</b></td><td>They were one column once, and the seam showed the first time somebody forgot their password: the reset link has to go somewhere the login form does not ask about. Splitting them also means an address can change without the account becoming a different account, and stops a semi-public string &mdash; the one in mailing lists, CC fields and breach dumps &mdash; being half of every credential pair. The cost is a mandatory column added to a populated table, which is the three-statement migration in <code class="inline">V5</code>: add nullable, backfill, tighten.</td></tr>
+          <tr><td><b>Reset by single-use token, not by security question</b></td><td>256 bits from a CSPRNG, only its SHA-256 stored, one hour, spent on first use, and every session revoked when it lands. The endpoint answers <code class="inline">202</code> for an address it knows and one it has never seen, which is the one place enumeration is still worth refusing absolutely. The link's base URL comes from configuration and not from the <code class="inline">Host</code> header &mdash; that is <em class="term">host header injection</em>, and password reset is where it is nearly always found.</td></tr>
+          <tr><td><b>Two throttle counters, and a third for mail</b></td><td>Per account stops a password list against one handle; per source address stops credential stuffing, where no single account is tried twice and the first counter never fires. Implementing only the first is the common half-measure, and it stops the attack nobody is running. Reset requests need their own limit, because they never fail &mdash; without one, an anonymous form is a way of posting a thousand emails at a stranger.</td></tr>
           <tr><td><b>The owner is in the query</b></td><td><code class="inline">findOwned(account, id)</code> rather than <code class="inline">findById(id)</code> plus a check. There is no version of that method that can return somebody else's row, so the insecure-direct-object-reference bug cannot be reintroduced by a second code path.</td></tr>
         </tbody>
       </table>
@@ -4728,7 +4741,7 @@ String caller = securityContext.getCallerPrincipal().getName();</pre>
       </div>
 
       <h3 style="font-size:15px;margin-top:20px">What is still missing, stated plainly</h3>
-      <p>No email verification, so an address is never proved. No password reset, which for a real product is not optional and needs a mail server. No multi-factor. No audit log of sign-ins. The rate limiter is in memory, so it resets on redeploy and is per node &mdash; on a cluster an attacker gets its budget once per node, and the real answer is a shared store plus a limiter at the ingress. And the enrollment API next door is still completely unauthenticated, on purpose, because it is the thing this chapter is about.</p>
+      <p>No email verification, so an address is never proved &mdash; which means a typo at registration produces an account whose reset link goes to a stranger, and nothing here notices. No multi-factor. No audit log of sign-ins, though a spent reset token is now kept for thirty days, which is the smallest useful version of one. Registration will confirm whether an address is already in use, and that is a deliberate reversal: while the address <em>was</em> the login it was worth hiding, and a signup form that refuses without saying which field is wrong is a form nobody can get past. The rate limiter is in memory, so it resets on redeploy and is per node &mdash; on a cluster an attacker gets its budget once per node, and the real answer is a shared store plus a limiter at the ingress. And the enrollment API next door is still completely unauthenticated, on purpose, because it is the thing this chapter is about.</p>
       <p>That list is the point of the section. Writing down what you have not built reads as engineering judgement; discovering it in review reads as something else.</p>
     </section>
 
@@ -9152,7 +9165,7 @@ git log --format='%an' -- src/main/java/.../EnrollmentService.java | sort | uniq
       <div class="map">
         <div class="mapr"><div class="req-txt">Conoscenza del linguaggio Java (8+ / 11+), OOP</div><div class="req-go">ch. <b>04 Java laws</b> &middot; <b>05 Collections</b> &middot; <b>06 Threads</b></div></div>
         <div class="mapr"><div class="req-txt">SQL e database relazionali (Oracle, PostgreSQL, MySQL, SQL Server)</div><div class="req-go">ch. <b>07 SQL</b> &middot; <b>08 Persistence</b></div></div>
-        <div class="mapr"><div class="req-txt">Spring, Spring Boot, Spring MVC, Spring Data</div><div class="req-go">ch. <b>16 Spring Boot</b> &middot; <b>17 Spring REST</b> &middot; <b>18 Rosetta stone</b></div></div>
+        <div class="mapr"><div class="req-txt">Spring, Spring Boot, Spring MVC, Spring Data</div><div class="req-go">ch. <b>16 Spring Boot</b> &middot; <b>17 Spring REST</b> &middot; <b>18 Rosetta stone</b> &middot; <b>42 Spring, running</b></div></div>
         <div class="mapr"><div class="req-txt">Hibernate / JPA, mapping, lazy loading</div><div class="req-go">ch. <b>08 Persistence</b> &middot; <b>09 Lifecycle</b></div></div>
         <div class="mapr"><div class="req-txt">Sviluppo di API REST, web services, JSON</div><div class="req-go">ch. <b>12 REST</b> &middot; <b>13 The boundary</b></div></div>
         <div class="mapr"><div class="req-txt">Transazioni, concorrenza, integrità dei dati</div><div class="req-go">ch. <b>11 Transactions</b> &middot; <b>07 SQL</b></div></div>
@@ -9162,7 +9175,7 @@ git log --format='%an' -- src/main/java/.../EnrollmentService.java | sort | uniq
         <div class="mapr"><div class="req-txt">Unit testing (JUnit, Mockito), qualità del codice</div><div class="req-go">ch. <b>20 Testing</b></div></div>
         <div class="mapr"><div class="req-txt">Metodologie Agile / Scrum, lavoro in team</div><div class="req-go">ch. <b>22 Agile and the team</b></div></div>
         <div class="mapr"><div class="req-txt">Buona conoscenza della lingua inglese (B1&ndash;B2)</div><div class="req-go">ch. <b>24 English for developers</b></div></div>
-        <div class="mapr"><div class="req-txt">JavaScript, TypeScript, Angular o React</div><div class="req-go">ch. <b>32 The front end</b></div></div>
+        <div class="mapr"><div class="req-txt">JavaScript, TypeScript, Angular o React</div><div class="req-go">ch. <b>32 The front end</b> &middot; <b>46 Angular</b></div></div>
         <div class="mapr"><div class="req-txt">Application server: JBoss / WildFly / Tomcat, Java EE</div><div class="req-go">ch. <b>02 Foundations</b> &middot; <b>27 Deployment</b></div></div>
         <div class="mapr"><div class="req-txt">Problem solving, precisione, autonomia, proattività</div><div class="req-go">ch. <b>23 Debugging</b> &middot; <b>22 Agile</b></div></div>
       </div>
@@ -9170,13 +9183,16 @@ git log --format='%an' -- src/main/java/.../EnrollmentService.java | sort | uniq
       <p>And the <em class="term">nice to have</em> block, which is where the gap between candidates is widest:</p>
       <div class="map">
         <div class="mapr nice"><div class="req-txt">Processi di continuous integration (Jenkins, GitLab CI, Actions)</div><div class="req-go">ch. <b>21 CI and Jenkins</b></div></div>
-        <div class="mapr nice"><div class="req-txt">Architetture a microservizi</div><div class="req-go">ch. <b>33 Microservices</b></div></div>
+        <div class="mapr nice"><div class="req-txt">Architetture a microservizi</div><div class="req-go">ch. <b>33 Microservices</b> &middot; <b>45 Distributed</b></div></div>
         <div class="mapr nice"><div class="req-txt">Docker, container, Kubernetes</div><div class="req-go">ch. <b>33 Microservices</b></div></div>
-        <div class="mapr nice"><div class="req-txt">Cloud: AWS, Azure, GCP</div><div class="req-go">ch. <b>33 Microservices</b> &middot; <b>27 Deployment</b></div></div>
-        <div class="mapr nice"><div class="req-txt">NoSQL, code di messaggi, Kafka</div><div class="req-go">ch. <b>33 Microservices</b> &middot; <b>10 Injection</b></div></div>
+        <div class="mapr nice"><div class="req-txt">Cloud: AWS, Azure, GCP</div><div class="req-go">ch. <b>33 Microservices</b> &middot; <b>27 Deployment</b> &middot; <code class="inline">docs/CLOUD.md</code></div></div>
+        <div class="mapr nice"><div class="req-txt">NoSQL, code di messaggi, Kafka</div><div class="req-go">ch. <b>44 NoSQL</b> &middot; <b>45 Distributed</b></div></div>
         <div class="mapr nice"><div class="req-txt">Sicurezza, secure coding, autenticazione</div><div class="req-go">ch. <b>15 Security</b></div></div>
         <div class="mapr nice"><div class="req-txt">Performance, profiling, tuning</div><div class="req-go">ch. <b>25 Performance</b></div></div>
-        <div class="mapr nice"><div class="req-txt">Job schedulati, batch notturni</div><div class="req-go">ch. <b>26 Scheduled jobs</b></div></div>
+        <div class="mapr nice"><div class="req-txt">Job schedulati, batch notturni</div><div class="req-go">ch. <b>26 Scheduled jobs</b> &middot; <b>43 Analytics</b></div></div>
+        <div class="mapr nice"><div class="req-txt">Data &amp; Analytics, reporting, SQL analitico</div><div class="req-go">ch. <b>43 Analytics</b></div></div>
+        <div class="mapr nice"><div class="req-txt">OpenAPI/Swagger, versioning, caching, observability</div><div class="req-go">ch. <b>47 The platform</b></div></div>
+        <div class="mapr nice"><div class="req-txt">Certificazioni riconosciute</div><div class="req-go"><code class="inline">docs/CERTIFICATIONS.md</code></div></div>
       </div>
 
       <details class="chk">
@@ -9185,7 +9201,7 @@ git log --format='%an' -- src/main/java/.../EnrollmentService.java | sort | uniq
       </details>
       <details class="chk">
         <summary>A listing wants &ldquo;J2EE, Spring, Hibernate, JAX-WS, JBoss, Maven, Git, Angular, Oracle, SQL&rdquo;. You have this course and this project. Which of the ten can you honestly claim?</summary>
-        <p class="a">Eight of the ten, at junior depth, and you can name the file for each: Java EE and JBoss because you deployed a WAR to WildFly by hand; Hibernate, Maven, Git, SQL and Oracle-family SQL from the whole middle of the course; Spring from chapters 16&ndash;18; Angular at the level of chapter 32. JAX-WS &mdash; SOAP &mdash; is the one genuinely missing piece, and the right move is to say so. A candidate who volunteers the one gap in a list of ten is far more credible than one who claims all ten.</p>
+        <p class="a">Nine of the ten, at junior depth, and you can name the file for each: Java EE and JBoss because you deployed a WAR to WildFly by hand; Hibernate, Maven, Git, SQL and Oracle-family SQL from the whole middle of the course; Spring from chapters 16&ndash;18 <em>and a second running application</em> in chapter 42; Angular from chapter 46, where there is an app that builds and talks to this API. JAX-WS &mdash; SOAP &mdash; is the one genuinely missing piece, and the right move is to say so. A candidate who volunteers the one gap in a list of ten is far more credible than one who claims all ten.</p>
       </details>
     </section>
 
@@ -9789,6 +9805,810 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     </section>
   </article>
 
+
+  <!-- ==================== 42. SPRING, RUNNING ==================== -->
+  <article class="chapter" data-cat="Spring, running" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 42</div>
+      <h1>The chapters you just read, as a second application</h1>
+      <p>Chapters 16 to 18 taught Spring against a repository that contained none. That gap is now closed: <code class="inline">spring-service/</code> is a running Spring Boot application over the <strong>same PostgreSQL schema</strong>, serving the <strong>same API contract</strong>. Every table in chapter 18 is now two files you can open side by side.</p>
+    </div>
+
+    <section class="sub" id="sr-1">
+      <h2>Three commands, and nothing installed</h2>
+      <p class="lede">Before any of the theory: see it running. No PostgreSQL, no Docker, no configuration.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">terminal</span><span>the demo profile — in-memory H2, seeded</span></div>
+<pre>mvn spring-boot:run -f spring-service/pom.xml <span class="k">-Dspring-boot.run.profiles=demo</span>
+
+<span class="c"># then:</span>
+curl -s localhost:8281/api/v1/courses?year=2026 | jq
+open http://localhost:8281/swagger-ui.html</pre>
+      </div>
+      <p>The WAR is still on <strong>8280</strong>. This is on <strong>8281</strong>. Both can run at once, against the same database, and a client cannot tell them apart &mdash; which is the claim this whole chapter exists to make checkable.</p>
+      <div class="eli5">
+        <span class="tag">In plain words</span>
+        <p>Imagine the same play, staged twice. Same script, same characters, same ending &mdash; one production at a big municipal theatre that was already there before anyone wrote the play, and one in a van that carries its own stage around with it.</p>
+        <p>WildFly is the theatre: you install it once, and your WAR is the script you hand over. Spring Boot is the van: the jar contains the stage, the lighting and the seats, and <code class="inline">java -jar</code> parks it anywhere. The play does not change. Everything about who owns the building does.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="sr-2">
+      <h2>Where the server went</h2>
+      <p>The Jakarta EE application has no <code class="inline">main()</code> anywhere &mdash; chapter 02 makes that the whole point. This one does, and it is four lines:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../EnrollmentSpringApplication.java</span><span>the entry point that does not exist over there</span></div>
+<pre><span class="a">@SpringBootApplication</span>
+<span class="a">@EnableScheduling</span>
+<span class="k">public class</span> EnrollmentSpringApplication {
+    <span class="k">public static void</span> main(String[] args) {
+        SpringApplication.run(EnrollmentSpringApplication.class, args);
+    }
+}</pre>
+      </div>
+      <p><code class="inline">@SpringBootApplication</code> is three annotations at once, and being able to name all three is a standard interview question: <code class="inline">@SpringBootConfiguration</code>, <code class="inline">@ComponentScan</code> from <em>this package downwards</em>, and <code class="inline">@EnableAutoConfiguration</code>.</p>
+      <p>That last one is the part that looks like magic and is not. Spring Boot ships a list of candidate configuration classes, each guarded by conditions &mdash; <em class="term">is Hibernate on the classpath? then configure JPA, unless the application already defined an EntityManagerFactory</em>. It is a large, well-tested pile of if-statements about the classpath.</p>
+      <div class="note trap">
+        <span class="tag">The one command that removes the mystery</span>
+        <p><code class="inline">mvn spring-boot:run -Dspring-boot.run.arguments=--debug</code> prints the <strong>conditions evaluation report</strong>: every auto-configuration that matched and why, and every one that did not and why not. The next time something is not configured the way you expected, that report answers it in seconds. It turns auto-configuration from magic into a list you can read.</p>
+      </div>
+      <p>And notice what is <em>not</em> in that class: no <code class="inline">@EnableJpaRepositories</code>, no <code class="inline">@EnableTransactionManagement</code>, no <code class="inline">@EnableWebMvc</code>. All three are implied by the starters. Adding <code class="inline">@EnableWebMvc</code> by hand is actively harmful &mdash; it switches <em>off</em> the MVC auto-configuration and you lose the Jackson setup, the static resources and the error handling in one move.</p>
+      <details class="chk">
+        <summary><code>@EnableScheduling</code> <em>is</em> there. Why does that one still have to be asked for?</summary>
+        <p class="a">Because a scheduler thread pool is a real cost, and Boot will not start one on the off chance you wanted it. Leave it off and every <code>@Scheduled</code> method compiles, deploys and never runs once &mdash; with no warning anywhere. It is the quietest failure in the framework, and <code>@EnableCaching</code> has exactly the same shape.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="sr-3">
+      <h2>The repository you do not write</h2>
+      <p class="lede">Open <code class="inline">repository/CourseRepository.java</code> in both projects. One is a class of about eighty lines. The other is an interface with no implementation anywhere.</p>
+      <p>Three different mechanisms are at work in that interface, and naming all three is the difference between <q>Spring Data is magic</q> and knowing what you are looking at.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../CourseRepository.java</span><span>three mechanisms, in order</span></div>
+<pre><span class="c">// 1. INHERITED — findById, save, findAll, count, existsById and ~20 more</span>
+<span class="k">public interface</span> CourseRepository <span class="k">extends</span> JpaRepository&lt;Course, Long&gt; {
+
+  <span class="c">// 2. DERIVED — parsed from the METHOD NAME, validated at startup</span>
+  Optional&lt;Course&gt; findByCodeAndAcademicYear(String code, <span class="k">int</span> academicYear);
+
+  <span class="c">// 3. EXPLICIT — because no method name can express a JOIN FETCH</span>
+  <span class="a">@Query</span>(<span class="s">"SELECT c FROM Course c JOIN FETCH c.professor "</span> +
+         <span class="s">"WHERE c.enrollmentOpensAt &lt;= :now AND c.enrollmentClosesAt &gt; :now"</span>)
+  List&lt;Course&gt; findOpenForEnrollment(<span class="a">@Param</span>(<span class="s">"now"</span>) Instant now);
+
+  <span class="c">// the pessimistic lock — three words instead of a method call</span>
+  <span class="a">@Lock</span>(LockModeType.PESSIMISTIC_WRITE)
+  <span class="a">@Query</span>(<span class="s">"SELECT c FROM Course c WHERE c.id = :id"</span>)
+  Optional&lt;Course&gt; findByIdForUpdate(<span class="a">@Param</span>(<span class="s">"id"</span>) Long id);
+}</pre>
+      </div>
+      <p>The lock emits the same <code class="inline">SELECT &hellip; FOR UPDATE</code> that chapter 11 spends a chapter on. Identical SQL, identical semantics, three words of annotation instead of <code class="inline">em.find(Course.class, id, LockModeType.PESSIMISTIC_WRITE)</code>. That is a fair summary of the whole framework difference.</p>
+      <div class="note trap">
+        <span class="tag">The limit of derived queries, and where teams get caught</span>
+        <p><strong>No method name can express a fetching strategy.</strong> Fetching is not a filter, so <code class="inline">JOIN FETCH</code> is unreachable by name-derivation &mdash; and that is precisely where a team that only ever writes derived queries ends up with a slow application and no idea why. The N+1 from chapter 08 arrives silently, because nothing failed.</p>
+        <p>The second sharp edge: <strong>a JOIN FETCH plus a <code class="inline">Pageable</code></strong>. Hibernate logs <q>firstResult/maxResults specified with collection fetch; applying in memory</q> and paginates <em>in the JVM</em> &mdash; loading every matching row before discarding all but twenty. On a large table that is an outage. The fix is an explicit <code class="inline">countQuery</code>.</p>
+      </div>
+      <p>The rule most teams settle on: <b>derive it while the name stays readable, annotate it after that.</b> <code class="inline">findByCodeAndAcademicYearAndSemesterOrderByTitleAsc</code> is a real method name that real codebases contain, and it is worse than the four lines of JPQL it replaces.</p>
+    </section>
+
+    <section class="sub" id="sr-4">
+      <h2>Six files become one</h2>
+      <p>The Jakarta EE application has six classes in <code class="inline">api/exception/</code>, each implementing <code class="inline">ExceptionMapper&lt;T&gt;</code>. Spring puts all six in one <code class="inline">@RestControllerAdvice</code>, dispatching on the parameter type &mdash; the same mechanism, expressed as methods rather than classes.</p>
+      <p>Which is better is a real question with a real answer. Six files means each is trivially testable and a seventh touches nothing. One file means <strong>the whole error contract of the API is visible on one screen</strong>, which is what you actually want when somebody asks <q>what does this service return when X fails?</q> Most teams find the second more valuable and split it once it passes a few hundred lines.</p>
+      <p>The contract itself does not change. Same <code class="inline">type</code> URIs, same <code class="inline">errorCode</code> values, same <code class="inline">correlationId</code>:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">terminal</span><span>same request, two implementations, one answer</span></div>
+<pre><span class="c"># WildFly, port 8280</span>
+curl -s -X POST localhost:8280/enrollment/api/enrollments -d '{"studentId":1,"courseId":2}'
+<span class="c"># Spring Boot, port 8281</span>
+curl -s -X POST localhost:8281/api/v1/enrollments      -d '{"studentId":1,"courseId":2}'
+
+<span class="c"># both:</span>
+{ <span class="s">"type"</span>: <span class="s">"https://api.unicam.it/problems/business-rule-violation"</span>,
+  <span class="s">"status"</span>: 409,
+  <span class="s">"errorCode"</span>: <span class="s">"COURSE_FULL"</span>,
+  <span class="s">"correlationId"</span>: <span class="s">"73e0d07c"</span> }</pre>
+      </div>
+      <div class="note trap">
+        <span class="tag">A real bug, found by a test that was looking for something else</span>
+        <p>The first version of that advice had a catch-all <code class="inline">@ExceptionHandler(Exception.class)</code> and nothing else. Spring throws <code class="inline">NoResourceFoundException</code> when a path matches no handler &mdash; and that is an <code class="inline">Exception</code>. So <strong>every unknown URL returned 500 instead of 404</strong>, logged at ERROR with a stack trace.</p>
+        <p>Three consequences, all real: the client is told the server is broken when the client is wrong; the error log fills with traces from anyone port-scanning you; and any alerting on 5xx fires on traffic you do not control. The same applied to the wrong HTTP verb and to malformed JSON.</p>
+        <p>It was caught by a test asserting that <code class="inline">/actuator/env</code> returns 404 &mdash; a <em>security</em> assertion that found a <em>correctness</em> bug. The general rule: a catch-all handler silently captures the framework's own control-flow exceptions, and each one needs its own handler or a precise 4xx becomes a misleading 5xx.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="sr-5">
+      <h2>Where it is genuinely the same, and genuinely different</h2>
+      <p class="lede">The honest summary, and the one worth carrying into an interview.</p>
+      <p><strong>Identical:</strong> every JPA and Bean Validation annotation on the entities, because those are <em>specifications</em> &mdash; Spring ships the same Hibernate that WildFly does. <code class="inline">EnrollmentStatus</code>, the state machine, is byte-for-byte the same file, because it is pure Java. The business rules in <code class="inline">EnrollmentService.enroll</code> are line-for-line the same shape, in the same order, raising the same exceptions.</p>
+      <p>So your mapping knowledge transfers <em>completely</em>. What changes is who starts Hibernate, who opens the transaction, and who hands you the <code class="inline">EntityManager</code>.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Genuinely different</th><th>Why it bites</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">Controller scope</td><td>A JAX-RS resource is <code class="inline">@RequestScoped</code>; a <code class="inline">@RestController</code> is a <strong>singleton</strong>. A mutable field is a race condition that only appears under load. The mistake most likely to be made by porting with find-and-replace.</td></tr>
+            <tr><td class="mono">Two validation exceptions</td><td>A rejected <code class="inline">@RequestBody</code> gives <code class="inline">MethodArgumentNotValidException</code>; a rejected query parameter gives <code class="inline">ConstraintViolationException</code>. Handle one and half your 400s become 500s. JAX-RS has one exception for both.</td></tr>
+            <tr><td class="mono">Open Session In View</td><td><strong>On by default in Boot</strong>, and switched off here. It holds a database connection until the response is written, and hides every N+1 completely &mdash; the queries still happen, nothing ever fails, nobody notices until production.</td></tr>
+            <tr><td class="mono">Exception translation</td><td><code class="inline">@Repository</code> converts Hibernate and JDBC exceptions into Spring's <code class="inline">DataAccessException</code> family, which is why the handler catches <code class="inline">DataIntegrityViolationException</code> rather than a Hibernate type.</td></tr>
+            <tr><td class="mono">The rollback rule</td><td><strong>The same</strong> &mdash; unchecked only, in both. People expect Spring to differ and it does not. Only the attribute names change: <code class="inline">rollbackFor</code> versus <code class="inline">rollbackOn</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="chk">
+        <summary>The self-invocation trap: which of the two frameworks has it?</summary>
+        <p class="a">Both, identically, and it is the single most valuable Spring internal to understand. <code>@Transactional</code> is implemented with a <strong>proxy</strong> &mdash; the bean injected elsewhere is a wrapper that opens a transaction and delegates. A call from one method to another inside the same object never touches the wrapper, so no transaction is opened, with no error and no warning. It is why <code>private @Transactional</code> silently does nothing. The same applies to <code>@Cacheable</code>, <code>@Async</code> and <code>@Retryable</code>, and the fix is always the same: move the annotated method to a different bean. <code>StatisticsRefreshService</code> in this repository exists for exactly that reason.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="sr-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">What porting between the two actually teaches.</p>
+      <ol class="rules">
+          <li><b>The specifications transfer; the container does not.</b><span>JPA, Bean Validation and JSON binding are standards with the same implementations underneath. Your entity mappings are portable knowledge. Who starts them, and who owns the transaction, is not.</span></li>
+          <li><b>A <code class="inline">@RestController</code> is a singleton.</b><span>Everything about the current request arrives as a method parameter; fields are collaborators injected once at startup. A mutable controller field is chapter 06 arriving from a third direction.</span></li>
+          <li><b>Derived queries cannot express fetching.</b><span>No method name reaches <code class="inline">JOIN FETCH</code>, which is exactly where a derive-everything codebase acquires an N+1 nobody can see. Annotate the query the moment the projection needs an association.</span></li>
+          <li><b>A catch-all exception handler swallows the framework's own signals.</b><span><code class="inline">@ExceptionHandler(Exception.class)</code> will capture <q>no such path</q> and <q>wrong verb</q> and turn a correct 404 into a misleading 500. Handle them explicitly, or extend <code class="inline">ResponseEntityExceptionHandler</code>, which pre-declares them all.</span></li>
+      </ol>
+    </section>
+  </article>
+
+  <!-- ==================== 43. ANALYTICS ==================== -->
+  <article class="chapter" data-cat="Analytics" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 43</div>
+      <h1>The SQL that chapter 07 stopped before</h1>
+      <p>Chapter 07 ends at <code class="inline">GROUP BY</code>. Every listing that mentions <em>Data &amp; Analytics</em> is asking about what comes after it: window functions, CTEs, and the difference between a query that serves a user and a query that serves a dashboard.</p>
+    </div>
+
+    <section class="sub" id="an-1">
+      <h2>A window function, in one sentence</h2>
+      <p class="lede">It computes across a set of rows related to the current row, <strong>without collapsing them</strong> the way <code class="inline">GROUP BY</code> does. Every input row still comes out, with an extra column.</p>
+      <p>That is the whole definition and it is the answer to the interview question. Before window functions, ranking within a group meant a self-join or a correlated subquery per row &mdash; if you have ever written <q>the top three per category</q> with a subquery, this is what replaces it.</p>
+      <div class="eli5">
+        <span class="tag">In plain words</span>
+        <p>Think of a class list with exam marks. <code class="inline">GROUP BY</code> is the teacher summarising: <em>one line per class, average 24</em>. The individual students are gone.</p>
+        <p>A window function is the teacher writing a <b>rank next to each name</b>. Everybody is still on the list; each one now knows where they stand. <code class="inline">PARTITION BY</code> is the instruction <q>rank them within their own class, not the whole school</q>.</p>
+      </div>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../ReportingRepository.java</span><span>courses ranked inside their department</span></div>
+<pre><span class="k">SELECT</span> c.code, p.department,
+       <span class="k">COUNT</span>(e.id)                                <span class="k">AS</span> enrollments,
+       <span class="k">RANK</span>()       <span class="k">OVER</span> (<span class="k">PARTITION BY</span> p.department
+                          <span class="k">ORDER BY</span> <span class="k">COUNT</span>(e.id) <span class="k">DESC</span>) <span class="k">AS</span> departmentRank,
+       <span class="k">DENSE_RANK</span>() <span class="k">OVER</span> (<span class="k">PARTITION BY</span> p.department
+                          <span class="k">ORDER BY</span> <span class="k">COUNT</span>(e.id) <span class="k">DESC</span>) <span class="k">AS</span> departmentDenseRank
+<span class="k">FROM</span> courses c
+<span class="k">JOIN</span> professors p       <span class="k">ON</span> p.id = c.professor_id
+<span class="k">LEFT JOIN</span> enrollments e <span class="k">ON</span> e.course_id = c.id
+<span class="k">GROUP BY</span> c.id, c.code, p.department</pre>
+      </div>
+      <p>Notice that the window ranks by <code class="inline">COUNT(e.id)</code> &mdash; an aggregate. That is legal because <strong>window functions are evaluated after <code class="inline">GROUP BY</code></strong>, which is the same clause-ordering fact chapter 07 uses to explain why <code class="inline">WHERE</code> cannot see a <code class="inline">SELECT</code> alias. The full order:</p>
+      <p style="font-family:var(--mono);font-size:12.5px">FROM &rarr; JOIN &rarr; WHERE &rarr; GROUP BY &rarr; HAVING &rarr; <b>WINDOW</b> &rarr; SELECT &rarr; ORDER BY &rarr; LIMIT</p>
+    </section>
+
+    <section class="sub" id="an-2">
+      <h2>RANK, DENSE_RANK, ROW_NUMBER</h2>
+      <p>Three functions in one family, and being asked to explain the difference is close to guaranteed in any interview that mentions SQL seriously. With enrolment counts of 10, 5, 5 and 2:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th class="num">enrollments</th><th class="num">RANK</th><th class="num">DENSE_RANK</th><th class="num">ROW_NUMBER</th></tr></thead>
+          <tbody>
+            <tr><td class="num">10</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+            <tr><td class="num">5</td><td class="num">2</td><td class="num">2</td><td class="num">2</td></tr>
+            <tr><td class="num">5</td><td class="num">2</td><td class="num">2</td><td class="num">3</td></tr>
+            <tr><td class="num">2</td><td class="num"><b>4</b></td><td class="num"><b>3</b></td><td class="num">4</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code class="inline">RANK</code> leaves a gap after a tie; <code class="inline">DENSE_RANK</code> does not; <code class="inline">ROW_NUMBER</code> never ties and picks an arbitrary winner. <strong>Neither is correct in general.</strong> Which one you want depends on whether <q>third place</q> should exist when two courses tie for second &mdash; a product decision, not a technical one. <code class="inline">ROW_NUMBER</code> is the one you use for deduplication, and the wrong one for a leaderboard.</p>
+      <div class="note trap">
+        <span class="tag"><code class="inline">COUNT(e.id)</code>, never <code class="inline">COUNT(*)</code>, after a LEFT JOIN</span>
+        <p>A <code class="inline">LEFT JOIN</code> produces one all-NULL row for a course with no enrollments. <code class="inline">COUNT(*)</code> counts that row as <strong>1</strong>; <code class="inline">COUNT</code> of a nullable column skips nulls and returns <strong>0</strong>.</p>
+        <p>Every empty course in the report claiming one student is the classic version of this bug, and it survives review because both queries look right and one of them is only wrong for the rows you forgot to create in the test.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="an-3">
+      <h2>Two more that earn their place</h2>
+      <p><strong>A percentage of the total, in one pass.</strong> <code class="inline">SUM(COUNT(*)) OVER ()</code> looks illegal and is not: <code class="inline">COUNT(*)</code> is evaluated per group by the <code class="inline">GROUP BY</code>, and <code class="inline">SUM(&hellip;) OVER ()</code> then adds those group counts across the whole result. An empty <code class="inline">OVER ()</code> means <q>the window is every row</q>, so it is the grand total.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">the enrollment funnel</span><span>counts and share, one query</span></div>
+<pre><span class="k">SELECT</span> e.status,
+       <span class="k">COUNT</span>(*)                                           <span class="k">AS</span> count,
+       <span class="k">ROUND</span>(<span class="s">100.0</span> * <span class="k">COUNT</span>(*) / <span class="k">SUM</span>(<span class="k">COUNT</span>(*)) <span class="k">OVER</span> (), 2) <span class="k">AS</span> percentage
+<span class="k">FROM</span> enrollments e <span class="k">JOIN</span> courses c <span class="k">ON</span> c.id = e.course_id
+<span class="k">WHERE</span> c.academic_year = :year
+<span class="k">GROUP BY</span> e.status</pre>
+      </div>
+      <div class="note trap">
+        <span class="tag"><code class="inline">100.0</code>, not <code class="inline">100</code></span>
+        <p>With integer operands, <code class="inline">count / total</code> is <strong>integer division</strong> and every percentage below 100% comes out as <code class="inline">0</code>. No error, no warning, a column of zeroes. The decimal point is load-bearing.</p>
+      </div>
+      <p><strong>Comparing to the previous period.</strong> <code class="inline">LAG(x) OVER (PARTITION BY code ORDER BY year)</code> gives the value of <code class="inline">x</code> from the previous row in that partition. It is how every <q>versus last month</q> column in every dashboard is built, and the alternative &mdash; joining the table to itself on <code class="inline">year = year - 1</code> &mdash; silently drops any course that skipped a year. <code class="inline">LEAD</code> is the same function looking forwards.</p>
+      <details class="chk">
+        <summary>A course in its first year has no previous year. Should <code>delta</code> be <code>0</code> or <code>NULL</code>?</summary>
+        <p class="a"><strong>NULL</strong>, and the projection interface must therefore use <code>Long</code> rather than <code>long</code>. Zero means <q>no change</q>; NULL means <q>not applicable</q>. A report that cannot distinguish a brand-new course from one whose numbers held steady will eventually mislead somebody, and a primitive field either throws on unboxing or silently coerces to 0 and reports <q>no change</q> for every new course. This is chapter 04's argument about <code>Optional</code>, reaching all the way into a report column.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="an-4">
+      <h2>OLTP and OLAP, as two endpoints</h2>
+      <p class="lede">Chapter 33 asserts that the reporting query belongs off the transactional database. This is what that means when you build it.</p>
+      <p>Everything in the schema before now is <strong>OLTP</strong>: narrow rows, heavily indexed, written constantly, read one row at a time inside a transaction. The <code class="inline">enrollments</code> table exists to answer <q>may this student take this seat, right now</q> correctly under concurrency.</p>
+      <p><code class="inline">course_statistics</code> is the other shape. It is written once every few minutes by a job, never inside a user transaction, read by queries that scan most of it, and it stores an <strong>answer</strong> rather than a fact. The <code class="inline">reporting</code> package serves both kinds side by side:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th>Live</th><th>Materialised</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">endpoint</td><td><code class="inline">/reports/funnel</code></td><td><code class="inline">/reports/course-statistics</code></td></tr>
+            <tr><td class="mono">accuracy</td><td>to the millisecond</td><td>up to 10 minutes stale</td></tr>
+            <tr><td class="mono">cost</td><td>scans the enrollments table</td><td>one indexed scan of a small table</td></tr>
+            <tr><td class="mono">scales with</td><td>number of enrollments</td><td>number of courses</td></tr>
+            <tr><td class="mono">honest about it?</td><td>n/a</td><td>every response carries <code class="inline">computedAt</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That last row is not decoration. <strong>A derived view without a timestamp is a view nobody can trust</strong> &mdash; there is no way to tell live data from the output of a job that has been failing since Friday.</p>
+      <p>Two deliberate denormalisations live in that table, and both would be wrong in an OLTP schema: the course code and title are <em>copied</em> so a dashboard reads one row without joining back, and the numbers are stored rather than computed. Normalisation optimises for consistent writes; a reporting table optimises for cheap reads. Different job, different rules.</p>
+      <div class="note trap">
+        <span class="tag">Why not a materialized view?</span>
+        <p>PostgreSQL has them and they do exactly this. Two reasons to prefer a table plus a job: <code class="inline">REFRESH MATERIALIZED VIEW</code> takes a lock that blocks readers unless you use <code class="inline">CONCURRENTLY</code> (which needs a unique index and is slower), and the refresh logic then lives in the database where it cannot be unit-tested, versioned with the application, or given a retry and a metric.</p>
+        <p>Both answers are defensible. A table plus a job is the one that fits an application team; a materialized view is the one that fits a data team.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="an-5">
+      <h2>The job, and why it is not Spring Batch</h2>
+      <p>Spring Batch is the name on the adverts. It is the right tool when you need restart from the failed chunk, a job repository recording every execution, per-item skip and retry policies, or partitioned parallel steps. That is a serious framework with nine tables of its own schema.</p>
+      <p>This job is <strong>one set-based statement</strong>. The aggregate runs entirely in the database and returns one row per course; there is no read-each-item step at all. So it needs a scheduler and a transaction, not a batch framework &mdash; and <em>knowing when not to use the thing named on the advert is a better signal than having used it</em>.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../StatisticsRefreshJob.java</span><span>two beans, and the reason why</span></div>
+<pre><span class="a">@Scheduled</span>(initialDelayString = <span class="s">"PT30S"</span>, fixedDelayString = <span class="s">"PT10M"</span>)
+<span class="k">public void</span> refresh() {
+    MDC.put(<span class="s">"correlationId"</span>, <span class="s">"job-"</span> + shortId());
+    <span class="k">try</span> {
+        <span class="k">int</span> written = refreshService.refreshAll();   <span class="c">// ← a DIFFERENT bean</span>
+        sample.stop(meterRegistry.timer(<span class="s">"enrollment.statistics.refresh"</span>,
+                                        <span class="s">"outcome"</span>, <span class="s">"success"</span>));
+    } <span class="k">catch</span> (RuntimeException e) {
+        sample.stop(meterRegistry.timer(<span class="s">"enrollment.statistics.refresh"</span>,
+                                        <span class="s">"outcome"</span>, <span class="s">"failure"</span>));
+        log.error(<span class="s">"Statistics refresh failed; the previous numbers still stand"</span>, e);
+    } <span class="k">finally</span> {
+        MDC.remove(<span class="s">"correlationId"</span>);            <span class="c">// pooled thread — or it leaks</span>
+    }
+}</pre>
+      </div>
+      <p>Four decisions in that method are worth naming.</p>
+      <p><b><code class="inline">fixedDelay</code>, not <code class="inline">fixedRate</code>.</b> <code class="inline">fixedRate</code> starts a run every N milliseconds regardless of whether the previous one finished, so a job that grows slower than its interval piles runs on top of each other until something falls over. For anything whose duration depends on data volume &mdash; which is every batch job &mdash; <code class="inline">fixedDelay</code> is the safe default.</p>
+      <p><b>The work lives in another bean.</b> <code class="inline">@Transactional</code> on a method called from <code class="inline">this</code> bypasses the proxy and runs with no transaction at all, silently. That is the self-invocation trap from chapter 11, and this file is where it was actually written and then fixed.</p>
+      <p><b>The exception is caught, not rethrown.</b> An exception escaping <code class="inline">@Scheduled</code> is logged and the schedule continues &mdash; Spring does not stop scheduling because one run failed. Catching it adds what the default does not: a metric tagged <code class="inline">outcome=failure</code>. <q>The job has not succeeded in six hours</q> is a monitorable statement; <q>an exception appeared in the log</q> is not.</p>
+      <p><b>It gets its own correlation id.</b> <code class="inline">CorrelationIdFilter</code> only ever runs for HTTP, so without this the MDC is empty on a scheduler thread and every line the job writes is unattributable.</p>
+      <div class="note trap">
+        <span class="tag">And it breaks on the second server</span>
+        <p>This runs on <strong>every instance</strong>. Three replicas means three concurrent refreshes computing identical numbers and fighting over the same rows, and nothing in the code prevents it. The standard fixes are a database advisory lock (ShedLock), a leader election, or moving the trigger outside the application so exactly one instance is called.</p>
+        <p>It is left unsolved on purpose. Chapter 26 raises it, chapter 33 raises it again from Kubernetes, and papering over it here would hide the problem the deployment chapter needs to raise.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="an-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">The reporting half of a backend job, in four sentences.</p>
+      <ol class="rules">
+          <li><b>A window function keeps the rows; <code class="inline">GROUP BY</code> collapses them.</b><span>That one sentence is the definition and the interview answer. Everything else &mdash; RANK, LAG, running totals &mdash; is a variation on it.</span></li>
+          <li><b>Native SQL is validated by nothing until it runs.</b><span>An ORM checks JPQL; it checks nothing inside <code class="inline">nativeQuery = true</code>. Every analytical query needs a test that executes it and asserts the numbers, or the first call in production is the first execution.</span></li>
+          <li><b>Materialise when the query scans and the answer may be stale.</b><span>And put <code class="inline">computedAt</code> on every row. A number without a timestamp cannot be distinguished from the output of a job that stopped working on Friday.</span></li>
+          <li><b>Reach for a batch framework when the work is per-item.</b><span>One set-based statement needs a scheduler and a transaction. Spring Batch earns its schema when restarting from the beginning is unacceptable, or when every run must be auditable.</span></li>
+      </ol>
+    </section>
+  </article>
+
+  <!-- ==================== 44. NOSQL ==================== -->
+  <article class="chapter" data-cat="NoSQL" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 44</div>
+      <h1>Document modelling, against a relational mind</h1>
+      <p>Chapter 33 gives NoSQL one honest paragraph. This is the rest &mdash; MongoDB running beside PostgreSQL as a read model, with the trades measured rather than asserted.</p>
+    </div>
+
+    <section class="sub" id="no-1">
+      <h2>Not instead of. Beside.</h2>
+      <p class="lede">The interesting architecture is not <q>SQL or NoSQL</q>. It is both, doing the jobs they are each good at.</p>
+      <p>PostgreSQL holds the constraints that make the data <em>correct</em>: the unique index on <code class="inline">(student, course)</code>, the foreign keys, the transaction that counts seats under a lock. MongoDB holds a shape that is <em>cheap to read</em> and impossible to corrupt, because nothing ever writes to it except the projection.</p>
+      <div class="eli5">
+        <span class="tag">In plain words</span>
+        <p>A relational database is a <b>filing cabinet</b>. Every fact lives in exactly one folder, cross-referenced, and the cabinet refuses to let you file a receipt against a customer who does not exist.</p>
+        <p>A document store is a <b>ring binder per customer</b> &mdash; everything about them on consecutive pages, ready to read in one go. Nothing stops you writing a page about a customer who left last year. The binder is faster to read and remembers nothing about what is true.</p>
+        <p>Keeping the cabinet as the record and printing binders from it every few minutes is the arrangement that gets both.</p>
+      </div>
+      <p>That has a name &mdash; <em class="term">polyglot persistence</em> &mdash; and it comes with a caveat worth stating: two databases is two things to operate, back up and monitor. The instinct from chapter 33 still holds: <b>the relational database is the default and the burden of proof is on the alternative.</b></p>
+      <div class="note trap">
+        <span class="tag">Which is why it is off by default</span>
+        <p><code class="inline">application.yml</code> <em>excludes</em> the MongoDB auto-configuration unless the <code class="inline">mongo</code> profile is active. That is not convenience &mdash; it is the architectural statement. A read model being unavailable must not stop the service taking enrollments. An application that cannot start without its cache has made the cache a dependency rather than an optimisation.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="no-2">
+      <h2>Embed or reference</h2>
+      <p>The most-asked NoSQL design question, and it has a usable rule:</p>
+      <p style="font-size:15px;padding:12px 16px;border-left:3px solid var(--accent);background:var(--accent-wash);border-radius:0 6px 6px 0"><b>Embed what you read together and write together. Reference what is shared, large, or changes independently.</b></p>
+      <div class="code">
+        <div class="code-top"><span class="file">the same course, twice</span><span>relational above, document below</span></div>
+<pre><span class="c">-- PostgreSQL: a foreign key, and a join to follow it</span>
+courses(id, code, title, capacity, <span class="k">professor_id</span> &rarr; professors.id)
+enrollments(id, <span class="k">student_id</span>, <span class="k">course_id</span>, status)
+
+<span class="c">// MongoDB: everything the page needs, in one document</span>
+{ <span class="s">"_id"</span>: <span class="s">"52"</span>, <span class="s">"code"</span>: <span class="s">"CS201"</span>, <span class="s">"capacity"</span>: 10,
+  <span class="s">"professor"</span>: { <span class="s">"fullName"</span>: <span class="s">"Marco Bianchi"</span>,        <span class="c">// embedded</span>
+                  <span class="s">"department"</span>: <span class="s">"Computer Science"</span> },
+  <span class="s">"students"</span>: [ { <span class="s">"studentNumber"</span>: <span class="s">"S1234567"</span>,      <span class="c">// embedded array</span>
+                  <span class="s">"fullName"</span>: <span class="s">"Giulia Rossi"</span> } ],
+  <span class="s">"occupiedSeats"</span>: 1, <span class="s">"computedAt"</span>: <span class="s">"2026-09-05T01:00:00Z"</span> }</pre>
+      </div>
+      <p>One read returns everything. There is no join because there is nothing to join to &mdash; and that is genuinely what document stores are good at.</p>
+      <p>The professor is embedded <em>even though a professor is shared between courses</em>. That is a deliberate and slightly uncomfortable denormalisation: rename a professor and every copy is stale until something rewrites it. In a relational schema that update is one row and correct everywhere by construction. <strong>The trade is acceptable only because this is a read model a batch rebuilds.</strong> If it were the system of record for professors it would be the wrong design.</p>
+      <details class="chk">
+        <summary>The roster is an embedded array. What stops it growing until the document breaks?</summary>
+        <p class="a">Course capacity, which Bean Validation caps at 1000. MongoDB has a hard <strong>16 MB document limit</strong>, and the general rule is never to embed an array that grows without bound &mdash; every enrollment for all time would eventually hit it, and the failure is writes starting to be rejected. This one is safe <em>by construction</em>, and knowing why it is safe is the point rather than knowing the number.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="no-3">
+      <h2>What the repository layer costs: almost nothing</h2>
+      <p class="lede">The best thing about Spring Data, and the honest answer to <q>how hard is MongoDB coming from JPA?</q></p>
+      <div class="code">
+        <div class="code-top"><span class="file">CourseDocumentRepository.java</span><span>same mechanism, different store</span></div>
+<pre><span class="k">public interface</span> CourseDocumentRepository <span class="k">extends</span> MongoRepository&lt;CourseDocument, String&gt; {
+
+  <span class="c">// Derived from the method name, exactly as in the JPA repository</span>
+  Optional&lt;CourseDocument&gt; findByCodeAndAcademicYear(String code, <span class="k">int</span> year);
+
+  <span class="c">// A JSON filter, not JPQL. Positional ?0, not named parameters.</span>
+  <span class="a">@Query</span>(<span class="s">"{ 'students.studentNumber': ?0 }"</span>)
+  List&lt;CourseDocument&gt; findCoursesForStudent(String studentNumber);
+}</pre>
+      </div>
+      <p>The derived-query mechanism is identical &mdash; parsed from the name, validated against the metamodel at startup. <strong>The repository layer is nearly free. The modelling is where the work is.</strong></p>
+      <p>That second query is the interesting one: <code class="inline">students.studentNumber</code> reaches <em>inside</em> the embedded array with dot notation, and Mongo matches if any element matches. In PostgreSQL that question needs a join to <code class="inline">enrollments</code>. Here it is one read of one collection &mdash; because the roster was embedded for exactly this access pattern.</p>
+      <p>Which is the whole lesson: <b>the schema is shaped by the queries you intend, not by the entities you have.</b> Model the wrong access pattern and no index saves you &mdash; you rewrite the documents.</p>
+    </section>
+
+    <section class="sub" id="no-4">
+      <h2>What the relational database was quietly giving you</h2>
+      <p>Three guarantees disappear, and each one becomes your code's problem.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Gone</th><th>What that means here</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">Foreign keys</td><td>Delete a course from PostgreSQL without rebuilding, and the document survives, referencing a course that no longer exists. Mongo did not notice and could not have. There is a test in this repository that does exactly that and asserts the dangling document is still there.</td></tr>
+            <tr><td class="mono">Cross-document transactions</td><td>Supported since 4.0, and <strong>only on a replica set</strong>. The seat-counting rule &mdash; lock the course, count, insert, commit &mdash; has no equivalent that is both correct and simple. MongoDB's own guidance is that needing them often means the schema should be different.</td></tr>
+            <tr><td class="mono">A schema</td><td>Two documents in one collection may have different fields. Genuinely useful during rapid change; genuinely dangerous afterwards, because the shape lives only in the code that reads it and old documents keep whatever shape they had when written.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That first row is the concrete version of chapter 33's claim that this application <q>would be materially harder to make correct in a document store</q>. In PostgreSQL a foreign key makes that state <em>unrepresentable</em>. Here, keeping it correct is the job of the code &mdash; fine for a read model that gets rebuilt, alarming for a system of record.</p>
+      <div class="note trap">
+        <span class="tag">A schemaless store does not fail. It gives you wrong answers.</span>
+        <p>Spring Data MongoDB stores a <code class="inline">BigDecimal</code> <strong>as a String</strong> by default, to preserve scale. So <code class="inline">{ fillRate: { $lt: 25.0 } }</code> returns <strong>zero documents, always</strong> &mdash; MongoDB is comparing a number against a string and they are different BSON types. No error. No warning. An empty result. Sorting is worse: as strings, <code class="inline">"100.00"</code> sorts before <code class="inline">"20.00"</code>.</p>
+        <p>In PostgreSQL, <code class="inline">NUMERIC</code> versus <code class="inline">TEXT</code> is caught by the schema before a single row is written. <strong>That is the trade being made when the schema goes away</strong>, and it is why <q>flexible</q> and <q>no constraints</q> are the same sentence read twice.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="no-5">
+      <h2>One direction only</h2>
+      <p>Rows are read from PostgreSQL and written as documents to MongoDB. <strong>Never the other way round.</strong> The arrow is the architecture.</p>
+      <p>The pattern has a name &mdash; <em class="term">CQRS</em>, command/query responsibility segregation &mdash; and the name covers a spectrum. The heavyweight version has separate models, separate stores and an event log. This is the light end: one writer, one derived read model, rebuilt in full. <b>Saying <q>we use a read model</q> is accurate and modest; saying <q>we do CQRS with event sourcing</q> when you have this is not.</b></p>
+      <p>Rebuilding in full rather than incrementally is deliberate: full rebuilds are <strong>idempotent and self-healing</strong>. Whatever went wrong last time is corrected this time and there is no accumulated drift. Incremental updates are faster and require you to get every event right forever. At a size where full stops working, the answer is change-data-capture &mdash; Debezium reading the PostgreSQL write-ahead log &mdash; and the fact that the simple version stops working is the reason that tool exists.</p>
+      <details class="chk">
+        <summary>The rebuild reads in a JPA transaction and writes to Mongo. What is not covered?</summary>
+        <p class="a">The Mongo writes. A JPA transaction and a MongoDB write are two different resource managers and no transaction spans them &mdash; the <strong>dual write problem</strong>. If the rebuild fails halfway, PostgreSQL is untouched (it was read-only) and Mongo holds a partial rebuild that nothing rolled back. It is survivable here because the next run repairs it and every document carries <code>computedAt</code>. The heavyweight answer &mdash; two-phase commit across both &mdash; is exactly what chapter 33 calls <q>the answer that sounds right and is almost never used</q>.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="no-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">Enough to answer the NoSQL question properly rather than generically.</p>
+      <ol class="rules">
+          <li><b>Embed what you read together; reference what is shared or unbounded.</b><span>And know why each embed is safe. The roster is bounded by course capacity; an array of every event for all time would meet the 16 MB limit and start rejecting writes.</span></li>
+          <li><b>The schema is shaped by the queries, not by the entities.</b><span>Model the wrong access pattern and no index rescues you &mdash; you rewrite the documents. This is the reverse of relational design, where one normalised schema serves queries nobody has thought of yet.</span></li>
+          <li><b>Everything the schema used to guarantee is now your code's job.</b><span>No foreign keys, no cross-document transaction outside a replica set, no type checking. A schemaless store does not reject bad data; it returns wrong answers, silently.</span></li>
+          <li><b>Say it in one sentence at interview.</b><span><q>This application would be materially harder to make correct in a document store, because the unique constraint on student-and-course and the seat count under a row lock are both things the relational database does for me.</q> That is specific and true, and it beats any comparison of features.</span></li>
+      </ol>
+    </section>
+  </article>
+
+
+  <!-- ==================== 45. DISTRIBUTED ==================== -->
+  <article class="chapter" data-cat="Distributed" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 45</div>
+      <h1>A method call becomes a request that can time out</h1>
+      <p>Chapter 33 offers that sentence as the honest thing to say in an interview, and then never shows one. The notification listener is now a second deployable, and this chapter counts exactly what that cost.</p>
+    </div>
+
+    <section class="sub" id="di-1">
+      <h2>The cut chapter 33 argued for</h2>
+      <p class="lede">Notifications was marked <q>a good cut</q> for three stated reasons. All three turned out to be the reasons it works.</p>
+      <p>It already listened to events, it never participated in the enrollment transaction, and nobody waits for it &mdash; so it can fail, retry and lag without anyone losing a seat. <code class="inline">notification-service/</code> is that cut, actually made, in about ninety lines of application code.</p>
+      <div class="note trap">
+        <span class="tag">Nine things replaced one line</span>
+        <p>Before, in the same JVM:</p>
+        <p style="font-family:var(--mono);font-size:12.5px;margin:6px 0">enrollmentCreatedEvent.fire(new EnrollmentCreatedEvent(&hellip;));</p>
+        <p>After, across a network: a <b>client</b> (there is a URL now), a <b>connect timeout</b> (the host may not answer), a <b>read timeout</b> (it may answer slowly, forever), a <b>retry</b> (a lost packet is not a failure), a <b>backoff</b> (retrying instantly makes it worse), a <b>circuit breaker</b> (retrying a dead service is pointless), a <b>fallback</b> (the enrollment must still succeed), an <b>idempotency key</b> (a retry can arrive twice), and <b>header propagation</b> (the two logs must be joinable).</p>
+        <p>None of them is hard. All of them are required. Forgetting any one produces a failure that appears only under load or during an incident. <strong>That is what <q>distributed is not free</q> means</strong>, and being able to list those nine is a far better answer than naming tools.</p>
+      </div>
+      <div class="eli5">
+        <span class="tag">In plain words</span>
+        <p>Telling a colleague at the next desk is a method call: you speak, they hear, and if they are not there you know immediately.</p>
+        <p>Posting them a letter is a network call. It might not arrive. It might arrive twice. It might arrive in an hour. You have no way to tell <q>the letter never got there</q> apart from <q>the reply got lost</q> &mdash; so you number your letters, you keep a copy, and you agree in advance that a repeated letter means the same thing as the first one.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="di-2">
+      <h2>The phase that matters</h2>
+      <p>Chapter 10 has a section called <q>events, and the phase that matters</q>. This is that section with a network on the end of it, and it is the most important line in the package:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../EnrollmentEventPublisher.java</span><span>one attribute, two disasters prevented</span></div>
+<pre><span class="a">@Async</span>(<span class="s">"notificationExecutor"</span>)
+<span class="a">@TransactionalEventListener</span>(phase = TransactionPhase.<span class="k">AFTER_COMMIT</span>)
+<span class="k">public void</span> onEnrollmentCreated(EnrollmentCreatedEvent event) {
+    notificationClient.notifyEnrollment(event);
+}</pre>
+      </div>
+      <p>Without <code class="inline">AFTER_COMMIT</code> the listener runs <em>inside</em> the enrollment transaction, and two things follow.</p>
+      <p><b>The transaction can still roll back after the notification was sent</b> &mdash; so a student is emailed about an enrollment that does not exist. Not hypothetical: any constraint violation at flush time does it.</p>
+      <p><b>The HTTP call, its timeouts and its retries all happen while the database transaction is open</b> &mdash; so the pessimistic lock on the course row is held for as long as the notification service takes to answer. A slow mail service now blocks other students from enrolling in that course. That one is genuinely alarming, and it is invisible until the downstream service has a bad day.</p>
+      <p>The Jakarta EE equivalent is <code class="inline">@Observes(during = AFTER_SUCCESS)</code>. Same idea, same reason.</p>
+      <details class="chk">
+        <summary><code>AFTER_COMMIT</code> creates a new problem. What is it, and what is the standard fix?</summary>
+        <p class="a">A window where the enrollment is committed and the notification has not been sent. If the process dies in that window the event is lost forever &mdash; the <strong>dual write problem</strong>. The standard answer is the <em>transactional outbox</em>: write the event to a table in the same transaction, and let a poller deliver it with retries. The Jakarta EE application in this repository already does exactly that for mail (<code>mail/domain/OutboxMessage.java</code>), so the older application has the more robust design here and this one is a deliberately simpler illustration of the client-side patterns.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="di-3">
+      <h2>Timeouts, retry, breaker &mdash; and the order they nest in</h2>
+      <p class="lede">The four lines that stop one slow dependency taking your service down with it.</p>
+      <p>The default in most HTTP clients is <strong>no timeout at all</strong> &mdash; wait forever. That is the single most damaging default in distributed systems: a downstream service that hangs rather than failing holds every one of your request threads until your service stops answering too. The failure spreads <em>upstream</em>, and the service that actually broke is not the one that pages.</p>
+      <p>Two timeouts, answering different questions. <b>Connect</b>: could I open a socket? (host down, DNS wrong, firewall). <b>Read</b>: did bytes arrive in time? (service alive but wedged). A connect timeout alone leaves you exposed to the second and worse case.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">spring-service/.../NotificationClient.java</span><span>the order is not cosmetic</span></div>
+<pre><span class="a">@Retry</span>(name = INSTANCE, fallbackMethod = <span class="s">"notificationFailed"</span>)
+<span class="a">@CircuitBreaker</span>(name = INSTANCE)
+<span class="k">public void</span> notifyEnrollment(EnrollmentCreatedEvent event) { <span class="c">/* … */</span> }</pre>
+      </div>
+      <p>Resilience4j applies its aspects in a fixed order: <span style="font-family:var(--mono);font-size:12px">Retry ( CircuitBreaker ( RateLimiter ( TimeLimiter ( Bulkhead ( call )))))</span>. <b>Retry is outermost, wrapping the breaker</b> &mdash; which is the right way round, because each attempt is then recorded by the breaker, so a run of failures opens it and subsequent retries are rejected instantly instead of waiting for timeouts.</p>
+      <div class="note trap">
+        <span class="tag">A fallback on the inner annotation disables the retry entirely</span>
+        <p>The first version of that method had <code class="inline">fallbackMethod</code> on <em>both</em> annotations. It looked more defensive and it silently switched the retry off.</p>
+        <p>Remember the nesting. With a fallback on the <b>inner</b> annotation, the circuit breaker catches the exception, runs the fallback, and returns <em>normally</em>. Retry therefore sees a success and never retries. The metric said so in as many words:</p>
+        <p style="font-family:var(--mono);font-size:12px;margin:6px 0">resilience4j_retry_calls_total{kind=<span style="color:var(--accent)">"successful_without_retry"</span>} 3.0</p>
+        <p>Three calls, three <q>successes</q>, zero retries &mdash; while the downstream service was refusing every connection. Nothing failed, nothing warned, and the retry policy was decoration. <b>A fallback terminates the chain wherever you put it; put it at the outermost layer or the layers outside never see a failure to act on.</b></p>
+      </div>
+      <p>The backoff matters more than it looks. Retrying immediately, three times, from every one of your instances at once is a denial-of-service attack on a service that was merely slow. It has a name &mdash; a <em class="term">retry storm</em> &mdash; and it is how a small incident becomes a large one. 200ms, then 400ms, then give up.</p>
+      <p>And retry only what is worth retrying: a connection failure or a timeout is transient; a 400 will be a 400 every time.</p>
+    </section>
+
+    <section class="sub" id="di-4">
+      <h2>Idempotency, and why the network forces it</h2>
+      <p>Chapter 33 says consumers must be idempotent because delivery is at-least-once. Here is the reason, drawn:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">the case that makes it necessary</span><span>work done, acknowledgement lost</span></div>
+<pre>caller                          notification-service
+------                          --------------------
+POST /api/notifications  ----&gt;  received, email sent
+                         &lt;--X   (the response is lost)
+retry                    ----&gt;  received AGAIN</pre>
+      </div>
+      <p>The caller <strong>cannot distinguish</strong> <q>the request never arrived</q> from <q>the response was lost</q>. That is not a bug in anybody's code &mdash; it is a property of networks, and it is why retries and idempotency are always mentioned together. A retry without an idempotent consumer sends two emails; an idempotent consumer without retries loses notifications. You need both.</p>
+      <p>The mechanism: the <strong>sender</strong> generates a stable <code class="inline">eventId</code> once, at the moment the enrollment happens, and reuses it on every retry. Generate it in the HTTP client instead and each attempt gets a fresh id, the receiver sees three distinct events, and three emails go out. <b>That is the most common way idempotency is implemented wrongly.</b></p>
+      <div class="note trap">
+        <span class="tag">A duplicate returns 202, not 409</span>
+        <p>Returning a conflict for a repeat would be wrong. From the caller's point of view the event <em>has</em> been accepted &mdash; it was accepted the first time &mdash; and a retry that receives an error would be retried again forever. <strong>An idempotent endpoint reports success for a repeat</strong> and says in the body that nothing new happened.</p>
+      </div>
+      <details class="chk">
+        <summary>The dedupe store is an in-memory map. What does that give up, and when does it matter?</summary>
+        <p class="a">Restart the service and it forgets, so a redelivery across a restart sends a duplicate. Acceptable when the worst case is one extra email; <strong>not</strong> acceptable for anything that charges money. The fix is a table with a unique constraint on the event id &mdash; which is exactly the mechanism the <code>enrollments</code> table already uses to stop a student being enrolled twice. Same problem, same answer, one layer out.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="di-5">
+      <h2>One id, two log files</h2>
+      <p class="lede">Chapter 33 notes that <code class="inline">CorrelationIdFilter</code> already exists, and that making it cross a network <q>writes the chapter itself</q>. This is that crossing.</p>
+      <p>The id travels through five hops, and every one is a place it can be dropped:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th class="num">#</th><th>Hop</th><th>Mechanism</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>header &rarr; MDC (service A)</td><td><code class="inline">CorrelationIdFilter</code>, adopting the caller's id</td></tr>
+            <tr><td class="num">2</td><td>MDC &rarr; async thread</td><td><code class="inline">TaskDecorator</code> in <code class="inline">AsyncConfig</code></td></tr>
+            <tr><td class="num">3</td><td>MDC &rarr; outbound header</td><td>a <code class="inline">RestClient</code> request interceptor</td></tr>
+            <tr><td class="num">4</td><td>header &rarr; MDC (service B)</td><td>the same filter, <em>adopting</em> rather than generating</td></tr>
+            <tr><td class="num">5</td><td>MDC &rarr; every log line</td><td><code class="inline">%X{correlationId}</code> in both log patterns</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="code">
+        <div class="code-top"><span class="file">two processes, two log files, one grep</span><span>this is the actual output</span></div>
+<pre><span class="c"># enrollment-service (JVM 1)</span>
+03:09:55 INFO <span class="s">[TRACEME02]</span> EnrollmentService - Student S1234569 enrolled in CS210
+03:09:55 INFO <span class="s">[TRACEME02]</span> CorrelationIdFilter - &lt;-- POST /api/v1/enrollments 201 (185ms)
+
+<span class="c"># notification-service (JVM 2, separate process)</span>
+03:09:55 INFO <span class="s">[TRACEME02]</span> NotificationService - Notifying S1234569: enrolled in CS210</pre>
+      </div>
+      <div class="note trap">
+        <span class="tag">Hop 2 is the one that silently broke</span>
+        <p>MDC is a <code class="inline">ThreadLocal</code>, so an <code class="inline">@Async</code> method starts with an <strong>empty</strong> context and the id vanishes exactly where you most want it. <code class="inline">AsyncConfig</code> fixes that with a <code class="inline">TaskDecorator</code> &mdash; capture on the submitting thread, restore on the executing one, clear in a <code class="inline">finally</code>.</p>
+        <p>And then it broke anyway. <code class="inline">@EnableScheduling</code> contributes a <code class="inline">taskScheduler</code> bean, <code class="inline">AsyncConfig</code> contributes <code class="inline">notificationExecutor</code>, and <strong>neither is named <code class="inline">taskExecutor</code></strong> &mdash; so Spring could not choose, logged a WARNING, and fell back to a default executor <em>without</em> the decorator. The notification was still delivered, so nothing looked broken; the receiving service simply logged an id of its own. Naming the executor explicitly is the fix, and it is good practice anyway.</p>
+      </div>
+      <p>Propagating one header by hand is fine for two services and does not scale to twenty &mdash; you also want a span per hop, timing, and a parent/child tree. That is W3C Trace Context and OpenTelemetry, exposed in Spring as Micrometer Tracing. <b>Knowing that this is the hand-rolled version of a standard is worth more than having configured the standard once.</b></p>
+    </section>
+
+    <section class="sub" id="di-6">
+      <h2>The failure that must not propagate</h2>
+      <p>When notification fails, the service logs a warning and carries on. <strong>It does not fail the enrollment.</strong> That is a business decision encoded in a fallback, and it is only correct because of the property chapter 33 identified: nobody is waiting for the notification.</p>
+      <p>A student who got a seat but no email has a minor problem. A student who lost a seat because the mail service was down has a serious one.</p>
+      <div class="note trap">
+        <span class="tag">The arithmetic of chained availability</span>
+        <p>Get that judgement backwards &mdash; make the enrollment depend on the notification &mdash; and you have built a system whose availability is the <strong>product</strong> of its parts. Two services at 99.9% chained together are 99.8%. Ten are 99%. That arithmetic is why <q>which failures may propagate</q> is the first question to ask about any boundary, and why the answer is almost never <q>all of them</q>.</p>
+      </div>
+      <p>Proved by killing the notification service and enrolling anyway:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">terminal</span><span>downstream dead, enrollments still 201</span></div>
+<pre>03:10:18 INFO  [DOWN3] EnrollmentService  - Student S1234568 enrolled in CS100
+03:10:18 <span class="k">WARN</span>  [DOWN3] NotificationClient - Notification for enrollment 157 could not be
+         delivered: Connection refused <span class="k">- the enrollment itself is unaffected</span>
+
+<span class="c"># and after five failures:</span>
+resilience4j_circuitbreaker_state{name="notifications",state=<span class="s">"open"</span>} 1.0</pre>
+      </div>
+    </section>
+
+    <section class="sub" id="di-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">What actually changes when a method call crosses a machine.</p>
+      <ol class="rules">
+          <li><b>Set both timeouts, on every client.</b><span>No timeout means wait forever, which turns a hanging dependency into your own outage. Connect answers <q>can I reach it</q>; read answers <q>is it wedged</q>, and the second is the worse failure.</span></li>
+          <li><b>Retries and idempotency are one decision, not two.</b><span>The caller cannot tell a lost request from a lost response, so retries are mandatory and duplicates are inevitable. A stable id generated once by the sender is what makes the pair safe.</span></li>
+          <li><b>Decide which failures may propagate, and encode it in a fallback.</b><span>Chained availability multiplies. A notification failing must not lose a seat &mdash; and the only reason that is safe is that the boundary was cut where nobody was waiting.</span></li>
+          <li><b>Publish an event; let the listener know about the network.</b><span><code class="inline">EnrollmentService</code> contains no URL, no timeout and no breaker. That is what made the extraction possible: the seam was already there, and only the listener had to change.</span></li>
+      </ol>
+    </section>
+  </article>
+
+  <!-- ==================== 46. ANGULAR ==================== -->
+  <article class="chapter" data-cat="Angular" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 46</div>
+      <h1>Angular, at parity with the React chapter</h1>
+      <p>Chapter 32 builds a real React component and gives Angular a six-row translation table &mdash; while saying in its own prose that Italian enterprise shops standardised on Angular. <code class="inline">angular-client/</code> is that table as working code.</p>
+    </div>
+
+    <section class="sub" id="ng-1">
+      <h2>The table, as files</h2>
+      <p class="lede">Every row of chapter 32's comparison now points at something you can open.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>React</th><th>Angular</th><th>In this project</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">function component</td><td class="mono">@Component class</td><td><code class="inline">course-list.component.ts</code></td></tr>
+            <tr><td class="mono">useState</td><td class="mono">signal()</td><td>the same file</td></tr>
+            <tr><td class="mono">useMemo</td><td class="mono">computed()</td><td>the same file</td></tr>
+            <tr><td class="mono">useEffect</td><td class="mono">ngOnInit</td><td>the same file</td></tr>
+            <tr><td class="mono">fetch</td><td class="mono">HttpClient</td><td><code class="inline">course.service.ts</code> &mdash; an Observable, not a promise</td></tr>
+            <tr><td class="mono">context</td><td class="mono">@Injectable + DI</td><td>the same file &mdash; <q>the one part that feels familiar</q></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>That last row is why the chapter says Angular looks like Spring on the other side of the wire. <code class="inline">@Injectable({providedIn: 'root'})</code> is <code class="inline">@Service</code>: one instance for the whole application, created lazily, injected by a real container.</p>
+      <div class="note trap">
+        <span class="tag">Two things most Angular material online predates</span>
+        <p><b>Standalone components.</b> There is no <code class="inline">NgModule</code> anywhere in this application. Until Angular 14 every component had to be declared in a module, and that ceremony is what gave Angular its reputation for being heavy. Standalone is the default from 17 and the only style in new code &mdash; but recognising <code class="inline">@NgModule</code> as legacy is itself worth knowing, because you will meet it.</p>
+        <p><b>Signals.</b> A signal is a value that knows who is reading it, so a change updates exactly the parts of the template that read it. Read one by <em>calling</em> it: <code class="inline">courses()</code>, not <code class="inline">courses</code>. Forgetting the parentheses in a template is the most common signals mistake and shows up as <code class="inline">[object Object]</code> on the page.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="ng-2">
+      <h2>Three states, enforced by the compiler</h2>
+      <p>Chapter 32's second golden rule says every remote call renders three states, and that a component with one branch has two bugs. That is advisory prose. This makes it structural:</p>
+      <div class="code">
+        <div class="code-top"><span class="file">angular-client/src/app/models/course.model.ts</span><span>a discriminated union</span></div>
+<pre><span class="k">export type</span> RemoteData&lt;T&gt; =
+  | { status: <span class="s">'idle'</span> }
+  | { status: <span class="s">'loading'</span> }
+  | { status: <span class="s">'success'</span>; data: T }
+  | { status: <span class="s">'error'</span>; problem: ProblemDetail | <span class="k">null</span>; message: string };</pre>
+      </div>
+      <p><code class="inline">status</code> is the <em class="term">discriminant</em>. Inside <code class="inline">if (state.status === 'success')</code> TypeScript narrows the type and <code class="inline">state.data</code> is available; in the other branches touching it is a compile error. <strong>The compiler now enforces that you cannot render data you have not loaded</strong> &mdash; which no amount of discipline achieves reliably.</p>
+      <p>Three booleans would have permitted states that make no sense: loading <em>and</em> error at once, data present while loading is true. This is chapter 04's argument about making illegal states unrepresentable, applied on the front end. Java 17's sealed interfaces are the same idea, and chapter 30 covers them.</p>
+      <p>And the fourth state everybody forgets: a <strong>successful response with no rows</strong> is not an error and must not render as a blank panel that looks broken.</p>
+      <details class="chk">
+        <summary>Chapter 32 says <code>fetch</code> does not throw on 4xx or 5xx. Does <code>HttpClient</code>?</summary>
+        <p class="a">It does the opposite &mdash; any non-2xx goes into the <em>error</em> channel. That is why an Angular codebase does not usually contain that particular bug, and why <code>course.service.ts</code> has a <code>catchError</code> that turns the failure back into the server's own <code>ProblemDetail</code>. The trap moves rather than disappearing: the case people forget in Angular is <code>status === 0</code>, which means no response arrived at all &mdash; server down, DNS, network, or CORS &mdash; so there is no ProblemDetail to read and the client must supply its own message.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="ng-3">
+      <h2>Branch on the error code, never on the message</h2>
+      <p class="lede">This is the payoff for all the RFC 7807 work on the server side.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">enroll-form.component.ts</span><span>the server contract, consumed</span></div>
+<pre>&#64;switch (problem()?.errorCode) {
+  &#64;case (<span class="s">'COURSE_FULL'</span>) {
+    &lt;p&gt;That course is full. Try another, or check back if someone withdraws.&lt;/p&gt;
+  }
+  &#64;case (<span class="s">'DUPLICATE_RESOURCE'</span>) {
+    &lt;p&gt;This student is already enrolled in that course.&lt;/p&gt;
+  }
+  &#64;case (<span class="s">'PREREQUISITES_NOT_MET'</span>) { &lt;p&gt;{{ problem()?.detail }}&lt;/p&gt; }
+  &#64;default { &lt;p&gt;{{ message() }}&lt;/p&gt; }
+}</pre>
+      </div>
+      <p><code class="inline">detail</code> is prose for a human and may be reworded next week. <code class="inline">errorCode</code> is the contract. A client that matches on <q>has reached its capacity</q> breaks the day somebody improves the wording &mdash; which is exactly why the server carries both.</p>
+      <p>The correlation id goes on the page too, as <q>Reference: e118b438</q>. That is the whole point of <code class="inline">CorrelationIdFilter</code> reaching its conclusion: a user can read that string out to support, and an engineer greps one log for it.</p>
+    </section>
+
+    <section class="sub" id="ng-4">
+      <h2>Validation runs twice, from the other side</h2>
+      <p>Chapter 13 makes this argument from the server. The client half:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Java (server)</th><th>Angular (client)</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">@NotNull</td><td class="mono">Validators.required</td></tr>
+            <tr><td class="mono">@Positive</td><td class="mono">Validators.min(1)</td></tr>
+            <tr><td class="mono">@Size(max = 12)</td><td class="mono">Validators.maxLength(12)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The duplication is the design. The client check gives a fast answer without a round trip; <strong>the server check is the one that cannot be bypassed</strong>, because anyone can open the developer console and post whatever they like. Client-side validation is a convenience for honest users and provides exactly zero security.</p>
+      <div class="note trap">
+        <span class="tag">Subset, never superset</span>
+        <p>Because the client rules are only a convenience, they may be a <b>subset</b> of the server rules but must never be a <b>superset</b>. A client that accepts something the server rejects produces a confusing error; a client that <em>rejects</em> something the server would accept makes a feature unreachable with no error anywhere.</p>
+        <p>And the rules the client cannot check at all &mdash; is this course full, has this student passed the prerequisites &mdash; are exactly the ones that come back as 409. Which is why the response handling matters more than the validators do.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="ng-5">
+      <h2>CORS, answered properly</h2>
+      <p>Chapter 32 poses the question: the request is made, the server log shows 200, and the console says the request was blocked. <strong>CORS is enforced on the client side</strong>, which is why the server log looks perfectly healthy and why the answer is never in it.</p>
+      <p>Three details the chapter's answer implies and does not spell out:</p>
+      <p><b>The preflight.</b> A POST with <code class="inline">Content-Type: application/json</code> is not a <q>simple</q> request, so the browser first sends an <code class="inline">OPTIONS</code> asking whether the real one is permitted. That must also be answered &mdash; which is why <q>my GET works but my POST does not</q> is such a common report.</p>
+      <p><b><code class="inline">exposedHeaders</code> is a separate list.</b> Allowing a header <em>in</em> is not the same as letting JavaScript <em>read</em> one out. Without it the correlation id arrives and the client cannot see it, which quietly defeats the whole propagation chain.</p>
+      <p><b>No wildcard.</b> <code class="inline">allowedOrigins("*")</code> makes the error go away and lets any website on the internet call your API using a visitor's browser. Chapter 15 argues this at length; the configuration here names exactly the two dev-server ports, and lives in the <code class="inline">demo</code> profile only.</p>
+      <details class="chk">
+        <summary>Where should the JWT live in a browser, and what is wrong with the obvious answer?</summary>
+        <p class="a">Chapter 32 already answers this and it is worth repeating because nothing here changed it: <code>localStorage</code> is readable by any injected script, so one XSS hole exfiltrates the token. An <code>HttpOnly</code> cookie cannot be read by JavaScript at all, which removes that class of theft and introduces CSRF, which you then handle with <code>SameSite</code> and a token. <strong>There is no free option</strong> &mdash; the choice is between two different attacks, not between secure and insecure.</p>
+      </details>
+    </section>
+
+    <section class="sub" id="ng-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">Four, and the last one is the same as chapter 32's.</p>
+      <ol class="rules">
+          <li><b>Model the three states as one type, not three booleans.</b><span>A discriminated union plus an exhaustive switch makes the missing error branch a compile error. And remember the fourth state: a successful empty response is not a failure and must not look like one.</span></li>
+          <li><b>Branch on <code class="inline">errorCode</code>, never on the message.</b><span>The detail is prose that may be reworded; the code is the contract. This is the entire reason the server sends both, and it only pays off if the client actually uses it.</span></li>
+          <li><b>Client validation is a convenience; the server is the guarantee.</b><span>Subset, never superset. Anyone can post whatever they like from a console, so the browser rules exist to save a round trip and nothing more.</span></li>
+          <li><b>Say which side you are strong on.</b><span><q>Backend, with enough front end to consume my own API</q> is a credible junior answer and is what full-stack listings actually mean. Claiming equal depth invites the question that exposes it.</span></li>
+      </ol>
+    </section>
+  </article>
+
+  <!-- ==================== 47. THE PLATFORM ==================== -->
+  <article class="chapter" data-cat="The platform" data-part="The full-stack extension">
+    <div class="chapter-head">
+      <div class="eyebrow">Chapter 47</div>
+      <h1>The parts nobody teaches, and the rest of the shelf</h1>
+      <p>OpenAPI, caching, API versioning and observability &mdash; four things every Spring codebase has, that no tutorial covers, and that a junior is expected to recognise on day one. Plus where to find the material this fieldbook keeps as documents rather than chapters.</p>
+    </div>
+
+    <section class="sub" id="pl-1">
+      <h2>OpenAPI, in one dependency</h2>
+      <p class="lede">Zero mentions in chapters 1&ndash;41, on a large share of Java adverts, and about fifteen minutes of work.</p>
+      <p>springdoc reads the annotations that are <em>already</em> on the controllers &mdash; the mappings, the path variables, the Bean Validation constraints, the record components &mdash; and produces an OpenAPI 3 document from them. Nothing extra is required for it to work.</p>
+      <div class="code">
+        <div class="code-top"><span class="file">what you get</span><span>after adding one dependency</span></div>
+<pre>http://localhost:8281/swagger-ui.html    <span class="c"># an interactive console</span>
+http://localhost:8281/v3/api-docs        <span class="c"># the specification, as JSON</span></pre>
+      </div>
+      <p><b>The argument worth having</b> is code-first versus design-first. A specification generated from the code cannot drift from the code &mdash; the failure mode of every hand-written API document. The alternative is design-first: the YAML is written and agreed <em>before</em> either side is built, and the server interfaces and client are generated from it. Large organisations pick design-first because it lets three teams start on the same day against a contract nobody can quietly change. Small teams pick code-first because it is free. <strong>Both are defensible; not knowing the other exists is not.</strong></p>
+      <div class="note trap">
+        <span class="tag">Not as configured, in production</span>
+        <p>An interactive console that enumerates every endpoint and its parameters is a gift to whoever is scanning you. Disable it by profile, or put authentication in front of it. Chapter 15 makes the general version of this argument about information disclosure.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="pl-2">
+      <h2>Caching, and the three questions first</h2>
+      <p>Chapter 25 spends a chapter on where the time goes and never introduces a cache, which leaves an obvious question unanswered. Here it is, with the conditions attached &mdash; because <strong>a cache is a correctness risk traded for speed</strong>, and the trade is only worth it when all three have answers.</p>
+      <ol class="rules">
+        <li><b>Is it read far more often than it changes?</b><span>The course catalogue is: read on every page load, edited a few times a semester. The seat count is <em>not</em> &mdash; it changes on every enrollment, which is why nothing caches it.</span></li>
+        <li><b>How stale may it be?</b><span>A product question, not a technical one. The honest version is <q>how long may a student see a title that was corrected five minutes ago</q>. Nobody can answer it for you, and a cache built without asking is a bug with a schedule.</span></li>
+        <li><b>What invalidates it?</b><span>If the answer is <q>nothing, it expires</q>, say so deliberately. If it is <q>an edit</q>, the eviction has to be written in the same commit as the cache.</span></li>
+      </ol>
+      <div class="note trap">
+        <span class="tag">The self-invocation trap applies to <code class="inline">@Cacheable</code> too</span>
+        <p>And it catches more people than the transactional version, because the symptom is silent. Same proxy mechanism: a call from another method inside the same class goes straight to the real object and never touches the cache. No error, no warning &mdash; the hit ratio is simply zero, and somebody spends an afternoon wondering why.</p>
+        <p>Which is also the argument for <code class="inline">recordStats()</code>: <strong>a cache you cannot measure is a cache you cannot defend in a review</strong>. One with a 3% hit rate is pure overhead and should be deleted, and you will not know which kind you have without the metric.</p>
+      </div>
+      <p>Two more, briefly. <code class="inline">expireAfterWrite</code>, not <code class="inline">expireAfterAccess</code> &mdash; access-based expiry means a popular entry is never refreshed at all, so it stays hot and stays stale. And a <b>maximum size</b>, because an unbounded cache is a memory leak with a friendly name.</p>
+    </section>
+
+    <section class="sub" id="pl-3">
+      <h2>Versioning: you version when you must break something</h2>
+      <p class="lede">Most teams version far too eagerly, because nobody taught them which changes are actually breaking.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Breaking</th><th>Not breaking</th></tr></thead>
+          <tbody>
+            <tr><td>Removing a field</td><td>Adding an optional response field</td></tr>
+            <tr><td>Renaming a field</td><td>Adding an optional request field with a default</td></tr>
+            <tr><td>Changing a type (number &rarr; string)</td><td>Adding a whole new endpoint</td></tr>
+            <tr><td>Narrowing what you accept</td><td rowspan="2">A well-written client ignores fields it does not know &mdash; the <em class="term">tolerant reader</em>. Additive change needs no new version at all.</td></tr>
+            <tr><td>Adding a required request field</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code class="inline">/api/v2/courses/{id}</code> in this repository exists because it does one genuinely breaking thing: it replaces the flat <code class="inline">professorId</code> and <code class="inline">professorName</code> with a nested <code class="inline">professor</code> object. A v1 client reading <code class="inline">professorName</code> gets nothing &mdash; not an error, a page with a blank name, which is the worst kind of breakage because nothing alerts anybody.</p>
+      <p>Three ways to carry the version, and you will be asked to compare them. <b>URI</b> (<code class="inline">/api/v2/…</code>): what nearly everyone ships, ugly to purists, and visible in a log, an address bar and a curl command with no tooling. <b>Header</b>: keeps URIs clean and makes the version invisible in every bug report you will ever read. <b>Media type</b> (<code class="inline">Accept: application/vnd…v2+json</code>): most correct by the letter of HTTP, and the one clients get wrong most often.</p>
+      <div class="note trap">
+        <span class="tag">The hard part is retiring v1, not serving v2</span>
+        <p>Three steps, and the middle one is the one teams skip. <b>Announce</b> &mdash; the <code class="inline">Deprecation</code> and <code class="inline">Sunset</code> response headers (RFC 8594) are the machine-readable way. <b>Measure</b> &mdash; you cannot retire what you cannot count, so every v1 response increments a metric that answers <q>is it safe to delete</q>. <b>Wait, then delete.</b></p>
+        <p>Teams that skip the measuring step keep v1 alive for five years out of fear. And a deprecated endpoint must still <em>work</em>: a deprecation that breaks callers is not a deprecation, it is an outage with a polite header.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="pl-4">
+      <h2>Observability: three things, one dependency each</h2>
+      <p><b>Metrics.</b> Micrometer is to metrics what SLF4J is to logging &mdash; a facade. Your code calls Micrometer; one artifact decides the numbers come out in Prometheus format. Actuator already publishes JVM memory, GC pauses, thread counts, HTTP timings per endpoint and status, and HikariCP pool usage.</p>
+      <p>Two of those are worth knowing by name. <code class="inline">hikaricp_connections_pending</code> is the number of threads waiting for a connection, and it rising above zero is <strong>the earliest signal that the pool is your bottleneck</strong> &mdash; chapter 25's argument, as a graph. And percentiles rather than averages: if 95% of requests take 20ms and 5% take four seconds, the mean is 220ms and looks healthy while one user in twenty is having a terrible time. <b>p95 and p99 are what you alert on.</b></p>
+      <p><b>Structured logging.</b> Chapters up to here log human-readable lines, which is right on a laptop and close to useless once there are three instances and somebody asks <q>how many 409s did we return for COURSE_FULL yesterday?</q> Answering that from plain text means regular expressions against a format nobody promised to keep stable; answering it from JSON means a query. Same events, same MDC &mdash; each line becomes an object with named fields.</p>
+      <div class="note trap">
+        <span class="tag"><code class="inline">logback-spring.xml</code>, never <code class="inline">logback.xml</code></span>
+        <p>Only the <code class="inline">-spring</code> variant is read by Spring, which is what makes <code class="inline">&lt;springProfile&gt;</code> work at all. Name it <code class="inline">logback.xml</code> and Logback loads it before Spring exists, every profile block is ignored, and you get the default appender with no warning.</p>
+      </div>
+      <p><b>Health, split two ways.</b> Chapter 33 spends a page on liveness versus readiness and previously had no endpoint to point at. Now: <code class="inline">/actuator/health/liveness</code> answers <q>am I wedged?</q> and must <em>not</em> touch the database; <code class="inline">/actuator/health/readiness</code> answers <q>can I serve?</q> and should. Point a liveness probe at the readiness endpoint and one slow query restarts the whole fleet.</p>
+      <div class="note trap">
+        <span class="tag">And never <code class="inline">include: "*"</code></span>
+        <p>That publishes <code class="inline">/actuator/env</code> and <code class="inline">/actuator/configprops</code>, which contain your datasource URL, your username and every environment variable the process can see. It is a real finding in real penetration tests. Expose what you need and authenticate anything more.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="pl-5">
+      <h2>The rest of the shelf</h2>
+      <p class="lede">Five subjects that are documents rather than chapters, because they are reference material rather than mechanisms to understand.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Document</th><th>What it answers</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">docs/CLOUD.md</td><td>Managed services, object storage and IAM &mdash; the three ideas that transfer between providers. Plus a table of the eight things this codebase would need before deploying, four of which are already done.</td></tr>
+            <tr><td class="mono">docs/DESIGN-LIFECYCLE.md</td><td>Requirement &rarr; analysis &rarr; design &rarr; code, walked on a feature this project does <em>not</em> have. The four diagrams a junior is asked to read, and Architecture Decision Records.</td></tr>
+            <tr><td class="mono">docs/CERTIFICATIONS.md</td><td>OCP, Spring Certified, AWS, CKAD &mdash; cost, time, and honest market value. Which chapters already cover which exam objectives, and the two genuine gaps (modules and NIO.2).</td></tr>
+            <tr><td class="mono">docs/ADJACENT-TECH.md</td><td>AI/ML, blockchain, mobile, IoT &mdash; what the <em>backend</em> job looks like next to each. The Data &amp; Analytics vocabulary, and SOAP.</td></tr>
+            <tr><td class="mono">docs/READING-ADVERTS.md</td><td>Filter adverts versus brochure adverts, and why the preparation is the same for both.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note trap">
+        <span class="tag">The one position worth stating plainly</span>
+        <p>Chapter 36's quiz offers <q>Java plus machine learning</q> and <q>Java plus Android</q> as wrong answers, explained as <q>a different career path</q> and <q>a separate market</q>. That is correct and nothing in the last six chapters changes it.</p>
+        <p>The pairing on junior Italian adverts is <b>Java + a JVM framework + SQL + Git</b>, and the fourth is the one people forget to demonstrate. An advert listing blockchain, AI, mobile and IoT is not asking you to know them &mdash; it is describing a company that does many things and inviting you to learn one. Being able to say that calmly, when confronted with eight buzzwords, is itself a signal.</p>
+      </div>
+    </section>
+
+    <section class="sub" id="pl-rules">
+      <h2>Golden rules</h2>
+      <p class="lede">The last four in the fieldbook.</p>
+      <ol class="rules">
+          <li><b>Generate the API document from the code.</b><span>A specification that cannot drift is worth more than one that is more elegant. Know that design-first exists and why a five-team company chooses it &mdash; then use code-first, and turn the console off in production.</span></li>
+          <li><b>Answer the three questions before adding a cache.</b><span>How often is it read against changed, how stale may it be, and what invalidates it. Write the eviction in the same commit, and turn on statistics &mdash; an unmeasured cache cannot be defended or deleted.</span></li>
+          <li><b>Adding a field is not a breaking change.</b><span>Removing, renaming and retyping are. Version when you must break something, carry the version in the URI because it is visible everywhere, and measure v1 usage from the first day or you will never dare delete it.</span></li>
+          <li><b>Alert on p99 and on pending connections, not on averages.</b><span>The mean hides the tail, and the tail is where your users are. <code class="inline">hikaricp_connections_pending</code> above zero is the pool becoming your ceiling &mdash; the earliest honest warning you get.</span></li>
+      </ol>
+    </section>
+  </article>
+
   </main>
 </div>
 
@@ -9816,8 +10636,8 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   </div>
   <div class="tray-body">
     <p class="tray-hint" id="notes-hint"></p>
-    <button class="btn primary" id="notes-new" style="width:100%;margin-bottom:9px">Write a note</button>
-    <p class="tray-hint" style="margin-bottom:13px">Or select any sentence in the chapter and press <b>q</b> &mdash; it arrives quoted, with room underneath for what you make of it.</p>
+    <button class="btn primary" id="notes-new" style="width:100%;margin-bottom:9px">New card on the page</button>
+    <p class="tray-hint" style="margin-bottom:13px">Notes are written on the page: a new one drops as a card you drag wherever you want it. Select any sentence and press <b>q</b> and it arrives quoted, beside the sentence, with room underneath for what you make of it. This panel is for finding them again &mdash; click any result to bring it back to the page.</p>
     <div id="notes-list"></div>
   </div>
 </aside>
@@ -14491,6 +15311,317 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     CHECKS[k] = (CHECKS[k] || []).concat(CHECKS_EXTRA[k]);
   });
 
+  /* A third authoring pass, for the full-stack extension (chapters 42-47).
+     Kept separate for the same reason CHECKS_EXTRA is: the passes stay legible
+     in the diff, and every chapter needs at least four questions for a 75% pass
+     mark to mean "at most one wrong" rather than "perfect". */
+  var CHECKS_FULLSTACK = {
+
+"Spring, running": [
+  {q:"<code>CourseRepository</code> in <code>spring-service</code> is an interface with no implementation anywhere. Which of its query mechanisms could <strong>not</strong> be expressed by a method name?",
+   o:["Filtering by two properties, like <code>findByCodeAndAcademicYear</code>",
+      "A <code>JOIN FETCH</code>, because fetching is not a filter",
+      "Checking existence, like <code>existsByCodeAndAcademicYear</code>",
+      "Ordering, like <code>OrderByCodeAsc</code>"],
+   c:1,
+   w:["That is exactly what derived queries are for, and Spring Data validates the property names against the entity metamodel at startup.",
+      "Right, and this is where a derive-everything codebase quietly acquires an N+1. Fetching strategy is not a predicate, so no method name reaches it &mdash; you have to write the JPQL. Chapter 08's problem, arriving through a framework that made everything else easier.",
+      "Also derivable. Spring Data understands <code>exists</code>, <code>count</code>, <code>delete</code> and several other prefixes.",
+      "Derivable too. <code>OrderBy</code> is part of the method-name grammar."],
+   g:"chapter 42 &mdash; the repository you do not write"},
+
+  {q:"A JAX-RS resource is <code>@RequestScoped</code>. A Spring <code>@RestController</code> is a singleton. What follows?",
+   o:["Spring controllers are faster because fewer objects are created",
+      "A mutable field on a controller is a race condition; request state must arrive as a method parameter",
+      "Spring controllers cannot inject anything",
+      "You must annotate Spring controllers <code>@RequestScoped</code> to be safe"],
+   c:1,
+   w:["Object creation is not the point, and it is not measurable here. The point is that one instance is shared by every thread at once.",
+      "Right, and it is the mistake most likely to be made by porting JAX-RS code with find-and-replace. The JAX-RS resource can safely hold an injected <code>UriInfo</code> field because it is fresh per request; do the same in Spring and two users see each other's data under load. Chapter 06 and chapter 10, arriving from a third direction.",
+      "They inject collaborators normally &mdash; that is what the constructor is for. The rule is about mutable per-request state, not about injection.",
+      "You could, and it would be the wrong fix: it makes every request allocate a controller to work around a field that should not exist."],
+   g:"chapter 42 &mdash; where it is genuinely the same, and genuinely different"},
+
+  {q:"Every request to a URL that does not exist was returning <strong>500</strong> with a stack trace. What caused it?",
+   o:["A missing <code>@ResponseStatus</code> on the controller",
+      "<code>@ExceptionHandler(Exception.class)</code> caught Spring's own <code>NoResourceFoundException</code>",
+      "Spring Boot always returns 500 for unmapped paths",
+      "The correlation filter threw before routing"],
+   c:1,
+   w:["Status codes come from the advice here, not from the controller. A missing annotation would not turn 404 into 500.",
+      "Right. Spring throws <code>NoResourceFoundException</code> when nothing matches, and that is an <code>Exception</code> &mdash; so the catch-all swallowed it. Three consequences: the client is told the server is broken when the client is wrong, the error log fills with traces from anyone scanning you, and 5xx alerting fires on traffic you do not control.",
+      "It returns a 404 with an HTML error page by default. The 500 was introduced by the advice.",
+      "The filter ran fine. It is the dispatcher, after the filter, that finds no handler."],
+   g:"chapter 42 &mdash; six files become one"},
+
+  {q:"Which of these differs between <code>jakarta.transaction.@Transactional</code> and the Spring one?",
+   o:["The default rollback rule &mdash; Spring commits on unchecked exceptions",
+      "Only the attribute names; both roll back on unchecked exceptions by default",
+      "Spring cannot roll back at all without <code>@EnableTransactionManagement</code>",
+      "The Jakarta one is applied by a proxy and the Spring one is not"],
+   c:1,
+   w:["Backwards, and it is the assumption people bring. Both roll back on unchecked and commit on checked.",
+      "Right, and it is worth being able to say plainly: the semantics are the same, <code>rollbackFor</code> versus <code>rollbackOn</code> is the difference. A checked exception thrown out of a transactional method COMMITS in both frameworks unless you say otherwise.",
+      "Boot implies it from the starters. Adding it changes nothing.",
+      "Both are proxies, which is why the self-invocation trap exists identically in both."],
+   g:"chapter 42 &mdash; where it is genuinely the same, and genuinely different"}
+],
+
+"Analytics": [
+  {q:"What is the one-sentence difference between a window function and <code>GROUP BY</code>?",
+   o:["A window function is faster because it uses an index",
+      "A window function computes across related rows without collapsing them; every input row still comes out",
+      "A window function can only be used in the <code>WHERE</code> clause",
+      "They are the same; <code>OVER</code> is just newer syntax"],
+   c:1,
+   w:["Neither is inherently faster, and a window function often needs a sort. Performance is not the distinction.",
+      "Right, and that sentence is the interview answer. <code>GROUP BY</code> gives you one row per group; <code>OVER</code> gives you every row plus an extra column. It is what replaced the self-join or correlated subquery for \"the top three per category\".",
+      "The opposite &mdash; window functions are evaluated AFTER <code>WHERE</code> and after <code>GROUP BY</code>, which is exactly why <code>WHERE</code> cannot filter on one.",
+      "They do different jobs. One aggregates away the detail; the other keeps it."],
+   g:"chapter 43 &mdash; a window function, in one sentence"},
+
+  {q:"With enrolment counts of 10, 5, 5 and 2, what does <code>RANK()</code> give the last row, and what does <code>DENSE_RANK()</code> give it?",
+   o:["3 and 3",
+      "4 and 3",
+      "4 and 4",
+      "3 and 4"],
+   c:1,
+   w:["<code>RANK</code> leaves a gap after the tie, so it cannot be 3.",
+      "Right. <code>RANK</code> skips to 4 because two rows occupy position 2; <code>DENSE_RANK</code> does not. Neither is correct in general &mdash; which you want depends on whether \"third place\" should exist when two tie for second, and that is a product decision. <code>ROW_NUMBER</code> is the third of the family and never ties at all.",
+      "<code>DENSE_RANK</code> is the one that does not leave gaps.",
+      "Reversed. <code>RANK</code> is the one that gaps."],
+   g:"chapter 43 &mdash; RANK, DENSE_RANK, ROW_NUMBER"},
+
+  {q:"A report counts enrolments per course with a <code>LEFT JOIN</code>, and every empty course shows <strong>1</strong> student. Why?",
+   o:["The <code>LEFT JOIN</code> should have been an <code>INNER JOIN</code>",
+      "<code>COUNT(*)</code> counts the single all-NULL row the LEFT JOIN produces; <code>COUNT(e.id)</code> would return 0",
+      "The <code>GROUP BY</code> is missing a column",
+      "Empty courses have a phantom enrolment row in the database"],
+   c:1,
+   w:["An inner join would drop the empty courses entirely, which is a different bug &mdash; the report would silently omit exactly the rows somebody wants to see.",
+      "Right, and it is the classic version of this mistake. A LEFT JOIN with no match produces one row with NULLs on the right, and <code>COUNT(*)</code> counts rows. <code>COUNT</code> of a nullable column skips nulls. It survives review because both look correct and only the rows you forgot to create in the test are wrong.",
+      "A missing GROUP BY column is an error in PostgreSQL, not a silently wrong count.",
+      "There is no such row. The 1 is an artefact of counting the join output."],
+   g:"chapter 43 &mdash; two more that earn their place"},
+
+  {q:"The statistics job puts its transactional work in a <strong>separate bean</strong>. What breaks if it does not?",
+   o:["Nothing; it is a style preference",
+      "The <code>@Transactional</code> proxy is bypassed, so the work runs with no transaction at all, silently",
+      "Spring refuses to start with a circular dependency",
+      "The schedule stops firing after the first failure"],
+   c:1,
+   w:["It is not style. Putting them in one class produces a job that appears to work and is not atomic.",
+      "Right &mdash; the self-invocation trap from chapter 11, met in practice. A call on <code>this</code> never reaches the wrapper, so the delete and the inserts stop being one unit and a failure halfway leaves the report table empty. No error, no warning.",
+      "There is no cycle. One class calling its own method is perfectly legal Java; that is what makes the trap silent.",
+      "An exception escaping <code>@Scheduled</code> is logged and the schedule continues. Spring does not stop scheduling because one run failed."],
+   g:"chapter 43 &mdash; the job, and why it is not Spring Batch"}
+],
+
+"NoSQL": [
+  {q:"What is the rule for deciding whether to embed a related object or reference it?",
+   o:["Always embed; joins do not exist in MongoDB",
+      "Embed what you read together and write together; reference what is shared, large, or changes independently",
+      "Always reference, to keep documents small",
+      "Embed only value objects, never entities"],
+   c:1,
+   w:["Always embedding produces unbounded documents and stale copies everywhere. The 16 MB limit is a real ceiling.",
+      "Right, and it is the most-asked NoSQL design question. Note that the rule permits a slightly uncomfortable answer: the professor is embedded even though professors are shared, because this is a read model a batch rebuilds. If it were the system of record for professors, it would be the wrong call.",
+      "Always referencing recreates the relational shape without the relational guarantees &mdash; the worst of both.",
+      "The value-object distinction belongs to JPA's <code>@Embeddable</code>. It is not the criterion here; the access pattern is."],
+   g:"chapter 44 &mdash; embed or reference"},
+
+  {q:"You delete a course from PostgreSQL without rebuilding the read model. What does MongoDB do about the document that references it?",
+   o:["Cascades the delete, because the id matches",
+      "Nothing. There are no foreign keys across collections, let alone across databases",
+      "Refuses subsequent writes to that collection",
+      "Marks the document invalid on the next read"],
+   c:1,
+   w:["There is no relationship for it to cascade along. The id is a value, not a constraint.",
+      "Right, and there is a test in this repository that does exactly that and asserts the dangling document survives. It is the concrete version of chapter 33's claim that this application would be harder to make correct in a document store &mdash; in PostgreSQL a foreign key makes that state unrepresentable.",
+      "Nothing is refused. The store has no opinion about what the ids mean.",
+      "Validity is your code's judgement, not the database's. Nothing marks anything."],
+   g:"chapter 44 &mdash; what the relational database was quietly giving you"},
+
+  {q:"A query filtering <code>{ fillRate: { $lt: 25.0 } }</code> returns zero documents, although documents with lower values plainly exist. The field was mapped as a <code>BigDecimal</code>. What happened?",
+   o:["The index was missing, so the query timed out",
+      "Spring Data stores BigDecimal as a <strong>String</strong>, so a numeric comparison never matches",
+      "MongoDB cannot compare decimals at all",
+      "The value needed to be quoted in the filter"],
+   c:1,
+   w:["A missing index makes a query slow, never empty.",
+      "Right, and the failure is silent &mdash; no error, no warning, an empty result. Spring Data stores BigDecimal as a String to preserve scale exactly. Sorting is worse: as strings, \"100.00\" sorts before \"20.00\". In PostgreSQL, NUMERIC versus TEXT is caught by the schema before a row is written.",
+      "It can, as BSON Decimal128. The problem is what the field was stored as, not what MongoDB supports.",
+      "Quoting it would make the mismatch permanent rather than fixing it."],
+   g:"chapter 44 &mdash; what the relational database was quietly giving you"},
+
+  {q:"The read model is rebuilt <strong>in full</strong> every time rather than updated incrementally. Why?",
+   o:["Because MongoDB cannot update individual documents",
+      "Full rebuilds are idempotent and self-healing; incremental updates require getting every event right forever",
+      "Because it is faster",
+      "Because the projection runs inside a distributed transaction"],
+   c:1,
+   w:["It updates documents perfectly well. The choice is about correctness over time, not capability.",
+      "Right. Whatever went wrong last time is corrected this time and there is no accumulated drift. It is slower, and at this size that does not matter. The point at which it stops working is the point at which change-data-capture &mdash; Debezium reading the write-ahead log &mdash; starts earning its complexity.",
+      "It is markedly slower than an incremental update. That is the price paid for self-healing.",
+      "There is no transaction spanning PostgreSQL and MongoDB. That is precisely the dual write problem the projection has to live with."],
+   g:"chapter 44 &mdash; one direction only"}
+],
+
+"Distributed": [
+  {q:"Why must the notification listener use <code>@TransactionalEventListener(AFTER_COMMIT)</code> rather than an ordinary listener?",
+   o:["Ordinary listeners are slower",
+      "Otherwise it runs inside the transaction: the enrollment can still roll back after the email is sent, and the course row lock is held across the network call",
+      "Ordinary listeners cannot be asynchronous",
+      "Because the event object is not serialisable until commit"],
+   c:1,
+   w:["Speed is not the issue and the difference is not measurable.",
+      "Right, and the second half is the alarming one. A slow notification service would hold the pessimistic lock on the course row for as long as it takes to answer &mdash; so other students cannot enroll in that course while the mail server is having a bad day. Invisible until it happens.",
+      "They can be, with <code>@Async</code>. That is an orthogonal concern and both are used here.",
+      "Serialisation has nothing to do with it. The event is a plain record throughout."],
+   g:"chapter 45 &mdash; the phase that matters"},
+
+  {q:"A client had <code>fallbackMethod</code> on both <code>@Retry</code> and <code>@CircuitBreaker</code>. The metric read <code>successful_without_retry: 3.0</code> while the downstream service refused every connection. Why?",
+   o:["The circuit breaker was open, so calls were rejected before the retry",
+      "The fallback on the inner annotation returned normally, so <code>@Retry</code> saw a success and never retried",
+      "The exception type was not in <code>retry-exceptions</code>",
+      "Retries are disabled when a fallback is present"],
+   c:1,
+   w:["An open breaker records rejections, not successes, and the breaker was still closed at that point.",
+      "Right. The nesting is Retry ( CircuitBreaker ( call ) ), so a fallback on the breaker terminates the chain before the retry can see a failure. The general rule: <strong>a fallback terminates the chain wherever you put it</strong> &mdash; put it on the outermost annotation, or the layers outside never see anything to act on.",
+      "<code>ResourceAccessException</code> was in the list. The retry never got the chance to consider it.",
+      "They are not. A fallback on <code>@Retry</code> itself works exactly as intended, and runs only once every attempt is exhausted."],
+   g:"chapter 45 &mdash; timeouts, retry, breaker"},
+
+  {q:"Why does an idempotency key have to be generated by the <strong>sender</strong>, once, rather than by the HTTP client on each attempt?",
+   o:["Because the receiver cannot generate random values",
+      "Because every retry must carry the same id, or the receiver sees three distinct events and sends three emails",
+      "Because the client has no access to the event contents",
+      "Because HTTP requires an idempotency header"],
+   c:1,
+   w:["It could, and that would be useless &mdash; a receiver-generated id cannot identify a repeat of something it has already seen.",
+      "Right, and it is the most common way idempotency is implemented wrongly. A fresh id per attempt defeats the entire mechanism while looking correct in every code review.",
+      "It has the whole event; that is what it serialises. Access is not the issue.",
+      "HTTP requires no such thing. Idempotency keys are a convention, not a specification."],
+   g:"chapter 45 &mdash; idempotency, and why the network forces it"},
+
+  {q:"The correlation id was being lost between the enrollment service and the notification service, even though a <code>TaskDecorator</code> was configured. What was wrong?",
+   o:["The receiving service generated its own id instead of adopting the caller's",
+      "<code>@Async</code> could not choose between two executor beans and fell back to a default without the decorator",
+      "The MDC was cleared too early in the filter",
+      "The interceptor added the header after the body was written"],
+   c:1,
+   w:["It does adopt it &mdash; that is exactly what its filter is written to do. The id never reached the outbound request in the first place.",
+      "Right, and the failure was silent. <code>@EnableScheduling</code> contributes <code>taskScheduler</code>, <code>AsyncConfig</code> contributes <code>notificationExecutor</code>, neither is named <code>taskExecutor</code>, so Spring logged a WARNING and picked a default. The notification still arrived, so nothing looked broken &mdash; the receiving service simply logged an id of its own.",
+      "The <code>finally</code> block clears it after the chain completes, which is correct and necessary on a pooled thread.",
+      "That is a real trap for response headers, and it is not this one &mdash; this is a request header on an outbound call."],
+   g:"chapter 45 &mdash; one id, two log files"}
+],
+
+"Angular": [
+  {q:"Why model the three states of a remote call as one discriminated union rather than three booleans?",
+   o:["It uses less memory",
+      "Three booleans permit impossible states; a union has exactly four legal values and the compiler narrows them",
+      "Angular templates cannot read booleans",
+      "Because signals only accept objects"],
+   c:1,
+   w:["Memory is irrelevant at this scale.",
+      "Right &mdash; loading and error at once, or data present while loading is true, are states that make no sense and that every component then has to defend against. This is chapter 04's argument about making illegal states unrepresentable, on the front end, and Java 17's sealed interfaces are the same idea.",
+      "They read booleans perfectly well. The problem is what combinations of them mean.",
+      "Signals hold any value, including primitives."],
+   g:"chapter 46 &mdash; three states, enforced by the compiler"},
+
+  {q:"Chapter 32's first golden rule is that <code>fetch</code> does not throw on 4xx or 5xx. What is the equivalent trap with Angular's <code>HttpClient</code>?",
+   o:["The same one; <code>HttpClient</code> also resolves on 4xx",
+      "The opposite: it routes non-2xx into the error channel, so the case people forget is <code>status === 0</code> &mdash; no response at all",
+      "It throws on 3xx redirects",
+      "There is no trap; HttpClient handles every case"],
+   c:1,
+   w:["It does not. Any non-2xx goes to the error callback, which is why Angular codebases rarely contain that particular bug.",
+      "Right, and the trap moves rather than disappearing. <code>status === 0</code> means the request never got an answer &mdash; server down, DNS, network, or CORS &mdash; so there is no ProblemDetail to read and the client must supply its own message. It is the branch that fires for the CORS question, and the one people forget until it happens.",
+      "Redirects are followed by the browser and never surface.",
+      "Every HTTP client has cases you have to handle. This one just has different ones."],
+   g:"chapter 46 &mdash; three states, enforced by the compiler"},
+
+  {q:"Client-side validation mirrors the Bean Validation constraints on the server. What is the rule about the relationship between the two sets?",
+   o:["They must be identical, or the API is inconsistent",
+      "The client rules may be a subset of the server rules, but must never be a superset",
+      "The client rules should be stricter, to reduce load",
+      "The server rules can be dropped once the client validates"],
+   c:1,
+   w:["Identical is ideal and not required &mdash; and some server rules, like \"is this course full\", cannot be checked on the client at all.",
+      "Right. A client that accepts something the server rejects produces a confusing error; a client that <em>rejects</em> something the server would accept makes a feature unreachable with no error anywhere, which is far harder to diagnose.",
+      "Stricter is the superset case, and it is the one that silently breaks features.",
+      "Never. Anyone can open a console and post whatever they like, so client validation provides exactly zero security &mdash; it saves a round trip and nothing more."],
+   g:"chapter 46 &mdash; validation runs twice, from the other side"},
+
+  {q:"CORS is configured with <code>allowedHeaders</code> including <code>X-Correlation-Id</code>, and the client still cannot read the id off the response. What is missing?",
+   o:["<code>allowedOrigins(\"*\")</code>",
+      "<code>exposedHeaders</code> &mdash; a separate list, controlling what JavaScript may read back",
+      "The header must be lowercase",
+      "A preflight <code>OPTIONS</code> handler"],
+   c:1,
+   w:["A wildcard would be a security regression and would not change what the client can read.",
+      "Right, and it is the half people forget. Allowing a header <em>in</em> is not the same as letting JavaScript read one <em>out</em>. Without it the id arrives on the wire and the browser hides it, which quietly defeats the whole propagation chain.",
+      "Header names are case-insensitive in HTTP.",
+      "Spring answers the preflight from the same mapping. A missing preflight fails the whole request, not one header."],
+   g:"chapter 46 &mdash; CORS, answered properly"}
+],
+
+"The platform": [
+  {q:"What is the argument <em>against</em> generating the OpenAPI document from the code?",
+   o:["Generated documents are less accurate",
+      "Nothing; code-first is always correct",
+      "Design-first lets several teams agree a contract before either side is built, which code-first cannot",
+      "It is slower at runtime"],
+   c:2,
+   w:["The opposite &mdash; a generated document cannot drift from the code, which is the failure mode of every hand-written one.",
+      "There is a real argument on the other side, and not knowing it is what the question is testing.",
+      "Right. Large organisations pick design-first because it lets three teams start on the same day against a contract nobody can quietly change. Small teams pick code-first because it is free. Both are defensible; not knowing the other exists is not.",
+      "The document is produced on request and cached. Runtime cost is not the issue."],
+   g:"chapter 47 &mdash; OpenAPI, in one dependency"},
+
+  {q:"Which of these is <strong>not</strong> a breaking API change?",
+   o:["Renaming a response field",
+      "Adding an optional response field",
+      "Changing a field from a number to a string",
+      "Adding a required request field"],
+   c:1,
+   w:["Renaming removes the old name, and a client reading it gets nothing &mdash; usually with no error, which is the worst kind of breakage.",
+      "Right, and it is the more useful half of the lesson. A well-written client ignores fields it does not know &mdash; the tolerant reader &mdash; so additive change needs no new version at all. Most teams version far too eagerly because nobody taught them this distinction.",
+      "A type change breaks every client that parses it.",
+      "Every existing client omits it, so every existing client starts failing validation."],
+   g:"chapter 47 &mdash; versioning: you version when you must break something"},
+
+  {q:"A cache is added with <code>@Cacheable</code> and the hit ratio stays at zero, with no error anywhere. What is the most likely cause?",
+   o:["The TTL is too short",
+      "The method is called from another method in the same class, so the proxy is bypassed",
+      "Caffeine requires an explicit <code>@EnableCaching</code> on every service",
+      "The cache name is misspelled, which fails silently"],
+   c:1,
+   w:["A short TTL produces a low hit ratio, not a zero one, and it would still register gets.",
+      "Right &mdash; the self-invocation trap again, and it catches more people here than with <code>@Transactional</code> because the symptom is completely silent. Same proxy mechanism: a call on <code>this</code> never touches the wrapper. It is also the argument for <code>recordStats()</code>: a cache you cannot measure is one you cannot defend or delete.",
+      "<code>@EnableCaching</code> is needed once, on a configuration class, and it is present.",
+      "A missing cache name throws at runtime rather than failing silently, provided the cache manager is not set to create caches on demand."],
+   g:"chapter 47 &mdash; caching, and the three questions first"},
+
+  {q:"Which metric gives the earliest honest warning that the connection pool has become your ceiling?",
+   o:["The average response time",
+      "<code>hikaricp_connections_pending</code> rising above zero",
+      "JVM heap usage",
+      "The number of active HTTP sessions"],
+   c:1,
+   w:["The mean hides the tail. If 95% of requests take 20ms and 5% take four seconds, the average looks healthy while one user in twenty is having a terrible time &mdash; which is why you alert on p95 and p99.",
+      "Right. It is the number of threads waiting for a connection, so it going above zero means demand has met the pool limit &mdash; chapter 25's argument turned into a graph, and visible well before anything times out.",
+      "Heap pressure is a different failure, and a pool-bound application is usually idle rather than full.",
+      "This API is stateless and has no sessions to count."],
+   g:"chapter 47 &mdash; observability: three things, one dependency each"}
+]
+
+  };
+  Object.keys(CHECKS_FULLSTACK).forEach(function(k){
+    CHECKS[k] = (CHECKS[k] || []).concat(CHECKS_FULLSTACK[k]);
+  });
+
 
   /* ---------- how the mastery number is weighted ---------- */
   var W_READ = 0.15, W_CHECK = 0.45, W_CARDS = 0.40;
@@ -15589,6 +16720,11 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       Notes.update(n.id, { body: next });
       paintNoteCount();
       Sync.schedule();
+      /* The tray is an index over exactly these words, so it must not go on
+         showing the sentence as it was two edits ago. Only when the words
+         are being typed on the page: if the tray owns the editor there is a
+         caret in it, and rebuilding the list under a caret loses it. */
+      if (notesOpen && stickiesLive()) renderNotes();
     }
     function schedule(){
       clearTimeout(timer);
@@ -15727,7 +16863,9 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       notesHint.textContent = scoped.length
         ? scoped.length + (scoped.length === 1 ? " note" : " notes") +
           (notesScope === "here" ? " in this chapter. " : ", in chapter order. ") +
-          "The tag on each card is a link back to where it came from."
+          (stickiesLive()
+            ? "Click one to put it back on the page; the tag is a link to where it came from."
+            : "The tag on each card is a link back to where it came from.")
         : "";
     }
 
@@ -15754,11 +16892,16 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     }
 
     var focusTarget = null;
+    /* Which surface owns the text. Whenever the page can hold a card the
+       page owns it, and the tray is an index you filter and click - two
+       live editors over one string is a merge conflict with yourself. */
+    var live = stickiesLive();
 
     scoped.forEach(function(n){
       var el = document.createElement("div");
       var away = onPage(n);
-      el.className = "note " + n.colour + (n.pinned ? " pinned" : "") + (away ? " away" : "");
+      el.className = "note " + n.colour + (n.pinned ? " pinned" : "") +
+                     (away ? " away" : "") + (live ? " pickable" : "");
 
       var head = document.createElement("div");
       head.className = "note-head";
@@ -15772,10 +16915,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
 
       var editor = null;
 
-      if (away) {
-        /* A stuck note is edited on the page, so the tray shows it rather
-           than offering a second textarea over the same string. Two live
-           editors on one value is a merge conflict with yourself. */
+      if (live) {
         where.addEventListener("click", function(){
           var m = chapterOf(n);
           if (m) { closeNotes(); go(m.n - 1, true); }
@@ -15784,15 +16924,25 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
 
         var tag = document.createElement("span");
         tag.className = "note-away-tag";
-        tag.textContent = "on the page";
+        tag.textContent = away ? "on the page" : "filed";
         el.appendChild(tag);
 
+        var body = document.createElement("div");
+        body.className = "note-body";
         var parts = splitQuote(n.body || "");
-        if (parts.quote) el.appendChild(quoteBlock(parts.quote));
+        if (parts.quote) body.appendChild(quoteBlock(parts.quote));
         var prev = document.createElement("p");
         prev.className = "note-preview";
         prev.textContent = parts.rest.trim() || (parts.quote ? "" : "Empty.");
-        if (prev.textContent) el.appendChild(prev);
+        if (prev.textContent) body.appendChild(prev);
+        el.appendChild(body);
+
+        /* A card here is a search result, so clicking it does the thing you
+           searched for it to do: puts it back under the cursor, on the page,
+           where it can be dragged and written in. */
+        body.title = away ? "Jump to this card on the page"
+                          : "Put this note back on the page";
+        body.addEventListener("click", function(){ bringToPage(n); });
       } else {
         editor = makeEditor(n);
         where.addEventListener("click", function(){
@@ -15809,7 +16959,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       var tools = document.createElement("div");
       tools.className = "note-tools";
 
-      if (!away) {
+      if (!live) {
         tools.appendChild(tool("&bull; list", "Bullet the selected lines", function(){
           toggleBullets(editor.el, editor.schedule);
         }));
@@ -15823,15 +16973,13 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
         });
       }));
 
-      if (stickiesLive()) {
-        tools.appendChild(tool(away ? "to tray" : "stick",
-          away ? "Take it off the page and keep it here"
-               : "Stick this note to the page while you read",
+      if (live) {
+        tools.appendChild(tool(away ? "file" : "to page",
+          away ? "Take the card off the page — the note stays here"
+               : "Put this note back on the page",
           function(){
-            if (editor) editor.flush();
-            Notes.place(n.id, away ? { stuck: false }
-                                   : { stuck: true, x: null, y: null });
-            redrawNotes();
+            if (away) { Notes.place(n.id, { stuck: false }); redrawNotes(); }
+            else bringToPage(n);
           }));
       }
 
@@ -15895,6 +17043,134 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
 
   function clampX(x){ return Math.max(6, Math.min(x, window.innerWidth - STICKY_W - 6)); }
   function clampY(y){ return Math.max(6, Math.min(y, window.innerHeight - 90)); }
+
+  /* ---------- where a new card lands ----------------------------------
+     A note is written on the page, not in the tray, so every way of making
+     one ends here: pick a spot, drop the card, put the cursor in it. The
+     tray never opens for it. */
+
+  /* The tray is an opaque panel over the right-hand end of the viewport,
+     so while it is open that strip is not somewhere a card can be seen. */
+  function freeRight(){
+    /* Measured from the panel's own width, not from where it currently is.
+       The tray slides in over 200ms and a card asked for during those 200ms
+       would otherwise be placed against an edge that is still moving - and
+       land underneath the panel that had just opened. */
+    if (notesOpen && notesTray && notesTray.offsetWidth) {
+      return Math.max(320, window.innerWidth - notesTray.offsetWidth);
+    }
+    return window.innerWidth;
+  }
+
+  /* Under the top bar, which is sticky and sits below this layer - a card
+     that slid under it would be half a card. */
+  function freeTop(){
+    var bar = document.querySelector(".topbar");
+    return (bar ? bar.getBoundingClientRect().height : 66) + 24;
+  }
+
+  /* In the margin beside the sentence it came from, level with it: a
+     marginal note, next to the paragraph rather than over it. When the
+     margin is too narrow for a card - a small window, or the tray taking
+     the right-hand end - it goes to the right-hand lane instead. Either
+     way the spot is stepped along until it is not exactly on top of a card
+     that is already open: two cards in the same pixel look like one card
+     and lose the other. */
+  function freeSpot(rect){
+    var right = freeRight();
+    var lane = right - STICKY_W - 26;
+    var x, y;
+    if (rect && (rect.width || rect.height)) {
+      /* The column edge, not the sentence edge, so a short line and a full
+         one put their cards in the same place. */
+      var col = openChapter && openChapter.el
+        ? openChapter.el.getBoundingClientRect() : null;
+      x = (col && col.width ? col.right : rect.right) + 16;
+      if (x + STICKY_W + 6 > right) x = rect.right + 18;
+      if (x + STICKY_W + 6 > right) x = lane;
+      y = rect.top - 10;
+    } else {
+      x = lane;
+      y = freeTop();
+    }
+    /* Fully inside the free band. In a window only just wide enough for a
+       card this can put one over the contents rail, which is the right
+       trade: visible and draggable beats tidy and half off the screen. */
+    x = Math.max(6, Math.min(x, right - STICKY_W - 6));
+    /* An estimate, because the card is not in the document yet and so has
+       no height. `settleSticky` corrects it once it has one. */
+    y = Math.max(freeTop(), Math.min(y, window.innerHeight - 210));
+
+    var taken = stickyLayer ? Array.prototype.slice.call(stickyLayer.children) : [];
+    function occupied(){
+      for (var i = 0; i < taken.length; i++) {
+        if (Math.abs((parseFloat(taken[i].style.left) || 0) - x) < 34 &&
+            Math.abs((parseFloat(taken[i].style.top)  || 0) - y) < 34) return true;
+      }
+      return false;
+    }
+    for (var guard = 0; guard < 40 && occupied(); guard++) {
+      y += 28;
+      if (y > window.innerHeight - 210) { y = freeTop(); x = Math.max(6, x - 30); }
+    }
+    return { x: x, y: y };
+  }
+
+  /* The height of a card is not known until it is in the document, so a
+     spot chosen from a guess is corrected once, after the render. */
+  function settleSticky(id){
+    if (!stickyLayer) return;
+    var ta = stickyLayer.querySelector('textarea[data-note="' + id + '"]');
+    var el = ta && ta.closest ? ta.closest(".sticky") : null;
+    if (!el) return;
+    var top = parseFloat(el.style.top) || 0;
+    var over = top + el.offsetHeight - (window.innerHeight - 12);
+    if (over > 0) {
+      top = Math.max(8, top - over);
+      el.style.top = top + "px";
+      Notes.place(id, { y: top });
+    }
+  }
+
+  function focusSticky(id){
+    if (!stickyLayer) return;
+    var ta = stickyLayer.querySelector('textarea[data-note="' + id + '"]');
+    if (!ta) return;
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = ta.value.length;
+  }
+
+  /* Returns false only when the window is too narrow to show a card at
+     all, which is the one case where the tray still has to open and hold
+     the editor itself. */
+  function stickToPage(note, rect){
+    if (!stickiesLive()) return false;
+    var spot = freeSpot(rect);
+    Notes.place(note.id, { stuck: true, x: spot.x, y: spot.y });
+    renderStickies();
+    settleSticky(note.id);
+    if (notesOpen) renderNotes(); else paintNoteCount();
+    focusSticky(note.id);
+    return true;
+  }
+
+  /* Clicking a card in the tray is a request to look at that note, so it
+     goes back on the page and takes the cursor with it. */
+  function bringToPage(n){
+    if (!stickiesLive()) return;
+    if (!n.stuck) {
+      var spot = freeSpot(null);
+      Notes.place(n.id, { stuck: true, x: spot.x, y: spot.y });
+    } else if ((n.x || 0) + STICKY_W > freeRight()) {
+      /* It is already out there, but underneath the panel you just clicked
+         in - so answering "show me this one" has to actually show it. */
+      Notes.place(n.id, { x: Math.max(6, freeRight() - STICKY_W - 26) });
+    }
+    renderStickies();
+    settleSticky(n.id);
+    renderNotes();
+    focusSticky(n.id);
+  }
 
   function renderStickies(){
     if (!stickyLayer) return;
@@ -16028,15 +17304,20 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
         el.style.top  = clampY(ev.clientY - dy) + "px";
       }
       function stop(){
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", stop);
-        handle.removeEventListener("pointercancel", stop);
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", stop, true);
+        window.removeEventListener("pointercancel", stop, true);
         el.classList.remove("dragging");
         Notes.place(n.id, { x: parseFloat(el.style.left), y: parseFloat(el.style.top) });
       }
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", stop);
-      handle.addEventListener("pointercancel", stop);
+      /* On the window rather than on the grip. Pointer capture usually keeps
+         the events coming to the handle, but it is allowed to fail and it is
+         released the moment the element is re-rendered - and a drag that
+         stops the instant the cursor outruns a 20px strip is a card that
+         will not go where you put it. */
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", stop, true);
+      window.addEventListener("pointercancel", stop, true);
       e.preventDefault();
     });
   }
@@ -16070,7 +17351,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
      that measures worst.
      ============================================================ */
   var grabEl = document.getElementById("grab");
-  var grabbed = { text: "", chapterId: null };
+  var grabbed = { text: "", chapterId: null, rect: null };
 
   function insideNoteUi(node){
     while (node && node !== document.body) {
@@ -16114,6 +17395,10 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     grabbed.chapterId = found.chapterId;
     var r = found.range.getBoundingClientRect();
     if (!r.width && !r.height) { hideGrab(); return; }
+    /* Kept so the card can be dropped beside the sentence it came from
+       rather than in some corner the eye has to go looking for. */
+    grabbed.rect = { left: r.left, right: r.right, top: r.top,
+                     width: r.width, height: r.height };
     grabEl.classList.add("on");
     var w = grabEl.offsetWidth, h = grabEl.offsetHeight;
     var left = r.left + (r.width / 2) - (w / 2);
@@ -16126,15 +17411,20 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
 
   function noteFromSelection(){
     if (!grabbed.text) return;
+    var rect = grabbed.rect;
     var note = Notes.add(grabbed.chapterId, asExcerpt(grabbed.text) + "\n\n");
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.removeAllRanges) sel.removeAllRanges();
     hideGrab();
+    Sync.schedule();
+    /* The card lands next to the sentence, already draggable, and the tray
+       stays out of it. Sliding a panel over the chapter you are reading is
+       the wrong answer to "I want to write one line about this". */
+    if (stickToPage(note, rect)) return;
     if (notesScope !== "all" && notesScope !== grabbed.chapterId) notesScope = "here";
     notesSearch = "";
     notesPinnedOnly = notesStuckOnly = false;
     openNotes(note.id);
-    Sync.schedule();
   }
 
   document.addEventListener("mouseup", function(){ setTimeout(showGrab, 0); });
@@ -16186,13 +17476,14 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   bindClick("notes-x", closeNotes);
   bindClick("notes-new", function(){
     var note = Notes.add(openChapter.id, "");
+    Sync.schedule();
+    if (stickToPage(note, null)) return;
     notesScope = "here";
     notesSearch = "";
     notesPinnedOnly = notesStuckOnly = false;
     /* Focus the note that was just made, not the first one in the list -
        they are different cards whenever the chapter already had notes. */
     renderNotes(note.id);
-    Sync.schedule();
   });
   bindClick("notes-here",   function(){ notesScope = "here"; renderNotes(); });
   bindClick("notes-all",    function(){ notesScope = "all";  renderNotes(); });
@@ -16225,11 +17516,12 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     var btn = e.currentTarget;
     function fresh(body){
       var note = Notes.add(openChapter.id, body);
+      Sync.schedule();
+      if (stickToPage(note, null)) return;
       notesScope = "here";
       notesSearch = "";
       notesPinnedOnly = notesStuckOnly = false;
       renderNotes(note.id);
-      Sync.schedule();
     }
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(function(text){
@@ -16527,13 +17819,30 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
   var acctBody   = document.getElementById("acct-body");
   var acctTitle  = document.getElementById("acct-title");
 
-  var acctMode  = "in";        /* in | up | manage */
+  var acctMode  = "in";        /* in | up | forgot | reset | manage */
   var menuOpen  = false;
+
+  /* The token out of a reset link, held only for as long as the panel is open.
+     Never written to localStorage: it is a credential with an hour to live, and
+     the one place it is allowed to persist is the email it arrived in. */
+  var resetToken = null;
 
   /* The floor the server enforces in AccountService.MIN_PASSWORD_LENGTH,
      repeated so the form can say so before spending a round trip. The server
      is still the one that decides; this only saves a wasted request. */
   var MIN_PASSWORD = 12;
+
+  /* The same shape Username.of enforces, written out a second time in a second
+     language - which is a duplication worth being uncomfortable about. It earns
+     its place on the REGISTRATION form, where "that is not a valid handle" is
+     the difference between one keystroke and a round trip. It is deliberately
+     NOT applied on the sign-in form: refusing to send a login attempt because
+     the handle looks wrong tells whoever is typing which guesses are worth
+     making, and the server answers every bad sign-in with one sentence for
+     exactly that reason. */
+  var USERNAME_RE  = /^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/;
+  var MIN_USERNAME = 3;
+  var MAX_USERNAME = 30;
 
   var PERSON_SVG =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 ' +
@@ -16550,14 +17859,14 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
         ? parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
         : name.slice(0, 2);
     }
-    var email = (me && me.email) || "";
-    return email ? email.slice(0, 2) : "?";
+    var handle = (me && (me.username || me.email)) || "";
+    return handle ? handle.slice(0, 2) : "?";
   }
 
   function acctName(me){
     if (!me) return "";
     var name = (me.displayName || "").trim();
-    return name || String(me.email || "").split("@")[0];
+    return name || me.username || String(me.email || "").split("@")[0];
   }
 
   /* ---------- the avatar in the bar ----------
@@ -16572,7 +17881,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       acctBtn.className = "acct-btn in";
       acctAvatar.textContent = initials(me);
       acctLabel.textContent = label || (state === "error" ? "sync failed" : acctName(me));
-      acctBtn.title = "Signed in as " + me.email +
+      acctBtn.title = "Signed in as " + (me.username || me.email) +
         (state === "error" ? " — the last sync did not go through"
                            : " — your progress syncs to the server");
     } else {
@@ -16629,7 +17938,7 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
                :                     '<span class="acct-state">syncing</span>';
       html =
         '<div class="acct-who"><b>' + escapeText(acctName(me)) + '</b>' +
-        '<span>' + escapeText(me.email || "") + '</span>' + chip + '</div>' +
+        '<span>' + escapeText(me.username || me.email || "") + '</span>' + chip + '</div>' +
         mLink("area-riservata.html", "&#128274;", "Area riservata") +
         mItem("m-sync", "&#128260;", "Sync now") +
         '<hr>' +
@@ -16761,12 +18070,16 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       "The password is stored as a <b>PBKDF2-HMAC-SHA256</b> hash, 210&thinsp;000 iterations, " +
       "with its own random salt. The stored string names its own parameters, so the cost can be " +
       "raised later and old rows upgrade themselves on the next successful sign-in.",
-      "There is <b>no email verification and no password reset</b>, because both need a mail " +
-      "server this project does not have. A forgotten password means a new account. That is a " +
-      "missing feature, written down rather than hidden.",
-      "Registering an address that already exists does not answer &ldquo;already registered&rdquo; " +
-      "&mdash; that answer would turn this form into a way of asking who has an account. It " +
-      "quietly tries to sign you in instead.",
+      "The <b>username</b> is what you sign in with; the <b>address</b> is only ever used to " +
+      "send a reset link. They were one field once, and splitting them is what makes a reset " +
+      "possible at all &mdash; the link has to go somewhere the login form does not ask about.",
+      "There is still <b>no email verification</b>. Nothing checks that the address you type " +
+      "belongs to you, so a typo means a reset link you will never receive. That is a missing " +
+      "feature, written down rather than hidden.",
+      "This form <b>does</b> tell you when a username or an address is already taken, and a " +
+      "form that refuses without saying which is a form nobody can get past. The cost is real: " +
+      "it will confirm whether an address has an account here. The reset form, where it matters " +
+      "more, gives nothing away.",
       "You can delete the account and everything in it in one click. A tool that stores your " +
       "history and offers no way out is one you should not sign in to."
     ] : [
@@ -16778,7 +18091,38 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       "no single account is ever tried twice.",
       "The session arrives as an <code class=\"inline\">HttpOnly</code> cookie, so no script on " +
       "this page can read it &mdash; not even this one. Whether you are signed in is a question " +
-      "only the server can answer."
+      "only the server can answer.",
+      "You sign in with a <b>username</b>, not an address. An address is semi-public &mdash; it " +
+      "is in mailing lists, CC fields and breach dumps &mdash; so using it as the login hands " +
+      "away half of every credential pair before anybody guesses anything."
+    ];
+    return '<details class="acct-why"><summary>What this form does not tell you</summary><ul><li>' +
+           items.join("</li><li>") + '</li></ul>' +
+           '<p>The reasoning in full is in <code class="inline">docs/ACCOUNTS.md</code> and in ' +
+           'chapter 15.</p></details>';
+  }
+
+  /* The same treatment for the reset form: the things it does that are not
+     visible from the outside, and in this case are deliberately invisible. */
+  function forgotWhy(){
+    var items = [
+      "This form gives the <b>same answer</b> for an address it knows and one it has never " +
+      "seen, and it will not tell you which. The alternative is a public API for &ldquo;does " +
+      "this person have an account here&rdquo;, offered anonymously to anybody with a list of " +
+      "addresses. The cost is that a typo looks exactly like success.",
+      "The link carries a <b>256-bit token</b> from a cryptographic random source. Only its " +
+      "SHA-256 is stored, so a stolen backup of the table yields hashes, and a hash cannot be " +
+      "put in a URL.",
+      "It <b>expires after an hour and works once</b>. Mail is forwarded, quoted and archived; " +
+      "a link that works twice works for whoever ends up holding the second copy. Asking again " +
+      "invalidates the previous link rather than leaving two alive.",
+      "The address in that link comes from <b>configuration</b>, not from the request. Building " +
+      "it from the <code class=\"inline\">Host</code> header would let anybody send you a real, " +
+      "valid reset link pointing at their own server &mdash; that is <b>host header " +
+      "injection</b>, and password reset is where it is nearly always found.",
+      "Using the link <b>signs the account out everywhere</b>. A password change that leaves old " +
+      "sessions alive achieves nothing against somebody who was using the cookie rather than " +
+      "the password."
     ];
     return '<details class="acct-why"><summary>What this form does not tell you</summary><ul><li>' +
            items.join("</li><li>") + '</li></ul>' +
@@ -16802,12 +18146,24 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       return;
     }
 
+    /* ---------- following a reset link ----------
+       Checked before "signed in", and that order is the whole reason this is a
+       separate branch: the browser holding the mail is usually the browser
+       already signed in, and showing that person the account panel instead of
+       the form they clicked through to is the one way to make the link look
+       broken. */
+    if (acctMode === "forgot") { renderForgot(); return; }
+    if (acctMode === "reset")  { renderReset();  return; }
+
     /* ---------- signed in ---------- */
     if (me) {
       acctTitle.textContent = "Your account";
       acctBody.innerHTML =
-        '<p class="acct-msg ok">' + escapeText(acctName(me)) + ' &middot; ' +
-        escapeText(me.email || "") + '</p>' +
+        '<p class="acct-msg ok">' + escapeText(acctName(me)) +
+        (me.username ? ' &middot; <b>' + escapeText(me.username) + '</b>' : '') +
+        (me.email ? ' &middot; ' + escapeText(me.email) : '') + '</p>' +
+        '<p class="acct-note">The name in bold is what you sign in with. The address underneath ' +
+        'is only used to send a password reset link.</p>' +
         '<p class="acct-note">Your chapters, checkpoint scores, review schedule and notes are ' +
         'stored on the server and merged with whatever this browser knows. Answering something ' +
         'here shows up on your other machine the next time it syncs.</p>' +
@@ -16876,31 +18232,114 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       return;
     }
 
-    /* ---------- signed out: the form ---------- */
+    /* ---------- signed out: one panel, four forms ----------------------
+       in     - a username and a password
+       up     - a username, a name, an address and a password
+       forgot - an address, and no confirmation of anything
+       reset  - a new password, once a link has been followed
+       Four steps of one errand, so they share a tray, a message line and a
+       submit path. Splitting them into four panels would mean four copies of
+       the same error handling, which is how three of them end up out of date.
+
+       Only two of the four land here: forgot and reset are routed above the
+       signed-in branch, because they have to work for somebody who is already
+       signed in. */
+    renderSignIn();
+  }
+
+  /* Every form below disables its button, says something, posts once, and
+     either moves the panel on or puts a sentence under the button. Written
+     once here rather than four times.
+
+     The callback returns a promise to mean "I sent something", or null to mean
+     "I refused before sending" - which is what keeps a local validation failure
+     from disabling the button forever. */
+  function wireForm(formId, goId, onSubmit){
+    var form = document.getElementById(formId);
+    if (!form) return;
+    var busy = false;
+
+    form.addEventListener("submit", function(e){
+      e.preventDefault();
+      if (busy) return;
+
+      var msg = document.getElementById("acct-out-msg");
+      function say(kind, text){
+        if (!msg) return;
+        msg.className = "acct-msg" + (kind ? " " + kind : "");
+        msg.textContent = text;
+      }
+      function fail(text, field){
+        say("bad", text);
+        if (field) field.focus();
+      }
+
+      var sent = onSubmit({ say: say, fail: fail });
+      if (!sent) return;
+
+      busy = true;
+      var go = document.getElementById(goId);
+      if (go) go.disabled = true;
+
+      sent.catch(function(){
+        fail("Could not reach the server.", null);
+      }).then(function(){
+        busy = false;
+        /* Looked up again rather than reused: the panel may have re-rendered
+           underneath this callback, in which case the old button is detached
+           and enabling it would do nothing visible. */
+        var again = document.getElementById(goId);
+        if (again) again.disabled = false;
+      });
+    });
+  }
+
+  /* Set the message line after a re-render, which is the only moment the
+     element the previous form was writing to no longer exists. */
+  function sayOnPanel(kind, text){
+    var m = document.getElementById("acct-out-msg");
+    if (!m) return;
+    m.className = "acct-msg" + (kind ? " " + kind : "");
+    m.textContent = text;
+  }
+
+  /* ---------- sign in, and sign up ---------- */
+  function renderSignIn(){
     var signingUp = acctMode === "up";
     acctTitle.textContent = signingUp ? "Create an account" : "Sign in";
 
     /* A real <form>. Not decoration: it is what makes Enter submit, what lets
        a password manager recognise the pair of fields, and what gives the
        browser somewhere to hang autofill. A div full of inputs does none of
-       those and looks identical. */
+       those and looks identical.
+
+       autocomplete="username" belongs on the handle now and not on the
+       address. Password managers key their entries on the field marked that
+       way, so leaving it on an email input would have them offering to fill a
+       box the login no longer has. */
     acctBody.innerHTML =
       '<p class="tray-hint">Entirely optional. Everything works without an account; signing in ' +
       'carries the same record between machines and gives it somewhere to live that is not one ' +
       'browser profile.</p>' +
       '<form id="acct-form" novalidate>' +
+        '<label class="field"><span>Username</span>' +
+          '<input id="acct-user" autocomplete="username" autocapitalize="off" ' +
+          'spellcheck="false" maxlength="' + MAX_USERNAME + '" required></label>' +
         (signingUp
           ? '<label class="field"><span>Name</span>' +
-            '<input id="acct-name" autocomplete="nickname" maxlength="60" placeholder="optional"></label>'
+            '<input id="acct-name" autocomplete="nickname" maxlength="60" placeholder="optional"></label>' +
+            '<label class="field"><span>Email</span>' +
+            '<input id="acct-email" type="email" autocomplete="email" autocapitalize="off" ' +
+            'spellcheck="false" required></label>'
           : '') +
-        '<label class="field"><span>Email</span>' +
-          '<input id="acct-email" type="email" autocomplete="username" autocapitalize="off" ' +
-          'spellcheck="false" required></label>' +
         '<label class="field"><span>Password</span>' +
           '<input id="acct-pass" type="password" required autocomplete="' +
           (signingUp ? "new-password" : "current-password") + '"></label>' +
         (signingUp
-          ? '<p class="acct-fine">At least ' + MIN_PASSWORD + ' characters. No symbol ' +
+          ? '<p class="acct-fine">The username is ' + MIN_USERNAME + '&ndash;' + MAX_USERNAME +
+            ' characters: letters, digits, dot, underscore or hyphen. The address is only ever ' +
+            'used to reset the password &mdash; it is not how you sign in.</p>' +
+            '<p class="acct-fine">At least ' + MIN_PASSWORD + ' characters. No symbol ' +
             'requirements &mdash; length is what actually buys entropy, and composition rules ' +
             'mostly produce <code class="inline">Password1!</code>.</p>'
           : '') +
@@ -16916,6 +18355,10 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
           ? 'Already have one? <button class="linkish" id="acct-swap">Sign in instead</button>'
           : 'No account yet? <button class="linkish" id="acct-swap">Create one</button>') +
       '</p>' +
+      (signingUp
+        ? ''
+        : '<p class="acct-note">Forgotten your password? ' +
+          '<button class="linkish" id="acct-forgot">Email me a reset link</button></p>') +
       acctWhy(signingUp);
 
     bindClick("acct-swap", function(){
@@ -16925,69 +18368,70 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
       if (first) first.focus();
     });
 
+    bindClick("acct-forgot", function(){
+      acctMode = "forgot";
+      renderAcct();
+      var first = acctBody.querySelector("input");
+      if (first) first.focus();
+    });
+
     /* Typing a password you cannot see, into a form that may reject it for
        being too short, is a bad time. The button is not a security hole - the
        characters are already in the DOM either way. */
     bindClick("acct-reveal", function(){
-      var pass = document.getElementById("acct-pass");
-      var btn  = document.getElementById("acct-reveal");
-      var show = pass.type === "password";
-      pass.type = show ? "text" : "password";
-      btn.setAttribute("aria-pressed", show ? "true" : "false");
-      btn.textContent = show ? "Hide password" : "Show password";
-      pass.focus();
+      revealToggle("acct-pass", "acct-reveal");
     });
 
-    var form = document.getElementById("acct-form");
-    var busy = false;
+    wireForm("acct-form", "acct-go", function(h){
+      var userEl = document.getElementById("acct-user");
+      var passEl = document.getElementById("acct-pass");
+      var mailEl = document.getElementById("acct-email");
+      var nameEl = document.getElementById("acct-name");
 
-    form.addEventListener("submit", function(e){
-      e.preventDefault();
-      if (busy) return;
-
-      var emailEl = document.getElementById("acct-email");
-      var passEl  = document.getElementById("acct-pass");
-      var nameEl  = document.getElementById("acct-name");
-      var msg     = document.getElementById("acct-out-msg");
-      var go      = document.getElementById("acct-go");
-
-      function fail(text, field){
-        msg.className = "acct-msg bad";
-        msg.textContent = text;
-        if (field) field.focus();
-      }
-
-      var email = (emailEl.value || "").trim();
-      var pass  = passEl.value || "";
+      /* Lower-cased here as well as on the server, so that what is sent is
+         what the unique constraint will see. Username.of would do it anyway;
+         doing it here too means the field a password manager remembers matches
+         the one the account has. */
+      var user = (userEl.value || "").trim().toLowerCase();
+      var pass = passEl.value || "";
+      var mail = mailEl ? (mailEl.value || "").trim() : "";
 
       /* Checked here AND on the server, and the server is the one that counts.
          This exists so an obvious mistake costs a keystroke instead of a round
          trip - never as the rule itself, because anything checked in a browser
-         can be skipped in a browser. */
-      if (!email || email.indexOf("@") < 1 || email.indexOf(".", email.indexOf("@")) < 0) {
-        fail("That does not look like an email address.", emailEl); return;
+         can be skipped in a browser.
+
+         Note which check is missing when signing IN: the handle's shape. A
+         form that refuses to send "admin!" has just told whoever typed it
+         something about which handles could exist. */
+      if (!user) { h.fail("Enter your username.", userEl); return null; }
+      if (signingUp && !USERNAME_RE.test(user)) {
+        h.fail("A username is " + MIN_USERNAME + " to " + MAX_USERNAME + " characters \u2014 " +
+               "letters, digits, dot, underscore or hyphen, starting and ending with a letter " +
+               "or a digit.", userEl);
+        return null;
       }
-      if (!pass) { fail("Enter a password.", passEl); return; }
+      if (signingUp && (!mail || mail.indexOf("@") < 1 || mail.indexOf(".", mail.indexOf("@")) < 0)) {
+        h.fail("That does not look like an email address.", mailEl); return null;
+      }
+      if (!pass) { h.fail("Enter a password.", passEl); return null; }
       if (signingUp && pass.length < MIN_PASSWORD) {
-        fail("The password must be at least " + MIN_PASSWORD + " characters long. That one is " +
-             pass.length + ".", passEl);
-        return;
+        h.fail("The password must be at least " + MIN_PASSWORD + " characters long. That one is " +
+               pass.length + ".", passEl);
+        return null;
       }
 
-      busy = true;
-      if (go) go.disabled = true;
-      msg.className = "acct-msg";
-      msg.textContent = signingUp ? "Creating the account…" : "Signing in…";
+      h.say("", signingUp ? "Creating the account\u2026" : "Signing in\u2026");
 
       var zone = "";
       try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (err) {}
 
       var body = signingUp
-        ? { email: email, password: pass,
+        ? { username: user, email: mail, password: pass,
             displayName: ((nameEl && nameEl.value) || "").trim(), timeZone: zone }
-        : { email: email, password: pass };
+        : { username: user, password: pass };
 
-      Sync.call(signingUp ? "auth/register" : "auth/login", "POST", body).then(function(r){
+      return Sync.call(signingUp ? "auth/register" : "auth/login", "POST", body).then(function(r){
         if (r.status === 200 || r.status === 201) {
           Sync.setMe(r.json);
           acctMode = "manage";
@@ -17004,15 +18448,170 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
           }
           return;
         }
-        fail(explain(r, signingUp), r.status === 429 ? null : passEl);
-      }).catch(function(){
-        fail("Could not reach the server.", null);
-      }).then(function(){
-        busy = false;
-        var again = document.getElementById("acct-go");
-        if (again) again.disabled = false;
+        /* A 409 is about the username or the address, never about the
+           password, so the cursor goes where the fix is. */
+        h.fail(explain(r, signingUp),
+               r.status === 429 ? null : (r.status === 409 ? userEl : passEl));
       });
     });
+  }
+
+  /* ---------- forgot: ask for a link ---------- */
+  function renderForgot(){
+    acctTitle.textContent = "Reset your password";
+
+    acctBody.innerHTML =
+      '<p class="tray-hint">Type the address the account was created with. If it has one, a link ' +
+      'to choose a new password is on its way.</p>' +
+      '<form id="acct-forgot-form" novalidate>' +
+        '<label class="field"><span>Email</span>' +
+          '<input id="acct-forgot-email" type="email" autocomplete="email" autocapitalize="off" ' +
+          'spellcheck="false" required></label>' +
+        '<div class="acct-row">' +
+          '<button class="btn primary" type="submit" id="acct-forgot-go">Send the link</button>' +
+          '<button class="btn" type="button" id="acct-back">Back to sign in</button>' +
+        '</div>' +
+        '<p class="acct-msg" id="acct-out-msg" role="status" aria-live="polite"></p>' +
+      '</form>' +
+      '<p class="acct-note">The link is valid for one hour and works once. Using it signs this ' +
+      'account out of every device, including this one. The email names the username too, which ' +
+      'is the way back if that is the half you have forgotten.</p>' +
+      forgotWhy();
+
+    bindClick("acct-back", function(){
+      acctMode = "in";
+      renderAcct();
+    });
+
+    wireForm("acct-forgot-form", "acct-forgot-go", function(h){
+      var mailEl = document.getElementById("acct-forgot-email");
+      var mail = (mailEl.value || "").trim();
+
+      if (!mail || mail.indexOf("@") < 1 || mail.indexOf(".", mail.indexOf("@")) < 0) {
+        h.fail("That does not look like an email address.", mailEl); return null;
+      }
+
+      h.say("", "Asking the server\u2026");
+
+      return Sync.call("auth/password/forgot", "POST", { email: mail }).then(function(r){
+        if (r.status === 202 || r.status === 200 || r.status === 204) {
+          /* Deliberately says "if". The server will not tell this page whether
+             the address is registered, and a page that answered "sent!" would
+             be inventing a confirmation nobody gave it - and would leak, on the
+             next screen, exactly what the endpoint refused to leak. */
+          h.say("ok", "If that address has an account, a link is on its way. It is valid for " +
+                      "one hour. Nothing arrives if the address has no account here, and " +
+                      "nothing about this screen will tell you which happened.");
+          return;
+        }
+        h.fail(explain(r), mailEl);
+      });
+    });
+  }
+
+  /* ---------- reset: choose the new password ---------- */
+  function renderReset(){
+    acctTitle.textContent = "Choose a new password";
+
+    /* Reached without a token - a bookmarked ?account=reset, or a link the mail
+       client mangled on the way through. There is nothing to submit, so the
+       panel offers the only useful move instead of an empty form. */
+    if (!resetToken) {
+      acctBody.innerHTML =
+        '<p class="acct-msg bad">This page was opened without a reset link, or with one that ' +
+        'was cut short on the way here.</p>' +
+        '<p class="acct-note">Links are long and some mail clients wrap them. Copy the whole ' +
+        'thing out of the message, or ask for another.</p>' +
+        '<div class="acct-row">' +
+          '<button class="btn primary" id="acct-again">Email me another link</button>' +
+          '<button class="btn" id="acct-back">Back to sign in</button>' +
+        '</div>';
+      bindClick("acct-again", function(){ acctMode = "forgot"; renderAcct(); });
+      bindClick("acct-back",  function(){ acctMode = "in";     renderAcct(); });
+      return;
+    }
+
+    acctBody.innerHTML =
+      '<p class="tray-hint">This link works once. Choose the password you will use from now on.</p>' +
+      '<form id="acct-reset-form" novalidate>' +
+        '<label class="field"><span>New password</span>' +
+          '<input id="acct-new" type="password" autocomplete="new-password" required></label>' +
+        '<label class="field"><span>Again</span>' +
+          '<input id="acct-new2" type="password" autocomplete="new-password" required></label>' +
+        '<p class="acct-fine">At least ' + MIN_PASSWORD + ' characters. Typed twice because ' +
+        'there is no old password left to fall back on if it goes in with a typo.</p>' +
+        '<div class="acct-row">' +
+          '<button class="btn primary" type="submit" id="acct-reset-go">Set the password</button>' +
+          '<button class="btn" type="button" id="acct-reveal2" aria-pressed="false">Show password</button>' +
+        '</div>' +
+        '<p class="acct-msg" id="acct-out-msg" role="status" aria-live="polite"></p>' +
+      '</form>' +
+      '<p class="acct-note">Setting it signs this account out everywhere. That is the point: the ' +
+      'reason to reset a password is that somebody else may have had it, and an attacker holding ' +
+      'a session cookie was never using the password anyway.</p>';
+
+    bindClick("acct-reveal2", function(){
+      revealToggle("acct-new", "acct-reveal2");
+      var second = document.getElementById("acct-new2");
+      var first  = document.getElementById("acct-new");
+      if (second && first) second.type = first.type;
+    });
+
+    wireForm("acct-reset-form", "acct-reset-go", function(h){
+      var oneEl = document.getElementById("acct-new");
+      var twoEl = document.getElementById("acct-new2");
+      var one = oneEl.value || "";
+      var two = twoEl.value || "";
+
+      if (one.length < MIN_PASSWORD) {
+        h.fail("The password must be at least " + MIN_PASSWORD + " characters long. That one is " +
+               one.length + ".", oneEl);
+        return null;
+      }
+      if (one !== two) { h.fail("Those two do not match.", twoEl); return null; }
+
+      h.say("", "Setting the password\u2026");
+
+      return Sync.call("auth/password/reset", "POST",
+                       { token: resetToken, newPassword: one }).then(function(r){
+        if (r.status === 204 || r.status === 200) {
+          /* Spent, so it is dropped here as well as on the server. Leaving it
+             in a variable would mean a second submit posting a token that can
+             only fail. */
+          resetToken = null;
+          Sync.setMe(null);
+          acctMode = "in";
+          renderAcct();
+          sayOnPanel("ok", "Password changed. Every device is signed out, this one included \u2014 " +
+                           "sign in with the new one.");
+          toast("password changed",
+                "Every session was ended, on every machine. Sign in again with the new password.");
+          return;
+        }
+        if (r.status === 410) {
+          resetToken = null;
+          acctMode = "reset";
+          renderAcct();
+          sayOnPanel("bad", "That link no longer works. Links expire after an hour and can only " +
+                            "be used once.");
+          return;
+        }
+        h.fail(explain(r), oneEl);
+      });
+    });
+  }
+
+  /* Shared by both reveal buttons. The password is in the DOM either way; what
+     this changes is whether the person typing can see their own typo. */
+  function revealToggle(fieldId, buttonId){
+    var field = document.getElementById(fieldId);
+    var btn   = document.getElementById(buttonId);
+    if (!field || !btn) return;
+    var show = field.type === "password";
+    field.type = show ? "text" : "password";
+    btn.setAttribute("aria-pressed", show ? "true" : "false");
+    btn.textContent = show ? "Hide password" : "Show password";
+    field.focus();
   }
 
   /* ============================================================
@@ -17050,11 +18649,23 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
     acctIntent = q.get("account");
     acctReason = q.get("reason");
     pendingNext = safeNext(q.get("next"));
+
+    /* The reset token, straight out of the link in the email. Held in a
+       variable and never in storage: it is a credential with an hour to live.
+       It is also the reason the parameters below are stripped from the address
+       bar immediately rather than as a tidiness measure - a token left in the
+       URL ends up in the browser history, in a bookmark, and in the Referer
+       header of the next request this page makes. */
+    if (acctIntent === "reset") {
+      var t = q.get("token");
+      resetToken = (t && t.length <= 200) ? t : null;
+    }
+
     if (!acctIntent && !acctReason) return;
     /* Take them out of the address bar, so a refresh after signing in does not
        reopen a panel about a session that ended ten minutes ago. */
     try {
-      q.delete("account"); q.delete("reason"); q.delete("next");
+      q.delete("account"); q.delete("reason"); q.delete("next"); q.delete("token");
       var rest = q.toString();
       window.history.replaceState({}, "",
         window.location.pathname + (rest ? "?" + rest : "") + window.location.hash);
@@ -17063,19 +18674,28 @@ mvn verify         <span class="c"># all 60 tests, no server needed</span></pre>
 
   function reasonText(reason){
     if (reason === "expired")  return "Your session has ended. Sign in again to carry on.";
+    if (reason === "forgot")   return "Type the address the account was created with.";
     if (reason === "password") return "Password changed. Every session was signed out, this one included, so sign in with the new password.";
     return "That page needs an account. Sign in and you will be taken straight back to it.";
   }
 
   function applyAccountIntent(){
     if (!acctIntent && !acctReason) return;
-    if (Sync.me()) {
+
+    /* A reset link is followed by whoever opened the mail, and that is often a
+       browser that is still signed in on this machine - which is precisely the
+       case the reset exists for. So it is the one intent that survives an
+       existing session, rather than being treated as a stale redirect. */
+    if (Sync.me() && acctIntent !== "reset" && acctIntent !== "forgot") {
       /* Already signed in, so whatever redirected here was stale. */
       if (pendingNext) { window.location.replace(pendingNext); return; }
       openAcct("manage");
       return;
     }
-    openAcct(acctIntent === "register" ? "up" : "in");
+    openAcct(acctIntent === "register" ? "up"
+           : acctIntent === "reset"    ? "reset"
+           : acctIntent === "forgot"   ? "forgot"
+           : "in");
     var msg = document.getElementById("acct-out-msg");
     if (msg && acctReason) {
       msg.className = "acct-msg" + (acctReason === "password" ? " ok" : " bad");
