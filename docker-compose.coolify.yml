@@ -135,6 +135,11 @@ services:
       # real university. Keep it.
       - ENROLLMENT_MAIL_SUBJECT_PREFIX=${ENROLLMENT_MAIL_SUBJECT_PREFIX:-[DEMO]}
 
+      # The public address links in outgoing mail point at, password reset
+      # included. Building it from the request's Host header instead would let
+      # anybody aim a valid reset link at their own server.
+      - ENROLLMENT_MAIL_PUBLIC_BASE_URL=${ENROLLMENT_MAIL_PUBLIC_BASE_URL:-}
+
     depends_on:
       postgres:
         condition: service_healthy

@@ -36,14 +36,16 @@ the boundary cannot be moved without rewriting the queries first.
 
 ## 2. The tables
 
-All created by `V3__fieldbook_accounts.sql`, all prefixed `fieldbook_`.
+Created by `V3__fieldbook_accounts.sql`, extended by
+`V5__usernames_and_password_reset.sql`, all prefixed `fieldbook_`.
 
 | table | holds |
 | --- | --- |
-| `fieldbook_accounts` | one row per person. Email (lower-cased, unique), display name, PBKDF2 hash, timezone, best streak |
+| `fieldbook_accounts` | one row per person. Username (lower-cased, unique — the login name), email (lower-cased, unique — where a reset link goes), display name, PBKDF2 hash, timezone, best streak |
 | `fieldbook_account_roles` | `@ElementCollection`, primary key on the pair, so a role cannot be granted twice |
 | `fieldbook_study_days` | one row per calendar day with activity — the streak is derived from these, never stored |
 | `fieldbook_sessions` | one row per signed-in browser. SHA-256 of the cookie, never the cookie |
+| `fieldbook_password_resets` | one row per outstanding reset. SHA-256 of the emailed token, an expiry, and a `used_at` stamp — kept after use as evidence, swept after thirty days |
 | `fieldbook_cards` | Leitner box state per question per learner |
 | `fieldbook_chapters` | read / best score / attempts / passed, per chapter per learner |
 | `fieldbook_notes` | sticky notes, ordered by a fractional `sort_index` |
@@ -152,14 +154,26 @@ everything they then do is recorded in an account the attacker can read.
 
 ### Not leaking who has an account
 
-- Login returns one 401 for both "unknown address" and "wrong password", and
-  runs the hash even for an unknown address so the two take the same time.
+- Login returns one 401 for both "unknown username" and "wrong password", and
+  runs the hash even for an unknown username so the two take the same time.
   Returning early would make a miss measurably faster, and that timing
-  difference is itself the oracle.
-- Registration with an existing address falls through to a login attempt with
-  the supplied password, rather than answering "already registered". The real
-  product answer is to send an email either way and say nothing in the response;
-  that needs a mail server.
+  difference is itself the oracle. A **malformed** handle gets the same 401
+  rather than a description of the rule, for the same reason.
+- `POST /auth/password/forgot` answers **202 for every input** — known address,
+  unknown address, malformed address, an account that has already asked five
+  times this hour. This is the one place the property is absolute, and it is
+  why `AccountService.requestPasswordReset` returns `void`: a method that
+  returned a boolean would make it very hard for the resource not to leak it.
+- Registration **does** report a duplicate username or address, as a 409. That
+  is a deliberate reversal of what this document used to say, and the reasoning
+  is worth following. While the address *was* the login name, refusing a
+  duplicate turned an anonymous form into a membership oracle, so the old code
+  quietly attempted a login instead. Two things changed: a duplicate address no
+  longer implies anything about the credentials in the request (the username
+  may well be free, so there is nothing to fall through to), and a form with two
+  ways to fail that will not say which is a form nobody can get past. The cost —
+  this endpoint will confirm whether an address is in use — is real, and the
+  proper fix is an email verification step this project still does not have.
 - `NoteService` answers **404**, not 403, for somebody else's note. 403 confirms
   the row exists.
 
@@ -167,7 +181,7 @@ everything they then do is recorded in an account the attacker can read.
 
 `LoginThrottle` keeps two counters, because there are two attacks:
 
-- **per account** (8 failures / 15 min) — a password list against one email;
+- **per account** (8 failures / 15 min) — a password list against one username;
 - **per source address** (30 / 15 min) — credential stuffing, where no single
   account is tried twice and the per-account counter never fires.
 
@@ -340,8 +354,10 @@ cookie.
 
 | method | path | notes |
 | --- | --- | --- |
-| `POST` | `/auth/register` | 201 + cookie. Duplicate address falls through to a login attempt |
-| `POST` | `/auth/login` | 200 + cookie, 401, or 429 with `Retry-After` |
+| `POST` | `/auth/register` | `{username, email, displayName?, password, timeZone?}` → 201 + cookie; 409 if the username or the address is taken |
+| `POST` | `/auth/login` | `{username, password}` → 200 + cookie, 401, or 429 with `Retry-After` |
+| `POST` | `/auth/password/forgot` | `{email}` → **always 202**, whether or not the address is known |
+| `POST` | `/auth/password/reset` | `{token, newPassword}` → 204 + expired cookie; 410 if the link is unknown, expired or spent; 400 if the password is too short (which does **not** spend the token) |
 | `GET` | `/auth/me` | the signed-in account |
 | `POST` | `/auth/logout` | deletes the row *and* expires the cookie |
 | `POST` | `/auth/logout-all` | every session for the account |
@@ -391,6 +407,22 @@ tutorial.html?account=signin&reason=expired&next=area-riservata.html
 anything else means "that page needs an account"); `next` is where to return to
 afterwards and is validated against the current origin before it is used — see
 `safeNext`, which exists in both clients for the same reason.
+
+`account` also takes `register`, `forgot` and `reset`. The reset link in the
+email is exactly this:
+
+```
+tutorial.html?account=reset&token=<the raw token>
+```
+
+Two things about that link are worth noticing. Its base URL comes from
+`enrollment.mail.public-base-url` and **not** from the request's `Host` header —
+building it from the header would let anyone send a victim a real, valid reset
+link pointing at the attacker's server, which is **host header injection** and
+is nearly always found in exactly this feature. And `reset` is the one intent
+that survives an existing session: the browser holding the mail is usually the
+browser already signed in, and showing that person the account panel instead of
+the form they clicked through to is the one way to make the link look broken.
 
 | file | what it is |
 | --- | --- |
@@ -445,10 +477,15 @@ because a dialog with an OK button is dismissed by reflex.
 
 ## 8. What is deliberately missing
 
-- **No email verification.** An address is never proved.
-- **No password reset.** Not optional for a real product; needs a mail server.
+- **No email verification.** An address is never proved. Since the address is
+  now the only route back into a locked-out account, a typo at registration
+  produces an account whose reset link goes to a stranger — and nothing here
+  notices.
 - **No multi-factor.**
-- **No audit log** of sign-ins or of failed attempts.
+- **No audit log** of sign-ins or of failed attempts. Spent reset tokens are
+  kept for thirty days, which is the smallest useful version of one: "was a
+  reset requested for my account, when, from where, and was it used?" is a
+  question with an answer.
 - **The rate limiter is in memory** — per node, reset by a redeploy.
 - **Sticky notes are plain text**, never rendered as HTML or Markdown. That
   removes stored XSS by construction: a note reading `<img onerror=...>` is a

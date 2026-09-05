@@ -73,6 +73,15 @@ public class MailTemplates {
     public static final String GRADE_FAILED = "grade-failed";
     public static final String TEST_MESSAGE = "test-message";
 
+    /**
+     * The one template that belongs to the fieldbook rather than to the
+     * registrar - and the reason the mail package is infrastructure shared by
+     * both bounded contexts rather than part of either. A second context
+     * needing to send mail is the moment that distinction stops being
+     * theoretical.
+     */
+    public static final String PASSWORD_RESET = "password-reset";
+
     private static final String TEMPLATE_PATH = "/mail/templates/";
     private static final String SUBJECT_PREFIX = "Subject:";
     private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([a-zA-Z0-9_.]+)}");
@@ -118,7 +127,8 @@ public class MailTemplates {
     public Set<String> knownTemplates() {
         Set<String> keys = new LinkedHashSet<>();
         Collections.addAll(keys,
-                ENROLLMENT_CONFIRMED, GRADE_PASSED, GRADE_HONOURS, GRADE_FAILED, TEST_MESSAGE);
+                ENROLLMENT_CONFIRMED, GRADE_PASSED, GRADE_HONOURS, GRADE_FAILED,
+                PASSWORD_RESET, TEST_MESSAGE);
         return Collections.unmodifiableSet(keys);
     }
 

@@ -38,6 +38,7 @@
       <div class="res-id">
         <p class="eyebrow">Area riservata</p>
         <h1 id="hello">&nbsp;</h1>
+        <p class="res-mail" id="handle"></p>
         <p class="res-mail" id="mail"></p>
         <div class="chips" id="chips"></div>
       </div>
@@ -198,14 +199,14 @@
           <div class="txt">
             <b>Delete this account</b>
             <span>Account, sessions, progress, study days and notes, in one
-              transaction. There is no undo and no backup. Type your email
-              address to confirm.</span>
+              transaction. There is no undo and no backup. Type your username
+              to confirm.</span>
           </div>
           <button type="button" class="btn danger" id="del-toggle">Delete</button>
 
           <form class="inline-form" id="del-form" hidden>
             <label class="field">
-              <span>Type your email address</span>
+              <span>Type your username</span>
               <input type="text" id="del-confirm" autocomplete="off"
                      autocapitalize="off" spellcheck="false">
             </label>
@@ -289,7 +290,12 @@
 
   function paintIdentity(a) {
     F.text(document.getElementById("hello"),
-           a.displayName ? a.displayName : a.email);
+           a.displayName ? a.displayName : (a.username || a.email));
+    /* Two lines, and the order says which is which: the handle you sign in
+       with, then the address a reset link would go to. They were the same
+       field once, and a page that still showed only the address would leave
+       somebody with no way to find out what to type at the login box. */
+    F.text(document.getElementById("handle"), a.username ? "@" + a.username : "");
     F.text(document.getElementById("mail"), a.email);
 
     var chips = document.getElementById("chips");
@@ -652,10 +658,14 @@
     e.preventDefault();
     F.hush(delMsg);
 
-    /* Typing the address is the confirmation. A dialog with an OK button is
-       dismissed by reflex; retyping the thing being destroyed is not. */
-    if (!me || delWhat.value.trim().toLowerCase() !== me.email.toLowerCase()) {
-      F.say(delMsg, "bad", "That is not the address on this account.");
+    /* Typing the name is the confirmation. A dialog with an OK button is
+       dismissed by reflex; retyping the thing being destroyed is not.
+       The username rather than the address, because it is the identifier this
+       account is actually known by - and because it is the one of the two a
+       person can be sure of without opening another page. */
+    if (!me || !me.username
+            || delWhat.value.trim().toLowerCase() !== me.username.toLowerCase()) {
+      F.say(delMsg, "bad", "That is not the username on this account.");
       return;
     }
 

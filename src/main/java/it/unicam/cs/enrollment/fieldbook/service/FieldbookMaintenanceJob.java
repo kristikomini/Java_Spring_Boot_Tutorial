@@ -50,6 +50,9 @@ public class FieldbookMaintenanceJob {
     AuthSessionRepository sessions;
 
     @Inject
+    AccountService accounts;
+
+    @Inject
     Clock clock;
 
     @Schedule(hour = "3", minute = "20", second = "0", persistent = false,
@@ -59,6 +62,27 @@ public class FieldbookMaintenanceJob {
         int removed = sessions.deleteExpired(clock.instant());
         if (removed > 0) {
             LOG.info("Swept {} expired fieldbook sessions", removed);
+        }
+    }
+
+    /**
+     * Drop password reset rows once they are past the audit window.
+     *
+     * <p>A separate schedule rather than two statements in the method above,
+     * and ten minutes later rather than at the same instant. Two reasons, and
+     * the second is the one worth remembering: each sweep is its own
+     * transaction, so a failure in one does not roll back the other; and two
+     * bulk deletes firing simultaneously against tables that share a parent is
+     * how a nightly job starts deadlocking against itself at three in the
+     * morning, which is the worst time to be reading a stack trace.
+     */
+    @Schedule(hour = "3", minute = "30", second = "0", persistent = false,
+            info = "Delete spent and expired fieldbook password reset tokens")
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public void sweepSpentPasswordResets() {
+        int removed = accounts.sweepExpiredResets();
+        if (removed > 0) {
+            LOG.info("Swept {} spent or expired password reset tokens", removed);
         }
     }
 }

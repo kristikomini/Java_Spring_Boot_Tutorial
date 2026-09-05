@@ -1,6 +1,7 @@
 package it.unicam.cs.enrollment.fieldbook.domain;
 
 import it.unicam.cs.enrollment.domain.model.Email;
+import it.unicam.cs.enrollment.fieldbook.domain.Username;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +16,7 @@ class CardProgressTest {
     private static final Instant NOW = Instant.parse("2026-03-01T10:00:00Z");
 
     private CardProgress card() {
-        LearnerAccount a = LearnerAccount.register(Email.of("m@u.it"), "M", "hash", null);
+        LearnerAccount a = LearnerAccount.register(Username.of("mario"), Email.of("m@u.it"), "M", "hash", null);
         return CardProgress.start(a, "quiz:abc", "ch-persistence");
     }
 

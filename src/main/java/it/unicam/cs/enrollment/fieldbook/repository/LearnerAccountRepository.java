@@ -39,7 +39,41 @@ public class LearnerAccountRepository extends AbstractJpaRepository<LearnerAccou
     }
 
     /**
-     * Lookup by the natural key, used by both registration and login.
+     * Lookup by the login name. The query sign-in runs, and the only one it
+     * runs: an account is found by USERNAME or it is not found.
+     *
+     * <p>The handle must already be normalised to lower case by
+     * {@code Username.of}, for the same reason the email lookup below says so -
+     * normalising here as well would hide a caller that forgot, which is a bug
+     * worth seeing rather than papering over.
+     */
+    public Optional<LearnerAccount> findByUsername(String normalisedUsername) {
+        if (normalisedUsername == null || normalisedUsername.isEmpty()) {
+            return Optional.empty();
+        }
+        return em().createNamedQuery("LearnerAccount.findByUsername", LearnerAccount.class)
+                .setParameter("username", normalisedUsername)
+                .getResultList()
+                .stream()
+                .findFirst();
+    }
+
+    /**
+     * Whether the handle is taken.
+     *
+     * <p>Unlike {@link #existsByEmail}, this one IS reported to the caller:
+     * registration answers "that name is taken" out loud, because a signup form
+     * that silently refuses a name leaves the person with no move to make. The
+     * enumeration cost is real and is the smaller of the two - a username is a
+     * public-facing label, and a system that shows it anywhere has already told
+     * you which ones exist.
+     */
+    public boolean existsByUsername(String normalisedUsername) {
+        return findByUsername(normalisedUsername).isPresent();
+    }
+
+    /**
+     * Lookup by the address, used by registration and by password reset.
      *
      * <p>{@code getResultList().stream().findFirst()} rather than
      * {@code getSingleResult()}: the latter throws

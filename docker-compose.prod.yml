@@ -175,6 +175,12 @@ services:
       # can never be mistaken for correspondence from a real university.
       ENROLLMENT_MAIL_SUBJECT_PREFIX: ${ENROLLMENT_MAIL_SUBJECT_PREFIX:-[DEMO]}
 
+      # The public address links in outgoing mail point at. Set it: without it
+      # the password reset link is built from the request's Host header, which
+      # the caller controls, and a valid reset link can then be aimed at
+      # somebody else's server. See .env.prod.example.
+      ENROLLMENT_MAIL_PUBLIC_BASE_URL: ${ENROLLMENT_MAIL_PUBLIC_BASE_URL:-}
+
       # Uncomment to force every message to one address regardless of its
       # recipient. If you ever restore a dump with real addresses in it onto
       # this server, set this FIRST.

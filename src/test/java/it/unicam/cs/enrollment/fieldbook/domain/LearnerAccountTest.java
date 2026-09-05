@@ -1,6 +1,7 @@
 package it.unicam.cs.enrollment.fieldbook.domain;
 
 import it.unicam.cs.enrollment.domain.model.Email;
+import it.unicam.cs.enrollment.fieldbook.domain.Username;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,8 @@ class LearnerAccountTest {
 
     private LearnerAccount account() {
         return LearnerAccount.register(
-                Email.of("mario@unicam.it"), "Mario", "pbkdf2-sha256$1$a$b", "Europe/Rome");
+                Username.of("mario"), Email.of("mario@unicam.it"), "Mario",
+                "pbkdf2-sha256$1$a$b", "Europe/Rome");
     }
 
     @Test
@@ -93,8 +95,22 @@ class LearnerAccountTest {
     @DisplayName("refuses to be built without a display name")
     void requiresADisplayName() {
         assertThatThrownBy(() -> LearnerAccount.register(
-                Email.of("x@y.it"), "   ", "hash", null))
+                Username.of("someone"), Email.of("x@y.it"), "   ", "hash", null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("keeps the login name and the address as separate things")
+    void usernameAndEmailAreDifferentFields() {
+        LearnerAccount a = account();
+        assertThat(a.getUsername().getValue()).isEqualTo("mario");
+        assertThat(a.getEmail().getValue()).isEqualTo("mario@unicam.it");
+
+        // The whole practical payoff of splitting them: the address can change
+        // without the account becoming a different account.
+        a.changeEmail(Email.of("Mario.Rossi@Gmail.COM"));
+        assertThat(a.getEmail().getValue()).isEqualTo("mario.rossi@gmail.com");
+        assertThat(a.getUsername().getValue()).isEqualTo("mario");
     }
 
     @Test

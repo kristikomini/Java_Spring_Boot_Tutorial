@@ -1,6 +1,7 @@
 package it.unicam.cs.enrollment.fieldbook.service;
 
 import it.unicam.cs.enrollment.domain.model.Email;
+import it.unicam.cs.enrollment.fieldbook.domain.Username;
 import it.unicam.cs.enrollment.fieldbook.domain.CardProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
@@ -29,7 +30,7 @@ class MasteryCalculatorTest {
     private final MasteryCalculator calc = new MasteryCalculator();
 
     private LearnerAccount account() {
-        return LearnerAccount.register(Email.of("m@u.it"), "M", "hash", null);
+        return LearnerAccount.register(Username.of("mario"), Email.of("m@u.it"), "M", "hash", null);
     }
 
     private ChapterProgress chapter(String id, boolean read, int score) {

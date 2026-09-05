@@ -23,6 +23,21 @@ import jakarta.validation.constraints.Size;
  */
 public class RegisterRequest {
 
+    /**
+     * The handle this account will sign in with.
+     *
+     * <p>{@code max = 60} rather than {@code Username.MAX_LENGTH}, and that is
+     * on purpose: the boundary limit is a denial-of-service guard, and the
+     * business rule is thirty characters enforced by {@code Username.of}. If
+     * this said thirty, a thirty-one character handle would be rejected by Bean
+     * Validation with a generic message instead of by the domain with a
+     * specific one, and the two would drift apart the first time the rule
+     * changed.
+     */
+    @NotBlank(message = "A username is required")
+    @Size(max = 60)
+    private String username;
+
     @NotBlank(message = "An email address is required")
     @Size(max = 255)
     private String email;
@@ -37,6 +52,9 @@ public class RegisterRequest {
     /** IANA zone id from the browser, for example Europe/Rome. Optional. */
     @Size(max = 60)
     private String timeZone;
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -62,6 +80,7 @@ public class RegisterRequest {
      */
     @Override
     public String toString() {
-        return "RegisterRequest{email=" + email + ", displayName=" + displayName + "}";
+        return "RegisterRequest{username=" + username + ", email=" + email
+                + ", displayName=" + displayName + "}";
     }
 }

@@ -1,6 +1,7 @@
 package it.unicam.cs.enrollment.fieldbook.service;
 
 import it.unicam.cs.enrollment.domain.model.Email;
+import it.unicam.cs.enrollment.fieldbook.domain.Username;
 import it.unicam.cs.enrollment.fieldbook.domain.CardProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
@@ -67,7 +68,7 @@ class ProgressServiceTest {
     void setUp() {
         service = new ProgressService(repository, accountRepository, new MasteryCalculator(),
                 accounts, Clock.fixed(NOW, ZoneOffset.UTC), log);
-        account = LearnerAccount.register(Email.of("m@u.it"), "M", "hash", "Europe/Rome");
+        account = LearnerAccount.register(Username.of("mario"), Email.of("m@u.it"), "M", "hash", "Europe/Rome");
     }
 
     /**

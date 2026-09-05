@@ -60,6 +60,7 @@
              different model - see V3__fieldbook_accounts.sql. -->
         <class>it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount</class>
         <class>it.unicam.cs.enrollment.fieldbook.domain.AuthSession</class>
+        <class>it.unicam.cs.enrollment.fieldbook.domain.PasswordResetToken</class>
         <class>it.unicam.cs.enrollment.fieldbook.domain.CardProgress</class>
         <class>it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress</class>
         <class>it.unicam.cs.enrollment.fieldbook.domain.StickyNote</class>

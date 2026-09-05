@@ -51,19 +51,44 @@ import java.util.TreeSet;
  * both agree on. Here that is exactly {@link BaseEntity} and {@link Email}.
  * Keeping the shared part deliberately tiny is the whole trick.
  *
+ * <h2>Two names, and why neither one does the other's job</h2>
+ * An account has a {@link Username} it signs in with and an {@link Email} it is
+ * reached at. They were one field once, and separating them is what makes the
+ * password reset flow possible at all: the reset link has to go somewhere the
+ * login form does not ask about. {@code Username}'s javadoc has the longer
+ * argument.
+ *
  * <h2>What is stored, and what deliberately is not</h2>
  * No plaintext password appears in this class or its table - see
- * {@code fieldbook.security.PasswordHasher}. There is no email verification,
- * no password reset and no OAuth. Those are real features with real designs,
- * and their absence is written down in the fieldbook's security chapter rather
- * than quietly left out.
+ * {@code fieldbook.security.PasswordHasher}. There is still no email
+ * verification and no OAuth: those are real features with real designs, and
+ * their absence is written down in the fieldbook's security chapter rather than
+ * quietly left out. Password reset is no longer on that list - see
+ * {@link PasswordResetToken}.
  */
 @Entity
 @Table(
         name = "fieldbook_accounts",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_fieldbook_accounts_email",
-                columnNames = "email")
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_fieldbook_accounts_username",
+                        columnNames = "username"),
+                @UniqueConstraint(
+                        name = "uk_fieldbook_accounts_email",
+                        columnNames = "email")
+        }
+)
+/*
+ * Two lookups, and they are not interchangeable. Sign-in resolves a USERNAME;
+ * a reset request resolves an EMAIL. Keeping them as separate named queries
+ * rather than one "find by identifier" that tries both is deliberate: a login
+ * form that silently accepts an address as well is a login form whose throttle
+ * counts two different keys for the same account, and whose error messages have
+ * to describe two shapes of input at once.
+ */
+@NamedQuery(
+        name = "LearnerAccount.findByUsername",
+        query = "SELECT a FROM LearnerAccount a WHERE a.username.value = :username"
 )
 @NamedQuery(
         name = "LearnerAccount.findByEmail",
@@ -80,12 +105,24 @@ public class LearnerAccount extends BaseEntity {
     public static final String ROLE_AUTHOR = "author";
 
     /**
-     * The natural key, and the thing typed into the login box.
+     * The handle typed into the login box, and the natural key.
      *
-     * <p>{@link Email} normalises to lower case in its factory, which is what
-     * makes the unique constraint above mean what a human expects it to mean.
-     * Without normalisation "Mario@unicam.it" and "mario@unicam.it" are two
-     * accounts, and the second one is a support ticket.
+     * <p>{@link Username} normalises to lower case in its factory, which is
+     * what makes the unique constraint above mean what a human expects it to
+     * mean. Without normalisation "Mario" and "mario" are two accounts, and the
+     * second one is a support ticket.
+     */
+    @Embedded
+    private Username username;
+
+    /**
+     * Where this person is reached. Password resets, and nothing else today.
+     *
+     * <p>Still unique, and still normalised to lower case by {@link Email}. The
+     * uniqueness is no longer about identity - the username carries that - but
+     * about the reset flow: an address shared by two accounts makes "send the
+     * link to this address" a question with two answers, and picking one of
+     * them silently is how somebody resets a stranger's password.
      */
     @Embedded
     private Email email;
@@ -190,7 +227,9 @@ public class LearnerAccount extends BaseEntity {
         // required by JPA
     }
 
-    private LearnerAccount(Email email, String displayName, String passwordHash, String timeZone) {
+    private LearnerAccount(Username username, Email email, String displayName,
+                           String passwordHash, String timeZone) {
+        this.username = username;
         this.email = email;
         this.displayName = displayName;
         this.passwordHash = passwordHash;
@@ -210,14 +249,15 @@ public class LearnerAccount extends BaseEntity {
      *                     hashing cost stays in the service, where it can be
      *                     configured and measured.
      */
-    public static LearnerAccount register(Email email, String displayName,
+    public static LearnerAccount register(Username username, Email email, String displayName,
                                           String passwordHash, String timeZone) {
+        Objects.requireNonNull(username, "username must not be null");
         Objects.requireNonNull(email, "email must not be null");
         Objects.requireNonNull(passwordHash, "passwordHash must not be null");
         if (displayName == null || displayName.trim().isEmpty()) {
             throw new IllegalArgumentException("displayName must not be blank");
         }
-        return new LearnerAccount(email, displayName.trim(), passwordHash, timeZone);
+        return new LearnerAccount(username, email, displayName.trim(), passwordHash, timeZone);
     }
 
     /**
@@ -315,8 +355,25 @@ public class LearnerAccount extends BaseEntity {
         this.timeZone = timeZone;
     }
 
+    public Username getUsername() {
+        return username;
+    }
+
     public Email getEmail() {
         return email;
+    }
+
+    /**
+     * Change the address a reset link would be sent to.
+     *
+     * <p>Possible precisely because it is no longer the login name: the account
+     * keeps its identity, its history and its sessions across the change. That
+     * is the whole practical payoff of splitting the two fields, and it is
+     * worth noticing that it is a one-line method only because of a decision
+     * made in the schema.
+     */
+    public void changeEmail(Email newEmail) {
+        this.email = Objects.requireNonNull(newEmail, "newEmail must not be null");
     }
 
     public String getDisplayName() {

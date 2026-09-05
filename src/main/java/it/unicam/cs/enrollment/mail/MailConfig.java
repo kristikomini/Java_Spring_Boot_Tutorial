@@ -70,6 +70,7 @@ public class MailConfig {
     private String fromName;
     private String subjectPrefix;
     private String redirectTo;
+    private String publicBaseUrl;
     private int maxAttempts;
     private int batchSize;
     private Duration stuckAfter;
@@ -84,6 +85,7 @@ public class MailConfig {
         this.fromName = stringValue("from-name", "UNICAM Enrollment");
         this.subjectPrefix = stringValue("subject-prefix", "");
         this.redirectTo = stringValue("redirect-to", null);
+        this.publicBaseUrl = stringValue("public-base-url", null);
         this.maxAttempts = intValue("max-attempts", 5, 1, 20);
         this.batchSize = intValue("batch-size", 25, 1, 500);
         this.stuckAfter = Duration.ofMinutes(intValue("stuck-after-minutes", 10, 1, 1440));
@@ -95,10 +97,17 @@ public class MailConfig {
         // exercise across three repositories. Note that nothing secret is
         // printed - a password would be logged as its presence, never its value.
         LOG.info("Mail configuration: enabled={} transport={} from={} <{}> redirectTo={} "
-                        + "maxAttempts={} batchSize={} retentionDays={}",
+                        + "publicBaseUrl={} maxAttempts={} batchSize={} retentionDays={}",
                 enabled, transportMode, fromName, fromAddress,
                 redirectTo == null ? "(none)" : redirectTo,
+                publicBaseUrl == null ? "(from the request)" : publicBaseUrl,
                 maxAttempts, batchSize, retentionDays);
+
+        if (publicBaseUrl == null) {
+            LOG.warn("enrollment.mail.public-base-url is not set: links in outgoing mail will be "
+                    + "built from the request that triggered them. Fine behind a proxy that "
+                    + "overwrites Host; set it explicitly in production. See getPublicBaseUrl().");
+        }
 
         if (redirectTo != null) {
             LOG.warn("Mail REDIRECT is active: every message will be delivered to {} "
@@ -229,6 +238,32 @@ public class MailConfig {
      * redirect in every non-production environment makes that impossible rather
      * than unlikely.
      */
+    /**
+     * The absolute base URL this application is reached at, for links inside
+     * emails - {@code https://fieldbook.example.it/enrollment}, no trailing
+     * slash.
+     *
+     * <h3>Why this is configuration and not something to work out per request</h3>
+     * Because the obvious alternative is a genuine vulnerability with a name.
+     * A link built from the incoming request takes its host from the
+     * {@code Host} header, and that header is supplied by whoever made the
+     * request. Send a password reset request with {@code Host: evil.example}
+     * and the victim receives a real, valid reset link pointing at the
+     * attacker's server - the mail is authentic, the token is authentic, and
+     * the moment the victim clicks it the token is in somebody else's access
+     * log. HOST HEADER INJECTION is the term, and password reset is where it is
+     * nearly always found, because reset mail is the one place an application
+     * puts a credential into a URL.
+     *
+     * <p>Empty means "build it from the request anyway", which is what makes
+     * the fieldbook usable on a laptop where the host really is whatever you
+     * typed. That is a development convenience with a startup warning attached,
+     * not a default anybody should ship.
+     */
+    public Optional<String> getPublicBaseUrl() {
+        return Optional.ofNullable(publicBaseUrl);
+    }
+
     public Optional<String> getRedirectTo() {
         return Optional.ofNullable(redirectTo);
     }

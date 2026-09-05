@@ -120,6 +120,12 @@ class MailTemplatesTest {
         everything.put("sentBy", "Kristi");
         everything.put("note", "checking the relay");
         everything.put("transport", "log only (test)");
+        everything.put("displayName", "Mario");
+        everything.put("username", "mario.rossi");
+        everything.put("resetLink", "https://example.test/enrollment/tutorial.html?account=reset&token=abc");
+        everything.put("validFor", "1 hour");
+        everything.put("expiresAt", "1 March 2026 at 11:00 CET");
+        everything.put("requestedFrom", "127.0.0.1");
 
         // A cheap guard against the commonest template bug there is: a file
         // renamed, a key added to the constant list but not to the resources
