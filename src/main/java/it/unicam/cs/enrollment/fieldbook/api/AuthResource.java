@@ -22,7 +22,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -58,9 +57,12 @@ import java.util.ArrayList;
  *   <li>202 for a password reset request, always - see
  *       {@link #forgotPassword}. It is the one status here that is chosen for
  *       what it does NOT reveal.</li>
- *   <li>429 when throttled, with {@code Retry-After}. A client that retries
- *       politely needs to be told how long to wait, and a client that does not
- *       is being told anyway.</li>
+ *   <li>429 when throttled, with {@code Retry-After} carrying the REAL
+ *       remaining window rather than a constant. A client that retries politely
+ *       needs to be told how long to wait, and a client that does not is being
+ *       told anyway. Registration is throttled as well as login - it is
+ *       anonymous, it writes a row and it runs a full PBKDF2, which is the
+ *       exact shape of an endpoint that needs a limit.</li>
  * </ul>
  */
 @Path("/fieldbook/auth")
@@ -99,38 +101,44 @@ public class AuthResource {
     HttpServletRequest servletRequest;
 
     /**
-     * The caller address, for the per-source throttle.
+     * The caller address, for the per-source throttles.
      *
-     * <p>{@code X-Forwarded-For} is set by a reverse proxy and is
-     * ATTACKER-CONTROLLED unless the proxy overwrites it. Trusting it blindly
-     * means an attacker sends a different value on every request and the
-     * per-source limit never fires. The correct configuration is a proxy that
-     * replaces the header rather than appending to it, and an application that
-     * takes the LAST entry rather than the first. This takes the first, which
-     * is right behind a proxy you control and wrong behind one you do not -
-     * written down here because a comment is cheaper than a false sense of
-     * security.
+     * <h3>Why this stopped reading {@code X-Forwarded-For} itself</h3>
+     * It used to take the first entry of that header. That is the documented
+     * shape of the value, and it is also ATTACKER-CONTROLLED: a header is
+     * whatever the caller typed, so an attacker sends a different one on every
+     * request and a per-source limit keyed on it never fires once. A rate
+     * limiter that can be bypassed by setting a header is not a rate limiter,
+     * it is a log line.
+     *
+     * <p>The fix is not to parse the header more cleverly - taking the last
+     * entry instead of the first, say - because no parsing rule can tell which
+     * entries a trusted proxy wrote and which the caller supplied. The fix is
+     * to get the answer from something the caller cannot write, and to make the
+     * proxy responsible for putting the truth there.
+     *
+     * <p>That is exactly what {@code proxy-address-forwarding} does, and this
+     * deployment already turns it on - see section 5 of
+     * {@code docker/wildfly/configure-prod.cli}. With it, Undertow consumes
+     * {@code X-Forwarded-For} and {@code X-Forwarded-Proto} at the edge of the
+     * server and rewrites the request itself, so {@code getRemoteAddr()}
+     * returns the real client address online and the peer address locally.
+     * One value, correct in both places, and not writable by the caller.
+     *
+     * <p>The cost of getting this wrong runs in the other direction too: behind
+     * a proxy WITHOUT that setting, every request appears to come from the
+     * proxy, and the per-source counter throttles the whole internet as one
+     * caller. That failure is at least loud and safe. The header-trusting
+     * version failed silently and open, which is the worse of the two.
      */
-    private String sourceAddress(String forwarded, String remote) {
-        if (forwarded != null && !forwarded.trim().isEmpty()) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        if (remote != null && !remote.trim().isEmpty()) {
-            return remote.trim();
-        }
-        // The socket's own peer address, which is the only value here that the
-        // caller cannot choose. Behind a proxy it is the proxy, which is why
-        // the forwarded header is consulted first - and why the note above
-        // about which end of that header to trust matters.
+    private String sourceAddress() {
         String peer = servletRequest == null ? null : servletRequest.getRemoteAddr();
-        return (peer == null || peer.isEmpty()) ? "unknown" : peer;
+        return (peer == null || peer.trim().isEmpty()) ? "unknown" : peer.trim();
     }
 
     @POST
     @Path("/register")
-    public Response register(@Valid @NotNull RegisterRequest request,
-                             @HeaderParam("X-Forwarded-For") String forwarded) {
+    public Response register(@Valid @NotNull RegisterRequest request) {
         char[] password = request.getPassword().toCharArray();
         try {
             AccountService.Login login = accounts.register(
@@ -139,7 +147,7 @@ public class AuthResource {
                     request.getDisplayName(),
                     password,
                     request.getTimeZone(),
-                    sourceAddress(forwarded, null),
+                    sourceAddress(),
                     headers.getHeaderString(HttpHeaders.USER_AGENT));
             return respondTo(login, Response.Status.CREATED);
         } finally {
@@ -149,14 +157,13 @@ public class AuthResource {
 
     @POST
     @Path("/login")
-    public Response login(@Valid @NotNull LoginRequest request,
-                          @HeaderParam("X-Forwarded-For") String forwarded) {
+    public Response login(@Valid @NotNull LoginRequest request) {
         char[] password = request.getPassword().toCharArray();
         try {
             AccountService.Login login = accounts.login(
                     request.getUsername(),
                     password,
-                    sourceAddress(forwarded, null),
+                    sourceAddress(),
                     headers.getHeaderString(HttpHeaders.USER_AGENT));
             return respondTo(login, Response.Status.OK);
         } finally {
@@ -172,10 +179,18 @@ public class AuthResource {
                         .entity(describe(login.getAccount()))
                         .build();
             case THROTTLED:
+                // The real remaining window, not a constant. This used to send
+                // a flat 900 while LoginThrottle.retryAfterSeconds - which
+                // knows when the window actually opened - was called only by a
+                // test. A header that says "fifteen minutes" to somebody with
+                // twenty seconds left is worse than no header: a polite client
+                // obeys it, so the number is not advice, it is the wait.
+                long retryAfter = login.getRetryAfterSeconds();
                 return Response.status(429)
-                        .header("Retry-After", 900)
+                        .header("Retry-After", retryAfter)
                         .entity(problem(429, "Too many attempts",
-                                "Too many failed sign-in attempts. Try again in a few minutes."))
+                                "Too many attempts from this address. Try again in "
+                                        + describe(retryAfter) + "."))
                         .build();
             case BAD_CREDENTIALS:
             default:
@@ -267,12 +282,11 @@ public class AuthResource {
      */
     @POST
     @Path("/password/forgot")
-    public Response forgotPassword(@Valid @NotNull ForgotPasswordRequest request,
-                                   @HeaderParam("X-Forwarded-For") String forwarded) {
+    public Response forgotPassword(@Valid @NotNull ForgotPasswordRequest request) {
         accounts.requestPasswordReset(
                 request.getEmail(),
                 resetLinkBase(),
-                sourceAddress(forwarded, null));
+                sourceAddress());
 
         return Response.accepted()
                 .entity(problem(202, "Check your inbox",
@@ -368,6 +382,22 @@ public class AuthResource {
         return Response.noContent()
                 .cookie(SessionCookies.expire(uriInfo))
                 .build();
+    }
+
+    /**
+     * "about 4 minutes", for the sentence a person reads.
+     *
+     * <p>The header carries the exact number for machines; this rounds for
+     * humans, because "try again in 247 seconds" invites arithmetic nobody
+     * wants to do. Rounding UP, so that following the sentence never lands you
+     * back on the same error.
+     */
+    private static String describe(long seconds) {
+        if (seconds <= 60) {
+            return "under a minute";
+        }
+        long minutes = (seconds + 59) / 60;
+        return "about " + minutes + (minutes == 1 ? " minute" : " minutes");
     }
 
     private AccountResponse describe(LearnerAccount account) {

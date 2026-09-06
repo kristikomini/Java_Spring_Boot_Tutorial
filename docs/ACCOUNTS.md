@@ -90,6 +90,27 @@ can be raised later without invalidating existing rows. `needsRehash()` reports
 a row written under weaker parameters, and the row is silently upgraded on the
 next **successful** login, which is the only moment the plaintext exists.
 
+**The minimum length is one character.** It was twelve, which is the NIST
+figure, and the argument for twelve has not stopped being true — length is
+what buys entropy, and composition rules produce `Password1!` rather than
+unpredictability. What changed is the judgement about whose risk this is. An
+account here holds one learner's own progress and sticky notes, the whole
+feature is optional, and a twelve-character wall in front of an optional
+feature mostly produces people who never sign in at all. The same relaxation
+applies to the username: any one to thirty characters, with nothing invisible
+in them.
+
+That is a real reduction in security, and it is affordable only because of what
+was *not* relaxed — the hashing above, so a weak password is still expensive
+to attack offline, and the throttle below, so it is expensive to attack online.
+Those two are load-bearing now in a way they were not while a length rule was
+doing part of the work. On a system holding anything that matters, put the
+floor back.
+
+Not zero, though. An empty password is not a weak credential, it is the absence
+of one, and an account anybody can open by leaving a box blank is not a weaker
+account than its neighbour — it is a public one.
+
 Argon2id is better, because it is memory-hard and therefore resists a GPU
 attack in a way PBKDF2 does not. It would mean a third-party dependency; PBKDF2
 is in the JDK, so every line of the algorithm path is readable here. In a real
@@ -179,16 +200,40 @@ everything they then do is recorded in an account the attacker can read.
 
 ### Throttling
 
-`LoginThrottle` keeps two counters, because there are two attacks:
+`LoginThrottle` keeps three counters, because there are three attacks:
 
 - **per account** (8 failures / 15 min) — a password list against one username;
-- **per source address** (30 / 15 min) — credential stuffing, where no single
-  account is tried twice and the per-account counter never fires.
+- **per source address** (30 failures / 15 min) — credential stuffing, where no
+  single account is tried twice and the per-account counter never fires;
+- **per source address, on registration** (10 *attempts* / 15 min) — see below.
 
 Implementing only the first is the common half-measure, and it stops the attack
 nobody is running. A success clears the account counter but **not** the source
 counter: guessing one password out of a thousand attempts should not buy a clean
 slate for the other 999.
+
+The registration counter counts **attempts, not failures**, and that inversion
+is the part worth understanding. On login a success means a legitimate person
+got in, and the counter should forget them. On registration the success *is*
+the thing being rationed: a row exists that did not before, it cost a full
+PBKDF2 to create, and the endpoint is anonymous. A limiter that counted only
+failed registrations would let one source create accounts without limit, which
+is precisely what there is to stop. It also bounds the enumeration that
+registration deliberately allows — this endpoint will confirm whether an
+address is taken, and the difference between leaking one address and leaking a
+mailing list is entirely a question of how often it can be asked.
+
+Registration went unthrottled for longer than it should have, and the shape of
+the gap was not subtle: anonymous, writes a row, runs the most expensive
+computation in the codebase. It is recorded here rather than quietly fixed.
+
+### Being told how long to wait
+
+A 429 carries `Retry-After` with the **real** remaining window, from
+`retryAfterSeconds()`. It used to send a flat `900` while that method existed
+and was called only by a test. A constant is worse than no header at all: a
+polite client obeys it, so telling somebody with twenty seconds left to wait a
+quarter of an hour is not advice, it is the wait.
 
 It is also the one class in the codebase that is `@ApplicationScoped` **and**
 holds mutable state, so it is written the way that requires:
@@ -354,7 +399,7 @@ cookie.
 
 | method | path | notes |
 | --- | --- | --- |
-| `POST` | `/auth/register` | `{username, email, displayName?, password, timeZone?}` → 201 + cookie; 409 if the username or the address is taken |
+| `POST` | `/auth/register` | `{username, email, displayName?, password, timeZone?}` → 201 + cookie; 409 if the username or the address is taken; 429 with `Retry-After` after 10 attempts from one address in 15 min |
 | `POST` | `/auth/login` | `{username, password}` → 200 + cookie, 401, or 429 with `Retry-After` |
 | `POST` | `/auth/password/forgot` | `{email}` → **always 202**, whether or not the address is known |
 | `POST` | `/auth/password/reset` | `{token, newPassword}` → 204 + expired cookie; 410 if the link is unknown, expired or spent; 400 if the password is too short (which does **not** spend the token) |
@@ -486,7 +531,13 @@ because a dialog with an OK button is dismissed by reflex.
   kept for thirty days, which is the smallest useful version of one: "was a
   reset requested for my account, when, from where, and was it used?" is a
   question with an answer.
-- **The rate limiter is in memory** — per node, reset by a redeploy.
+- **The rate limiter is in memory** — per node, reset by a redeploy. It now
+  covers registration as well as login, but the storage is unchanged: on a
+  cluster an attacker still gets each budget once per node.
+- **There are almost no password or username rules** — one character minimum
+  on the password, thirty on the username, nothing invisible in either.
+  Deliberate, argued in section 3, and the first thing to reverse if this ever
+  holds anything but study progress.
 - **Sticky notes are plain text**, never rendered as HTML or Markdown. That
   removes stored XSS by construction: a note reading `<img onerror=...>` is a
   note about an img tag. "Escape everything" beats "sanitise carefully" for

@@ -50,6 +50,74 @@ class LoginThrottleTest {
     }
 
     @Test
+    @DisplayName("allows registrations until the per-source limit is reached")
+    void blocksRegistrationFlood() {
+        for (int i = 0; i < LoginThrottle.MAX_REGISTRATIONS_PER_SOURCE; i++) {
+            assertThat(throttle.allowRegistration("203.0.113.7", T0)).isTrue();
+            throttle.recordRegistrationAttempt("203.0.113.7", T0);
+        }
+        assertThat(throttle.allowRegistration("203.0.113.7", T0)).isFalse();
+        assertThat(throttle.allowRegistration("198.51.100.4", T0)).isTrue();
+    }
+
+    @Test
+    @DisplayName("counts registration attempts separately from failed logins")
+    void registrationAndLoginHaveSeparateBudgets() {
+        // Spending the whole login budget must not close registration. They are
+        // different attacks with different limits, and a shared counter would
+        // let either one exhaust the other.
+        for (int i = 0; i < LoginThrottle.MAX_PER_SOURCE; i++) {
+            throttle.recordFailure("victim" + i + "@example.com", "203.0.113.7", T0);
+        }
+        assertThat(throttle.allow("someone@example.com", "203.0.113.7", T0)).isFalse();
+        assertThat(throttle.allowRegistration("203.0.113.7", T0)).isTrue();
+    }
+
+    @Test
+    @DisplayName("counts a successful registration, not only a rejected one")
+    void registrationCountsEveryAttempt() {
+        // The distinguishing rule of this counter. recordSuccess clears the
+        // account counter after a good login; there is deliberately no
+        // equivalent here, because on registration the success IS the thing
+        // being rationed.
+        for (int i = 0; i < LoginThrottle.MAX_REGISTRATIONS_PER_SOURCE; i++) {
+            throttle.recordRegistrationAttempt("203.0.113.7", T0);
+        }
+        throttle.recordSuccess("whoever@example.com");
+        assertThat(throttle.allowRegistration("203.0.113.7", T0)).isFalse();
+    }
+
+    @Test
+    @DisplayName("forgets registrations once the window has passed")
+    void registrationWindowExpires() {
+        for (int i = 0; i < LoginThrottle.MAX_REGISTRATIONS_PER_SOURCE; i++) {
+            throttle.recordRegistrationAttempt("203.0.113.7", T0);
+        }
+        assertThat(throttle.allowRegistration("203.0.113.7", T0)).isFalse();
+
+        Instant later = T0.plus(LoginThrottle.WINDOW).plusSeconds(60);
+        assertThat(throttle.allowRegistration("203.0.113.7", later)).isTrue();
+    }
+
+    @Test
+    @DisplayName("reports a shrinking registration wait, never zero")
+    void registrationRetryAfterShrinks() {
+        throttle.recordRegistrationAttempt("203.0.113.7", T0);
+
+        long early = throttle.registrationRetryAfterSeconds("203.0.113.7", T0.plusSeconds(30));
+        long late  = throttle.registrationRetryAfterSeconds("203.0.113.7", T0.plusSeconds(600));
+        assertThat(early).isEqualTo(LoginThrottle.WINDOW.getSeconds() - 30);
+        assertThat(late).isLessThan(early);
+
+        // Past the window there is nothing left to wait for, and the contract
+        // is still "at least one second": a Retry-After of 0 invites an
+        // immediate retry, which is the one thing a 429 asks you not to do.
+        assertThat(throttle.registrationRetryAfterSeconds("203.0.113.7", T0.plusSeconds(99999)))
+                .isEqualTo(1);
+    }
+
+
+    @Test
     @DisplayName("forgets failures once the window has passed")
     void windowExpires() {
         for (int i = 0; i < LoginThrottle.MAX_PER_ACCOUNT; i++) {

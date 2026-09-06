@@ -49,16 +49,31 @@ import java.util.Optional;
 public class AccountService {
 
     /**
-     * The shortest password accepted.
+     * The shortest password accepted: one character.
      *
-     * <p>Twelve, with no composition rules - no "must contain a symbol". That
-     * combination is the current NIST guidance and it reverses twenty years of
-     * advice, for a reason worth being able to state: complexity rules do not
-     * produce unpredictable passwords, they produce {@code Password1!}, and
-     * they push people towards reuse and sticky notes. Length is what actually
-     * buys entropy, so the rule is a floor on length and nothing else.
+     * <p>It was twelve, which is the current NIST figure, and the argument for
+     * it has not stopped being true - length is what buys entropy, and
+     * composition rules produce {@code Password1!} rather than unpredictability.
+     * What changed is the judgement about whose risk this is. An account here
+     * holds one learner's own study progress and sticky notes; there is nothing
+     * in it to steal and nothing to do with it once stolen, and a twelve
+     * character floor on an optional account is a wall in front of a feature
+     * most people will simply skip instead.
+     *
+     * <p>So the floor is now "not empty", and that is a real reduction in
+     * security stated plainly rather than dressed up. Everything downstream of
+     * it is unchanged and is what actually carries the weight: PBKDF2 at
+     * {@code 210_000} iterations with a per-row salt, so a weak password is
+     * still expensive to attack offline, and {@link LoginThrottle}, so it is
+     * expensive to attack online. Those two are the reason a short password
+     * here is survivable. On a system holding anything that matters, put the
+     * floor back.
+     *
+     * <p>Not zero. An empty password is not a weak credential, it is the
+     * absence of one, and an account that anybody can enter by leaving a box
+     * blank is not a weaker account than its neighbour - it is a public one.
      */
-    public static final int MIN_PASSWORD_LENGTH = 12;
+    public static final int MIN_PASSWORD_LENGTH = 1;
 
     /** Re-extend a session at most once a day, rather than on every request. */
     private static final Duration EXTEND_AFTER = Duration.ofDays(1);
@@ -176,11 +191,17 @@ public class AccountService {
         private final LoginResult result;
         private final String rawToken;
         private final LearnerAccount account;
+        private final long retryAfterSeconds;
 
         Login(LoginResult result, String rawToken, LearnerAccount account) {
+            this(result, rawToken, account, 0);
+        }
+
+        Login(LoginResult result, String rawToken, LearnerAccount account, long retryAfterSeconds) {
             this.result = result;
             this.rawToken = rawToken;
             this.account = account;
+            this.retryAfterSeconds = retryAfterSeconds;
         }
 
         public LoginResult getResult() {
@@ -197,6 +218,19 @@ public class AccountService {
 
         public boolean isOk() {
             return result == LoginResult.OK;
+        }
+
+        /**
+         * How long the caller should actually wait, in seconds; zero when it
+         * was not throttled.
+         *
+         * <p>Carried on the result rather than recomputed by the resource,
+         * because only the throttle knows when the window opened and asking it
+         * a second time from a different layer is how the header and the
+         * behaviour drift apart.
+         */
+        public long getRetryAfterSeconds() {
+            return retryAfterSeconds;
         }
     }
 
@@ -228,15 +262,48 @@ public class AccountService {
      * have. The anti-enumeration effort moved to where it now belongs and where
      * it is airtight: {@link #requestPasswordReset}, which behaves identically
      * for an address it knows and one it has never seen.
+     *
+     * <p>What bounds the leak in the meantime is the throttle below. Confirming
+     * one address is a fact about one address; confirming ten thousand is a
+     * mailing list, and the difference between the two is entirely a question
+     * of how many times this endpoint can be called from one place.
+     *
+     * <h3>Why it is throttled at all</h3>
+     * It is anonymous, it writes a row, and it runs a full PBKDF2 for anybody
+     * who asks - so without a limit it is simultaneously a way to fill the
+     * table with junk accounts and a way to spend the server's CPU at the cost
+     * of one HTTP request. That is the same amplification argument
+     * {@link LoginThrottle} makes about login, arriving at the same endpoint
+     * from the other direction, and it went unlimited here for longer than it
+     * should have.
      */
     @Transactional
     public Login register(String rawUsername, String rawEmail, String displayName,
                           char[] password, String timeZone,
                           String sourceAddress, String userAgent) {
+        Instant now = clock.instant();
+
+        // First, and before anything expensive: this endpoint is anonymous, it
+        // writes a row, and it runs a full PBKDF2 for whoever asks. Checking
+        // after the hash would ration nothing - see LoginThrottle.
+        if (!throttle.allowRegistration(sourceAddress, now)) {
+            log.warn("Registration throttled for source={}", sourceAddress);
+            return new Login(LoginResult.THROTTLED, null, null,
+                    throttle.registrationRetryAfterSeconds(sourceAddress, now));
+        }
+        // Counted here rather than at the end, so that every path below - the
+        // duplicate username, the malformed address, the exception thrown three
+        // lines from now - has already been paid for. Recording only on the way
+        // out means a caller who always fails is never counted at all.
+        //
+        // Safe to do inside @Transactional precisely because it is not
+        // transactional: the counters are in-memory maps, so a rollback leaves
+        // the attempt counted, which is the behaviour wanted.
+        throttle.recordRegistrationAttempt(sourceAddress, now);
+
         validatePassword(password);
         Username username = parseUsername(rawUsername);
         Email email = parseEmail(rawEmail);
-        Instant now = clock.instant();
 
         if (accounts.existsByUsername(username.getValue())) {
             throw new DuplicateResourceException(
@@ -295,7 +362,8 @@ public class AccountService {
 
         if (!throttle.allow(normalised, sourceAddress, now)) {
             log.warn("Login throttled for source={}", sourceAddress);
-            return new Login(LoginResult.THROTTLED, null, null);
+            return new Login(LoginResult.THROTTLED, null, null,
+                    throttle.retryAfterSeconds(normalised, sourceAddress, now));
         }
 
         Optional<LearnerAccount> found = accounts.findByUsername(normalised);
@@ -686,9 +754,8 @@ public class AccountService {
             return Username.of(raw);
         } catch (RuntimeException invalid) {
             throw new InvalidRequestException("USERNAME_INVALID",
-                    "A username is " + Username.MIN_LENGTH + " to " + Username.MAX_LENGTH
-                            + " characters: letters, digits, dot, underscore or hyphen, "
-                            + "starting and ending with a letter or a digit");
+                    "A username is 1 to " + Username.MAX_LENGTH
+                            + " characters and cannot contain invisible ones");
         }
     }
 
@@ -746,7 +813,7 @@ public class AccountService {
     private void validatePassword(char[] password) {
         if (password == null || password.length < MIN_PASSWORD_LENGTH) {
             throw new InvalidRequestException("PASSWORD_TOO_SHORT",
-                    "The password must be at least " + MIN_PASSWORD_LENGTH + " characters long");
+                    "A password is required");
         }
     }
 
