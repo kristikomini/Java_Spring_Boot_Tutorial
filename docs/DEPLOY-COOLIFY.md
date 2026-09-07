@@ -23,10 +23,10 @@ It takes over exactly three things from
 | Getting new code onto the server | `git pull && docker compose up` over SSH | Coolify pulls and rebuilds |
 
 Everything else is unchanged, and that is the point worth noticing. The
-application image ([`Dockerfile.prod`](../docker/wildfly/Dockerfile.prod)) and
+application image ([`Dockerfile`](../docker/app/Dockerfile)) and
 the server configuration
-([`configure-prod.cli`](../docker/wildfly/configure-prod.cli)) are used
-verbatim. WildFly does not know or care which proxy is in front of it — it only
+its configuration are used verbatim. The application does not know or care
+which proxy is in front of it — it only
 knows that *some* proxy terminates TLS and forwards `X-Forwarded-Proto`, which
 is why `proxy-address-forwarding` in section 5 of that file matters here for
 precisely the same reason it did with Caddy.
@@ -76,7 +76,7 @@ Log in to Coolify — `http://YOUR_SERVER_IP:8000`.
    must match exactly — Coolify will not find `.yaml` if the file is `.yml`.
 
 5. **Continue.** Coolify parses the compose file and shows the two services it
-   found, `wildfly` and `postgres`.
+   found, `app` and `postgres`.
 
 ---
 
@@ -85,10 +85,10 @@ Log in to Coolify — `http://YOUR_SERVER_IP:8000`.
 Because [`docker-compose.coolify.yml`](../docker-compose.coolify.yml) declares
 
 ```
-- SERVICE_FQDN_WILDFLY_8080
+- SERVICE_FQDN_APP_8080
 ```
 
-Coolify knows the `wildfly` service is the one to publish, and that the proxy
+Coolify knows the `app` service is the one to publish, and that the proxy
 should talk to its port 8080. It offers a domain field for it.
 
 Set it to the full URL, **with the scheme**:
@@ -117,8 +117,8 @@ In order, you are waiting for:
 
 1. the build to finish and report an image;
 2. `postgres` to pass its healthcheck;
-3. `wildfly` to log `WFLYSRV0025: WildFly ... started`;
-4. Coolify to mark the deployment healthy — this waits on the `wildfly`
+3. `app` to log `Started EnrollmentApplication in N seconds`;
+4. Coolify to mark the deployment healthy — this waits on the `app`
    healthcheck, which has a 120-second `start_period`, so a couple of minutes
    of "unhealthy" at the start is expected and not a failure.
 
@@ -156,8 +156,9 @@ not proxied.
 `proxy-address-forwarding` is not in effect. Register an account through the
 site, sign in, and confirm in the browser's developer tools that the session
 cookie shows **Secure**, **HttpOnly** and **SameSite=Strict**. If `Secure` is
-missing, WildFly is not seeing `X-Forwarded-Proto` — see
-[`configure-prod.cli`](../docker/wildfly/configure-prod.cli) section 5.
+missing, the application is not seeing `X-Forwarded-Proto` — check
+`server.forward-headers-strategy: framework` in
+[`application.yml`](../src/main/resources/application.yml).
 
 **Nothing else is exposed.** From your own machine:
 
@@ -175,7 +176,7 @@ Push to `master`. If you connected via the GitHub App, Coolify redeploys on its
 own; with a public-repository source, add the webhook Coolify gives you to the
 repository's settings, or press **Redeploy** in the UI.
 
-Expect about a minute of downtime while WildFly restarts. Coolify can do
+Expect about a minute of downtime while the application restarts. Coolify can do
 zero-downtime deployments, but they require two containers of the application to
 run simultaneously, which on a 4 GB server sharing space with Coolify itself is
 a good way to meet the out-of-memory killer.
@@ -213,7 +214,7 @@ scheduled backups to S3.
 ## 9. Memory
 
 This is the constraint most likely to bite. On the server you now have
-Coolify itself, Traefik, PostgreSQL, WildFly with a 768 MB heap, and — during a
+Coolify itself, Traefik, PostgreSQL, the application with a heap sized from the container limit, and — during a
 deploy — a Maven build that will happily use a gigabyte.
 
 Check free memory in Coolify's server view before the first deploy. On a 4 GB
@@ -221,7 +222,7 @@ machine it will be tight but workable. If deploys get killed, in order of
 preference:
 
 1. Lower the heap: change `-Xmx768m` to `-Xmx512m` in the `JAVA_OPTS` line of
-   [`docker-compose.coolify.yml`](../docker-compose.coolify.yml). WildFly runs
+   [`docker-compose.coolify.yml`](../docker-compose.coolify.yml). The application runs
    in 512 MB for an application this size.
 2. Add swap on the server — see [DEPLOY-HETZNER.md](DEPLOY-HETZNER.md) §5. Swap
    is insurance against the build spike, not a substitute for memory.
@@ -234,10 +235,10 @@ preference:
 
 | Symptom | Almost always |
 |---|---|
-| **502** from Traefik | `wildfly` is not up, or not healthy yet. Check the container log in Coolify. |
-| **404 on every path**, including `/` | WildFly is up but the deployment failed. In the container's terminal: `ls /opt/jboss/wildfly/standalone/deployments` — a `ROOT.war.failed` file contains the reason. |
+| **502** from Traefik | `app` is not up, or not healthy yet. Check the container log in Coolify. |
+| **404 on every path**, including `/` | The context path. Everything is served under `/enrollment`, so `/` is genuinely nothing. |
 | Certificate is `TRAEFIK DEFAULT CERT` | Issuance failed. The domain is missing `https://`, or the DNS record is proxied through Cloudflare, or DNS does not point here. |
-| **`WFLYCTL0211`** / "cannot resolve expression" in the WildFly log | An environment variable the datasource or mail session needs is missing. The message names it. |
+| The app exits at startup with a `Description:` and an `Action:` | Boot's failure analyser. Usually an environment variable the datasource or mail configuration needs is missing; the message names it. |
 | The site is up, then intermittently unreachable | A custom `networks:` key was added to the compose file. Coolify's documentation is explicit about this; remove it. |
 | Build killed, or exit code **137** | Out of memory. See §9. |
 | Deploy succeeds, database is empty | Expected on a first deploy — `DataSeeder` inserts demonstration data only when the database is empty, and it is idempotent. |
@@ -249,7 +250,7 @@ preference:
 Unchanged from [DEPLOY-HETZNER.md](DEPLOY-HETZNER.md) §14, and worth repeating
 because Coolify makes deploying easy enough to forget:
 
-`persistence.xml` still has `schema-generation.database.action=update`, so
+Flyway runs the migrations at startup, so
 Hibernate alters the live schema at deploy time, and `hibernate.show_sql=true`,
 so every statement is printed. Both are marked in that file's own comments as
 production-forbidden. They are acceptable for a public demonstration of a

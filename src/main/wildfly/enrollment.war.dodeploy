@@ -1,5 +1,0 @@
-This file's CONTENT is ignored. Its EXISTENCE is the instruction.
-
-Maven copies it next to the WAR at the end of `package`; WildFly's deployment
-scanner sees it, deploys enrollment.war, deletes this marker and writes
-enrollment.war.deployed (or enrollment.war.failed, containing the reason).

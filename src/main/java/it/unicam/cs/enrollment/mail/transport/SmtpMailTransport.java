@@ -61,12 +61,12 @@ public class SmtpMailTransport implements MailTransport {
 
     private final Session session;
     private final MailConfig config;
-    private final String jndiName;
+    private final String description;
 
-    public SmtpMailTransport(Session session, MailConfig config, String jndiName) {
+    public SmtpMailTransport(Session session, MailConfig config, String description) {
         this.session = session;
         this.config = config;
-        this.jndiName = jndiName;
+        this.description = description;
     }
 
     @Override
@@ -97,7 +97,7 @@ public class SmtpMailTransport implements MailTransport {
 
             Transport.send(mime);
 
-            LOG.debug("Delivered '{}' to {} via {}", message.getSubject(), recipient, jndiName);
+            LOG.debug("Delivered '{}' to {} via {}", message.getSubject(), recipient, description);
 
         } catch (UnsupportedEncodingException e) {
             // UTF-8 is required of every JVM, so this cannot happen. It is
@@ -151,7 +151,7 @@ public class SmtpMailTransport implements MailTransport {
 
         if (e instanceof AuthenticationFailedException) {
             return MailDeliveryException.transientFailure(
-                    "SMTP authentication failed - check the mail session credentials - " + summary, e);
+                    "SMTP authentication failed - check enrollment.mail.smtp-username/password - " + summary, e);
         }
 
         return MailDeliveryException.transientFailure(summary, e);
@@ -184,6 +184,6 @@ public class SmtpMailTransport implements MailTransport {
 
     @Override
     public String describe() {
-        return "SMTP via " + jndiName;
+        return "SMTP via " + description;
     }
 }

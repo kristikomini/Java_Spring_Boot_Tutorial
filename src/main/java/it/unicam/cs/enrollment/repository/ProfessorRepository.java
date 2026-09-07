@@ -1,46 +1,50 @@
 package it.unicam.cs.enrollment.repository;
 
 import it.unicam.cs.enrollment.domain.model.Professor;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.TypedQuery;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Data access for {@link Professor}.
+ * Needed because Course.professor has NO cascade.
  *
- * <p>Deliberately minimal. Not every repository needs to be elaborate - most
- * production repositories look like this one, and only a couple carry the
- * complexity you see in {@link StudentRepository} and {@link CourseRepository}.
- * Adding methods "because we might need them" is how a codebase accumulates
- * dead code; add them when a use case asks.
+ * <p>That is the correct mapping and it has a consequence worth knowing: saving
+ * a Course whose Professor has never been persisted throws
+ *
+ * <pre>
+ *   TransientPropertyValueException: Not-null property references a transient
+ *   value - transient instance must be saved before current operation
+ * </pre>
+ *
+ * <p>The tempting fix is {@code cascade = CascadeType.PERSIST} on the
+ * association, and it is wrong. Fieldbook chapter 09 gives the test: does the
+ * child have any meaning without this parent? A professor exists independently
+ * of any course they happen to teach, outlives every one of them, and must not
+ * be created as a side effect of creating a course - let alone deleted as a side
+ * effect of deleting one. Cascade belongs on Student-to-Enrollment, where the
+ * enrollment is meaningless without the student. It does not belong here.
+ *
+ * <p>So the professor is saved first, explicitly, which is one extra line and
+ * the honest description of what is happening.
  */
-@ApplicationScoped
-public class ProfessorRepository extends AbstractJpaRepository<Professor> {
+@Repository
+public interface ProfessorRepository extends JpaRepository<Professor, Long> {
 
-    public ProfessorRepository() {
-        super(Professor.class);
-    }
+    Optional<Professor> findByStaffNumber(String staffNumber);
 
-    public Optional<Professor> findByStaffNumber(String staffNumber) {
-        TypedQuery<Professor> query = em()
-                .createNamedQuery(Professor.FIND_BY_STAFF_NUMBER, Professor.class)
-                .setParameter("staffNumber", staffNumber);
-        return singleResult(query);
-    }
-
-    public List<Professor> findAllOrdered() {
-        return em().createNamedQuery(Professor.FIND_ALL_ORDERED, Professor.class)
-                .getResultList();
-    }
-
-    public boolean existsByStaffNumber(String staffNumber) {
-        Long count = em().createQuery(
-                        "SELECT COUNT(p) FROM Professor p WHERE p.staffNumber = :staffNumber",
-                        Long.class)
-                .setParameter("staffNumber", staffNumber)
-                .getSingleResult();
-        return count > 0;
-    }
+    /**
+     * Everyone, in the order a human would list them.
+     *
+     * <p>A derived query name, not {@code @Query}: Spring Data parses
+     * {@code findAllByOrderByLastNameAscFirstNameAsc} and writes the JPQL. The
+     * name is long, and that is the trade - it is checked AT STARTUP, so a typo
+     * fails the application rather than a request, and there is no query string
+     * to drift out of sync with the entity.
+     *
+     * <p>The rule of thumb: derive it when the name stays readable, write
+     * {@code @Query} when it does not. This one is right at the boundary.
+     */
+    List<Professor> findAllByOrderByLastNameAscFirstNameAsc();
 }

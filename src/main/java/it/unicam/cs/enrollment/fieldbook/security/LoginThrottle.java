@@ -1,6 +1,6 @@
 package it.unicam.cs.enrollment.fieldbook.security;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -76,7 +76,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * at the ingress before the request ever reaches the application. This is the
  * cheap version, and cheap is a great deal better than absent.
  */
-@ApplicationScoped
+@Component
 public class LoginThrottle {
 
     /** Failures against one account before it stops accepting attempts. */

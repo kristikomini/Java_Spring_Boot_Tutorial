@@ -9,15 +9,13 @@ import it.unicam.cs.enrollment.fieldbook.domain.PasswordResetToken;
 import it.unicam.cs.enrollment.fieldbook.domain.StickyNote;
 import it.unicam.cs.enrollment.fieldbook.domain.Username;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.Persistence;
 import jakarta.persistence.PersistenceException;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,68 +32,50 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>Named {@code *IT} so Failsafe runs it during {@code mvn verify} rather
  * than Surefire during {@code mvn test} - the same split the enrollment
  * repository tests use. What it buys over the unit tests is everything JPA
- * actually does: whether the mappings are valid, whether the named queries
- * parse, whether the unique constraints are where the annotations claim, and
- * whether a lazy association behaves once there is a real persistence context
- * to be outside of.
+ * actually does: whether the mappings are valid, whether the queries parse,
+ * whether the unique constraints are where the annotations claim, and whether
+ * a lazy association behaves once there is a real persistence context to be
+ * outside of.
  *
- * <p>H2 is not PostgreSQL, and the honest limits of that are set out in the
- * test persistence unit. A constraint violation here is a real bug; a
- * constraint violation that only happens on PostgreSQL will not be caught by
- * this file.
+ * <p>H2 is not PostgreSQL, and the limits of that are worth stating: a
+ * constraint violation here is a real bug, but a constraint violation that only
+ * happens on PostgreSQL will not be caught by this file. {@code EnrollmentApiIT}
+ * runs against a real PostgreSQL in Testcontainers for exactly that reason.
+ *
+ * <h2>{@code @Import}, and why it is needed</h2>
+ * {@code @DataJpaTest} loads the entities, the Spring Data repositories, a
+ * transaction manager and an in-memory datasource. These five repositories are
+ * none of those - they are hand-written {@code @Repository} CLASSES - so the
+ * slice does not find them and they have to be named. That is the annotation
+ * telling you something true about the design rather than getting in the way.
+ *
+ * <p>Every test method runs in a transaction that is ROLLED BACK afterwards, so
+ * there is no cleanup code and no ordering dependency between tests. The
+ * {@code flush()} / {@code clear()} pairs below are still necessary: without
+ * them a lookup is answered from the first-level cache and a broken mapping
+ * passes.
  */
+@DataJpaTest
+@Import({LearnerAccountRepository.class, AuthSessionRepository.class,
+        PasswordResetTokenRepository.class, ProgressRepository.class,
+        StickyNoteRepository.class})
+@ActiveProfiles("test")
 @DisplayName("Fieldbook repositories (H2)")
 class FieldbookRepositoryIT {
 
-    private static EntityManagerFactory emf;
+    @Autowired
     private EntityManager em;
 
+    @Autowired
     private LearnerAccountRepository accounts;
+    @Autowired
     private AuthSessionRepository sessions;
+    @Autowired
     private PasswordResetTokenRepository resets;
+    @Autowired
     private ProgressRepository progress;
+    @Autowired
     private StickyNoteRepository notes;
-
-    @BeforeAll
-    static void bootPersistenceUnit() {
-        emf = Persistence.createEntityManagerFactory("enrollmentTestPU");
-    }
-
-    @AfterAll
-    static void closePersistenceUnit() {
-        if (emf != null) {
-            emf.close();
-        }
-    }
-
-    @BeforeEach
-    void setUp() {
-        em = emf.createEntityManager();
-
-        accounts = new LearnerAccountRepository();
-        accounts.useEntityManager(em);
-        sessions = new AuthSessionRepository();
-        sessions.useEntityManager(em);
-        resets = new PasswordResetTokenRepository();
-        resets.useEntityManager(em);
-        notes = new StickyNoteRepository();
-        notes.useEntityManager(em);
-        progress = new ProgressRepository();
-        progress.useEntityManager(em);
-
-        em.getTransaction().begin();
-    }
-
-    @AfterEach
-    void rollBack() {
-        // Rolling back rather than deleting keeps every test independent
-        // without a cleanup script, and without one test seeing another one
-        // half-finished.
-        if (em.getTransaction().isActive()) {
-            em.getTransaction().rollback();
-        }
-        em.close();
-    }
 
     /**
      * The handle is a separate argument rather than derived from the address,

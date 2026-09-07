@@ -16,10 +16,9 @@
 # matters: the last matching line wins.
 # =============================================================================
 
-# Build output. The image builds the WAR itself in its first stage; a WAR built
+# Build output. The image builds the jar itself in its first stage; a jar built
 # on someone's laptop must never be what ships.
 target/
-docker/deployments/
 
 # Secrets. Belt and braces with .gitignore - see above.
 .env

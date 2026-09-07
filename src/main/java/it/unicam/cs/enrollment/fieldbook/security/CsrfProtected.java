@@ -1,15 +1,13 @@
 package it.unicam.cs.enrollment.fieldbook.security;
 
-import jakarta.ws.rs.NameBinding;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a resource whose state-changing methods must carry the custom request
- * header. See {@link CsrfFilter}.
+ * Marks a controller whose state-changing methods must carry the custom request
+ * header. See {@link CsrfInterceptor}.
  *
  * <p>Separate from {@link Authenticated} because the two rules protect
  * different things and do not always apply together. Login and registration are
@@ -22,7 +20,6 @@ import java.lang.annotation.Target;
  * choose between being protected and being reachable. Two small annotations
  * that compose beat one that has to be all things.
  */
-@NameBinding
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface CsrfProtected {

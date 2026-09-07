@@ -1,6 +1,6 @@
 package it.unicam.cs.enrollment.fieldbook.security;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -64,7 +64,7 @@ import java.util.Objects;
  * the next successful login. A bare digest column cannot be migrated at all
  * without asking every user to reset their password.
  */
-@ApplicationScoped
+@Component
 public class PasswordHasher {
 
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";

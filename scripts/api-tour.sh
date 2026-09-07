@@ -188,7 +188,7 @@ else
 fi
 echo
 echo "Tip: every request above was logged with a correlation id. Try:"
-echo "  docker compose logs wildfly | grep $CID"
+echo "  docker compose logs app | grep $CID"
 echo
 
 [ "$fail" -eq 0 ]

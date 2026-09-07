@@ -4,15 +4,10 @@ import it.unicam.cs.enrollment.mail.MailConfig;
 import it.unicam.cs.enrollment.mail.domain.MailMessage;
 import it.unicam.cs.enrollment.mail.transport.MailDeliveryException;
 import it.unicam.cs.enrollment.mail.transport.MailTransport;
-import jakarta.ejb.ConcurrencyManagement;
-import jakarta.ejb.ConcurrencyManagementType;
-import jakarta.ejb.Schedule;
-import jakarta.ejb.Singleton;
-import jakarta.ejb.TransactionAttribute;
-import jakarta.ejb.TransactionAttributeType;
-import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -37,53 +32,52 @@ import java.util.Optional;
  * the query costs more than the work, or the latency starts to matter - is the
  * part worth carrying forward.
  *
- * <h2>{@code @Singleton} plus container concurrency</h2>
- * The EJB singleton's default write lock means only one thread is inside this
- * bean at a time, so a sweep that overruns its interval cannot start a second
- * copy of itself and send everything twice. Getting that for free is why a
- * scheduled component is still an EJB in a codebase that is otherwise all CDI.
+ * <h2>Why one sweep cannot overtake another</h2>
+ * Spring's default {@code TaskScheduler} is a pool of ONE thread and runs
+ * {@code @Scheduled} methods sequentially, so a sweep that overruns its
+ * thirty-second interval delays the next firing rather than starting a second
+ * copy of itself. Worth stating because it is easy to lose: raise
+ * {@code spring.task.scheduling.pool.size} and this guarantee goes away, and
+ * two dispatchers racing would try to send the same message twice. The claim
+ * step in {@link OutboxProcessor} is what makes that safe even so - defence in
+ * depth rather than a reason to be careless with the pool size.
  *
- * <h2>{@code NOT_SUPPORTED} on the class</h2>
- * Suspends any transaction for the duration of these methods, so the SMTP
- * conversation provably happens with no transaction open. The database work is
- * done by {@link OutboxProcessor}, whose methods each start their own. See that
- * class for why it must be a different bean.
+ * <h2>No {@code @Transactional} anywhere in this class</h2>
+ * That is the design, not an omission. Every method here runs with NO
+ * transaction open, so the SMTP conversation provably holds no database
+ * connection and no row locks. All the database work is delegated to
+ * {@link OutboxProcessor}, whose methods each start their own short
+ * transaction. See that class for why it must be a different bean.
  */
-@Singleton
-@ConcurrencyManagement(ConcurrencyManagementType.CONTAINER)
-@TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+@Component
 public class MailDispatcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(MailDispatcher.class);
 
-    // FIELD injection here, where the service layer uses CONSTRUCTOR injection.
-    // Not a slip: an EJB session bean is required to have a no-argument
-    // constructor, so the constructor cannot carry the dependencies. The fields
-    // are package-private rather than private so the test in this package can
-    // set them without reflection - a small, deliberate widening of visibility
-    // for a real reason, the same trade AbstractJpaRepository makes.
-    @Inject
-    OutboxProcessor processor;
+    private final OutboxProcessor processor;
+    private final MailTransport transport;
+    private final MailConfig config;
+    private final Clock clock;
 
-    @Inject
-    MailTransport transport;
-
-    @Inject
-    MailConfig config;
-
-    @Inject
-    Clock clock;
+    public MailDispatcher(OutboxProcessor processor, MailTransport transport,
+                          MailConfig config, Clock clock) {
+        this.processor = processor;
+        this.transport = transport;
+        this.config = config;
+        this.clock = clock;
+    }
 
     /**
      * The main loop, every thirty seconds.
      *
-     * <p>{@code persistent = false} for the same reason as the enrollment
-     * sweep: a persistent timer lives in the server's timer database and is
-     * recreated by every node in a cluster, which is how a nightly job runs
-     * four times. See {@code EnrollmentMaintenanceJob} for the longer version.
+     * <p>{@code fixedDelay} rather than {@code fixedRate}: the delay is
+     * measured from the END of the previous run, so a slow pass pushes the next
+     * one back instead of queueing firings behind it. On a job that talks to a
+     * remote SMTP server - which can be slow for minutes at a time -
+     * {@code fixedRate} would build a backlog of scheduled executions that all
+     * run the moment the server recovers.
      */
-    @Schedule(second = "*/30", minute = "*", hour = "*", persistent = false,
-            info = "Mail outbox dispatch")
+    @Scheduled(fixedDelay = 30_000, initialDelay = 10_000)
     public void dispatchDue() {
         if (!config.isEnabled()) {
             LOG.debug("Mail delivery is disabled - {} message(s) will stay queued",
@@ -186,8 +180,7 @@ public class MailDispatcher {
      * it every five minutes, against a ten-minute claim age, keeps it well clear
      * of a dispatcher that is merely slow.
      */
-    @Schedule(minute = "*/5", hour = "*", persistent = false,
-            info = "Mail outbox stuck-message recovery")
+    @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
     public void recoverStuckMessages() {
         Instant now = clock.instant();
         List<Long> stuck = processor.findStuck(now, config.getBatchSize());

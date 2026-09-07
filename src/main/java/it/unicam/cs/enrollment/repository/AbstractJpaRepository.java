@@ -43,6 +43,23 @@ import java.util.Optional;
  * there because of TYPE ERASURE - generic type arguments do not exist at
  * runtime, so a subclass must hand the class object over explicitly.
  *
+ * <h2>Why this exists in a project that also uses Spring Data</h2>
+ * Most repositories here are Spring Data interfaces: you declare
+ * {@code interface CourseRepository extends JpaRepository<Course, Long>} and
+ * the framework generates the implementation. That is the right default and
+ * covers the great majority of data access.
+ *
+ * <p>It stops being the right answer when a repository needs to do something
+ * the derived-query machinery cannot express cleanly - the mail outbox claims
+ * rows under a lock and moves them through a state machine, and the fieldbook
+ * repositories merge progress rather than overwrite it. For those, dropping to
+ * the {@code EntityManager} is not a failure of the framework; it is the escape
+ * hatch the framework deliberately leaves open, and Spring Data itself offers
+ * it as a "custom implementation fragment".
+ *
+ * <p>Reading this class is also the fastest way to understand what Spring Data
+ * is doing on your behalf, which is worth an hour of anybody's time.
+ *
  * @param <T> the entity type this repository manages
  */
 public abstract class AbstractJpaRepository<T extends BaseEntity> {
@@ -52,15 +69,25 @@ public abstract class AbstractJpaRepository<T extends BaseEntity> {
      *
      * <p>{@code @PersistenceContext} does not inject a plain EntityManager - it
      * injects a proxy that resolves, on every call, to the EntityManager bound
-     * to the CURRENT JTA TRANSACTION. That is why this field can live in an
-     * {@code @ApplicationScoped} (single-instance, shared by all threads) bean
-     * without any thread-safety problem: the shared object is a proxy, and the
-     * real EntityManager behind it is per-transaction.
+     * to the CURRENT TRANSACTION. That is why this field can live in a
+     * singleton bean, shared by every thread, without any thread-safety
+     * problem: the shared object is a proxy, and the real EntityManager behind
+     * it is per-transaction.
      *
      * <p>Never call {@code em.close()} on a container-managed EntityManager, and
-     * never call {@code em.getTransaction()} - the container owns both.
+     * never call {@code em.getTransaction()} - the framework owns both. In
+     * Spring that transaction is opened by {@code @Transactional}, so a
+     * repository method called with no transaction around it gets a
+     * short-lived EntityManager of its own and any change it makes is lost.
+     * That is the failure this class cannot protect you from, and the reason
+     * every writing method in the services above carries the annotation.
+     *
+     * <p>No {@code unitName}: Spring Boot auto-configures exactly one
+     * {@code EntityManagerFactory} from {@code spring.datasource.*}, so there
+     * is nothing to disambiguate. A project with two databases would name them
+     * here, and would have to define both factories by hand.
      */
-    @PersistenceContext(unitName = "enrollmentPU")
+    @PersistenceContext
     protected EntityManager entityManager;
 
     private final Class<T> entityClass;
@@ -69,22 +96,6 @@ public abstract class AbstractJpaRepository<T extends BaseEntity> {
         this.entityClass = Objects.requireNonNull(entityClass);
     }
 
-    /**
-     * Test seam. An integration test creates a RESOURCE_LOCAL EntityManager
-     * itself and injects it here, so the repository can be exercised against H2
-     * without an application server.
-     *
-     * <p>{@code protected} rather than {@code public}: subclasses need it -
-     * including the fieldbook repositories, which live in another package - and
-     * nothing else does. It was package-private until a subclass outside this
-     * package needed the same seam, which is the ordinary reason visibility
-     * widens. Widen it one step, when something real requires it, and no
-     * further; {@code public} here would advertise a way for application code
-     * to swap the persistence context at runtime.
-     */
-    protected void setEntityManager(EntityManager entityManager) {
-        this.entityManager = entityManager;
-    }
 
     protected EntityManager em() {
         return entityManager;

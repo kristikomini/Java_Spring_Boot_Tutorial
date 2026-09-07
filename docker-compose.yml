@@ -2,7 +2,7 @@
 # The local development stack: PostgreSQL + WildFly
 # =============================================================================
 #   docker compose up -d --build     start everything
-#   docker compose logs -f wildfly   watch the application log
+#   docker compose logs -f app       watch the application log
 #   docker compose down              stop (keeps the database volume)
 #   docker compose down -v           stop and DELETE the database
 #
@@ -77,54 +77,55 @@ services:
   # ---------------------------------------------------------------------------
   # WildFly - the Jakarta EE application server
   # ---------------------------------------------------------------------------
-  wildfly:
+  app:
     build:
-      context: ./docker/wildfly
-      dockerfile: Dockerfile
-    container_name: enrollment-wildfly
+      # The build context is the REPOSITORY ROOT, not docker/app, because the
+      # Dockerfile needs pom.xml and src/ - and a build context cannot reach
+      # above itself. `dockerfile:` is then a path relative to that context.
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: enrollment-app
 
     ports:
       # Host port 8280, because 8080 on this machine is already taken by another
       # project. The container still serves on 8080 internally.
-      - "8280:8080"   # the application:   http://localhost:8280/enrollment
-      - "9990:9990"   # the admin console: http://localhost:9990  (admin / Admin#2026)
-
-    volumes:
-      # THE HOT-DEPLOY MOUNT.
-      #
-      # WildFly's deployment scanner watches this directory. Because Maven is
-      # configured (see <outputDirectory> in pom.xml) to write the WAR straight
-      # here, `mvn package` triggers a redeploy within a second or two.
-      #
-      # The scanner also writes marker files next to the WAR - enrollment.war.deployed
-      # on success, .failed with the reason on error. Those appear on your host,
-      # which is why .gitignore excludes them. Reading the .failed file is the
-      # quickest way to diagnose a deployment that did not come up.
-      - ./docker/deployments:/opt/jboss/wildfly/standalone/deployments
+      - "8280:8080"   # the application: http://localhost:8280/enrollment
+                      # the fieldbook:   http://localhost:8280/enrollment/tutorial.html
 
     environment:
-      # Heap sizing. The default is a fraction of host RAM, which in a container
-      # can be surprisingly large. Being explicit keeps the footprint predictable.
-      JAVA_OPTS: >-
-        -Xms256m
-        -Xmx768m
-        -Djava.net.preferIPv4Stack=true
-        -Djboss.as.management.blocking.timeout=600
+      # -----------------------------------------------------------------------
+      # THE DATABASE
+      # -----------------------------------------------------------------------
+      # `postgres`, not `localhost`. Inside the compose network every service is
+      # reachable by its service name, and 5432 is the CONTAINER port - the
+      # 55433 published above is only for tools running on your machine. Getting
+      # this wrong is the single most common compose mistake, and it presents as
+      # "connection refused" from an application that works fine outside Docker.
+      #
+      # RELAXED BINDING is what makes these work at all: Spring maps
+      # SPRING_DATASOURCE_URL onto spring.datasource.url, so every property in
+      # application.yml is settable from the environment with no adapter and no
+      # rebuild. It is the same mechanism Kubernetes Secrets rely on.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/enrollment
+      SPRING_DATASOURCE_USERNAME: enrollment
+      SPRING_DATASOURCE_PASSWORD: enrollment
 
-      # ---------------------------------------------------------------------
+      # -----------------------------------------------------------------------
       # MAIL
-      # ---------------------------------------------------------------------
+      # -----------------------------------------------------------------------
       # Read by MailConfig, which looks for a system property first and then an
       # environment variable - so every one of these can be overridden for a
       # single run with -Denrollment.mail.xxx without editing this file.
       #
-      # transport=smtp rather than the `auto` default, deliberately: the mail
-      # session is baked into this image by configure.cli, so if it is missing
-      # something is wrong with the build and the deployment SHOULD fail loudly
-      # rather than quietly degrade to writing emails into the log. `auto` is
-      # the right default for a laptop running WildFly natively, where there may
-      # genuinely be no mail server; it is the wrong one here.
+      # transport=smtp rather than the `auto` default, deliberately: Mailpit is
+      # part of this stack, so if it cannot be reached something is wrong and
+      # the application SHOULD say so loudly rather than quietly degrade to
+      # writing emails into the log. `auto` is the right default for a laptop
+      # running the jar directly, where there may genuinely be no mail server;
+      # it is the wrong one here.
       ENROLLMENT_MAIL_TRANSPORT: smtp
+      ENROLLMENT_MAIL_SMTP_HOST: mailpit
+      ENROLLMENT_MAIL_SMTP_PORT: "1025"
       ENROLLMENT_MAIL_FROM: no-reply@enrollment.unicam.test
       ENROLLMENT_MAIL_FROM_NAME: UNICAM Enrollment
 
@@ -148,11 +149,23 @@ services:
       # database, where the addresses in the data belong to real people.
       # ENROLLMENT_MAIL_REDIRECT_TO: you@example.com
 
+    healthcheck:
+      # Actuator's readiness probe, which includes the database. See the
+      # `management.endpoint.health.probes` block in application.yml for why
+      # liveness and readiness are different questions.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/enrollment/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
     depends_on:
       postgres:
         # Waits for the HEALTHCHECK above to pass, not merely for the container
         # to exist. `depends_on` without a condition only orders startup, which
-        # is almost never what you actually want.
+        # is almost never what you actually want - and here it would mean Flyway
+        # running its migrations against a database that is not accepting
+        # connections yet.
         condition: service_healthy
       mailpit:
         # No health condition: unlike the database, a missing mail server does

@@ -4,9 +4,8 @@ import it.unicam.cs.enrollment.common.logging.Loggable;
 import it.unicam.cs.enrollment.domain.model.Professor;
 import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
 import it.unicam.cs.enrollment.repository.ProfessorRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -21,26 +20,21 @@ import java.util.List;
  * place the first real rule will land when one appears.
  */
 @Loggable
-@ApplicationScoped
+@Service
 public class ProfessorService {
 
-    private ProfessorRepository professorRepository;
+    private final ProfessorRepository professorRepository;
 
-    protected ProfessorService() {
-        // required by CDI
-    }
-
-    @Inject
     public ProfessorService(ProfessorRepository professorRepository) {
         this.professorRepository = professorRepository;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Professor> findAll() {
-        return professorRepository.findAllOrdered();
+        return professorRepository.findAllByOrderByLastNameAscFirstNameAsc();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Professor findById(Long id) {
         return professorRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Professor", id));

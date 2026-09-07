@@ -1,11 +1,9 @@
 package it.unicam.cs.enrollment.fieldbook.security;
 
 import it.unicam.cs.enrollment.fieldbook.domain.AuthSession;
-import jakarta.ws.rs.core.Cookie;
-import jakarta.ws.rs.core.NewCookie;
-import jakarta.ws.rs.core.UriInfo;
-
-import java.util.Map;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseCookie;
 
 /**
  * Builds and reads the one cookie this application sets.
@@ -28,7 +26,7 @@ import java.util.Map;
  * exfiltration is silent and permanent - the token leaves the machine and you
  * never know - while CSRF is loud, bounded to actions rather than credentials,
  * and has two good mitigations that are applied below and in
- * {@link AuthenticationFilter}.
+ * {@link CsrfInterceptor}.
  *
  * <h2>The three attributes, and what each one stops</h2>
  * <ul>
@@ -50,9 +48,17 @@ import java.util.Map;
  *       does nothing" is a genuinely horrible half hour.</li>
  * </ul>
  *
- * <p>The second half of the CSRF defence is in the filter: a custom request
- * header that a cross-origin form cannot set. Belt and braces, because
- * {@code SameSite} is enforced by the browser and browsers vary.
+ * <p>The second half of the CSRF defence is in {@link CsrfInterceptor}: a
+ * custom request header that a cross-origin form cannot set. Belt and braces,
+ * because {@code SameSite} is enforced by the browser and browsers vary.
+ *
+ * <h2>Why {@link ResponseCookie} and not {@code jakarta.servlet.http.Cookie}</h2>
+ * The servlet {@code Cookie} class has no {@code SameSite} setter - the
+ * attribute postdates it, and the usual workaround is to write the
+ * {@code Set-Cookie} header by hand and get the formatting wrong. Spring's
+ * {@code ResponseCookie} is an immutable builder that renders the header
+ * correctly, and its {@code toString()} IS the header value. Reading still uses
+ * the servlet type, because that is what arrives on the request.
  */
 public final class SessionCookies {
 
@@ -78,19 +84,18 @@ public final class SessionCookies {
     /**
      * The {@code Set-Cookie} for a freshly issued session.
      *
-     * <p>{@code path} is the application's context root rather than {@code /},
-     * so the cookie is not broadcast to every other application deployed on the
-     * same server. On a shared host that is the difference between a scoped
+     * <p>{@code path} is the application's context path rather than {@code /},
+     * so the cookie is not broadcast to every other application served from the
+     * same host. On a shared host that is the difference between a scoped
      * credential and one that leaks sideways.
      */
-    public static NewCookie issue(String rawToken, UriInfo uriInfo) {
-        return new NewCookie.Builder(NAME)
-                .value(rawToken)
-                .path(contextPath(uriInfo))
-                .maxAge((int) AuthSession.LIFETIME.getSeconds())
+    public static ResponseCookie issue(String rawToken, HttpServletRequest request) {
+        return ResponseCookie.from(NAME, rawToken)
+                .path(contextPath(request))
+                .maxAge(AuthSession.LIFETIME.getSeconds())
                 .httpOnly(true)
-                .secure(isSecure(uriInfo))
-                .sameSite(NewCookie.SameSite.STRICT)
+                .secure(isSecure(request))
+                .sameSite("Strict")
                 .build();
     }
 
@@ -103,49 +108,53 @@ public final class SessionCookies {
      * different cookie and keeps both. Forgetting {@code path} here is the
      * classic reason a logout button appears to do nothing.
      */
-    public static NewCookie expire(UriInfo uriInfo) {
-        return new NewCookie.Builder(NAME)
-                .value("")
-                .path(contextPath(uriInfo))
+    public static ResponseCookie expire(HttpServletRequest request) {
+        return ResponseCookie.from(NAME, "")
+                .path(contextPath(request))
                 .maxAge(0)
                 .httpOnly(true)
-                .secure(isSecure(uriInfo))
-                .sameSite(NewCookie.SameSite.STRICT)
+                .secure(isSecure(request))
+                .sameSite("Strict")
                 .build();
     }
 
     /** The raw token from the request, or {@code null} if there is no cookie. */
-    public static String read(Map<String, Cookie> cookies) {
-        if (cookies == null) {
+    public static String read(HttpServletRequest request) {
+        if (request == null || request.getCookies() == null) {
             return null;
         }
-        Cookie cookie = cookies.get(NAME);
-        if (cookie == null) {
-            return null;
+        for (Cookie cookie : request.getCookies()) {
+            if (NAME.equals(cookie.getName())) {
+                String value = cookie.getValue();
+                return value == null || value.isEmpty() ? null : value;
+            }
         }
-        String value = cookie.getValue();
-        return value == null || value.isEmpty() ? null : value;
+        return null;
     }
 
-    private static boolean isSecure(UriInfo uriInfo) {
-        return uriInfo != null
-                && uriInfo.getRequestUri() != null
-                && "https".equalsIgnoreCase(uriInfo.getRequestUri().getScheme());
+    /**
+     * Whether the request arrived over TLS.
+     *
+     * <p>{@code isSecure()} is the servlet container's answer, and behind a
+     * reverse proxy it is only correct because the proxy forwarding support is
+     * switched on - {@code server.forward-headers-strategy} in
+     * {@code application.yml}. Without that, every request looks like plain
+     * HTTP to the container, the {@code Secure} flag is never set, and the
+     * session cookie travels in clear text on the hop the proxy cannot see.
+     */
+    private static boolean isSecure(HttpServletRequest request) {
+        return request != null && request.isSecure();
     }
 
-    private static String contextPath(UriInfo uriInfo) {
-        if (uriInfo == null || uriInfo.getBaseUri() == null) {
+    /**
+     * The application's context path, which is what the cookie should be
+     * scoped to: the page and the API both live under it.
+     */
+    private static String contextPath(HttpServletRequest request) {
+        if (request == null) {
             return "/";
         }
-        // baseUri is e.g. http://host:8080/enrollment/api/ - the cookie should
-        // cover the whole application, page included, so trim back to the
-        // context root rather than leaving it scoped to /api.
-        String path = uriInfo.getBaseUri().getPath();
-        if (path == null || path.isEmpty()) {
-            return "/";
-        }
-        int apiAt = path.indexOf("/api");
-        String root = apiAt > 0 ? path.substring(0, apiAt) : path;
-        return root.isEmpty() ? "/" : root;
+        String path = request.getContextPath();
+        return path == null || path.isEmpty() ? "/" : path;
     }
 }

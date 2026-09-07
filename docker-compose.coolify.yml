@@ -37,7 +37,7 @@
 #      stores it, and injects the same value everywhere the name appears. There
 #      is no .env.prod on this path, and no password anywhere in git.
 #
-#   5. THE PROXY IS TOLD WHERE TO GO by SERVICE_FQDN_WILDFLY_8080 below.
+#   5. THE PROXY IS TOLD WHERE TO GO by SERVICE_FQDN_APP_8080 below.
 #
 # -----------------------------------------------------------------------------
 # WHAT DID NOT CHANGE
@@ -53,13 +53,13 @@ services:
   # ---------------------------------------------------------------------------
   # WildFly - the application
   # ---------------------------------------------------------------------------
-  wildfly:
+  app:
     build:
       # Relative to the Base Directory configured in Coolify, which is the
       # repository root. The first stage of Dockerfile.prod compiles the WAR
       # from src/, so the build happens ON THE SERVER - nothing is uploaded.
       context: .
-      dockerfile: docker/wildfly/Dockerfile.prod
+      dockerfile: docker/app/Dockerfile
 
     # NOTE THE LIST FORM. `environment:` can be written as a map (KEY: value)
     # or a list (- KEY=value). It has to be a list here, because Coolify's
@@ -69,7 +69,7 @@ services:
       # ---------------------------------------------------------------------
       # THE LINE THAT PUBLISHES THIS SERVICE
       # ---------------------------------------------------------------------
-      # Reads as: "give the compose service named `wildfly` a domain, and point
+      # Reads as: "give the compose service named `app` a domain, and point
       # the proxy at its port 8080". Coolify generates the Traefik router,
       # service and TLS certificate from it. The actual hostname is whatever
       # you set in the Coolify UI - java.testdemo.it - or an auto-generated one
@@ -78,7 +78,7 @@ services:
       # Two rules about the name, both of which produce silent no-ops rather
       # than errors when broken:
       #   - the identifier must be the COMPOSE SERVICE NAME, upper-cased.
-      #     `wildfly` -> WILDFLY. Rename the service, rename this.
+      #     `app` -> APP. Rename the service, rename this.
       #   - an identifier containing an underscore cannot carry a port suffix;
       #     use hyphens if you ever need a multi-word service name.
       #
@@ -86,7 +86,7 @@ services:
       # would put the application server directly on the internet, next to the
       # proxy rather than behind it, and would defeat
       # proxy-address-forwarding exactly as described in configure-prod.cli.
-      - SERVICE_FQDN_WILDFLY_8080
+      - SERVICE_FQDN_APP_8080
 
       - JAVA_OPTS=-Xms256m -Xmx768m -Djava.net.preferIPv4Stack=true -Djboss.as.management.blocking.timeout=600
 

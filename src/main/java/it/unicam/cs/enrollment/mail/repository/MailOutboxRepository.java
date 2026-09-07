@@ -5,7 +5,7 @@ import it.unicam.cs.enrollment.common.PageRequest;
 import it.unicam.cs.enrollment.mail.domain.MailStatus;
 import it.unicam.cs.enrollment.mail.domain.OutboxMessage;
 import it.unicam.cs.enrollment.repository.AbstractJpaRepository;
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Repository;
 import jakarta.persistence.TypedQuery;
 
 import java.time.Instant;
@@ -24,28 +24,13 @@ import java.util.Optional;
  * readable place ({@code MailDispatcher} and {@code OutboxMessage}) instead of
  * being spread across a query and a service.
  */
-@ApplicationScoped
+@Repository
 public class MailOutboxRepository extends AbstractJpaRepository<OutboxMessage> {
 
     public MailOutboxRepository() {
         super(OutboxMessage.class);
     }
 
-    /**
-     * Test seam, package-private so only the integration test beside it can
-     * reach it.
-     *
-     * <p>The inherited setter is {@code protected}, which lets a SUBCLASS call
-     * it on itself but not an unrelated class holding a reference - so this
-     * two-line method is how a subclass re-exports the seam to its own package
-     * without widening it for everyone. The fieldbook repositories do the same
-     * thing for the same reason; it is worth understanding once, because
-     * protected-across-packages is the corner of Java visibility that people
-     * most often guess at.
-     */
-    void useEntityManager(jakarta.persistence.EntityManager entityManager) {
-        setEntityManager(entityManager);
-    }
 
     /**
      * The dispatcher's query: messages that are waiting and whose time has come,

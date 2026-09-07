@@ -2,36 +2,39 @@ package it.unicam.cs.enrollment.fieldbook.security;
 
 import it.unicam.cs.enrollment.fieldbook.domain.AuthSession;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
-import jakarta.enterprise.context.RequestScoped;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.annotation.RequestScope;
 
 import java.util.Optional;
 
 /**
- * Who is making this request. Filled in by {@link AuthenticationFilter} and
- * injected wherever the answer is needed.
+ * Who is making this request. Filled in by {@link AuthenticationInterceptor}
+ * and injected wherever the answer is needed.
  *
- * <h2>Why {@code @RequestScoped} is the whole design</h2>
- * This bean holds mutable state that belongs to one caller. Marked
- * {@code @ApplicationScoped} it would be a single shared instance and every
- * concurrent request would overwrite everyone else's identity - the worst
- * possible bug, because under light load it works perfectly and under real
- * traffic it serves one learner another learner's notes.
+ * <h2>Why {@code @RequestScope} is the whole design</h2>
+ * This bean holds mutable state that belongs to one caller. As a singleton -
+ * Spring's default, and what you get by writing {@code @Component} alone -
+ * there would be one shared instance and every concurrent request would
+ * overwrite everyone else's identity. That is the worst possible bug, because
+ * under light load it works perfectly and under real traffic it serves one
+ * learner another learner's notes.
  *
- * <p>{@code @RequestScoped} means CDI creates one instance per HTTP request and
- * destroys it at the end. The thing being injected into your
- * {@code @ApplicationScoped} services is not this object at all: it is a PROXY,
- * which on every call looks up the instance belonging to the current request's
- * context and forwards to it. That indirection is what lets a long-lived
- * singleton hold a reference to a short-lived bean without either of them
- * knowing about threads.
+ * <p>{@code @RequestScope} means Spring creates one instance per HTTP request
+ * and discards it at the end. What gets injected into your singleton services
+ * is not this object at all: it is a PROXY, which on every call looks up the
+ * instance belonging to the current request and forwards to it. That
+ * indirection is what lets a long-lived singleton hold a reference to a
+ * short-lived bean without either of them knowing about threads.
  *
  * <p>The general rule this illustrates: state that varies per request must live
  * in a per-request scope. Reaching for a {@code ThreadLocal} is the same idea
- * implemented by hand, and it is how frameworks did this before CDI - with the
- * failure mode that forgetting to clear it leaks one request's identity into
- * the next, because application servers reuse threads from a pool.
+ * implemented by hand - and is, in fact, exactly how Spring implements it, via
+ * {@code RequestContextHolder}. Doing it yourself has one nasty failure mode
+ * the framework handles for you: forgetting to clear the thread-local leaks one
+ * request's identity into the next, because servers reuse threads from a pool.
  */
-@RequestScoped
+@Component
+@RequestScope
 public class CurrentUser {
 
     private LearnerAccount account;

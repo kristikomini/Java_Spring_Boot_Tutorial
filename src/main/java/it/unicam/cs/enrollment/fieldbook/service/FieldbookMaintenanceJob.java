@@ -1,15 +1,12 @@
 package it.unicam.cs.enrollment.fieldbook.service;
 
 import it.unicam.cs.enrollment.fieldbook.repository.AuthSessionRepository;
-import jakarta.ejb.ConcurrencyManagement;
-import jakarta.ejb.ConcurrencyManagementType;
-import jakarta.ejb.Schedule;
-import jakarta.ejb.Singleton;
-import jakarta.ejb.TransactionAttribute;
-import jakarta.ejb.TransactionAttributeType;
-import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 
@@ -28,36 +25,48 @@ import java.time.Clock;
  * the schedule. A design that relies on the sweeper for correctness has a
  * security hole for as long as the sweeper is down.
  *
- * <h2>{@code @Singleton} and container concurrency</h2>
- * One instance for the whole application, and by default the container holds a
- * write lock around every method - so two timer firings can never overlap. That
- * is what you want for a job like this, and it is also why a slow scheduled
- * method blocks the next firing rather than running twice.
+ * <h2>{@code @Scheduled}, and the one line that makes it run</h2>
+ * The annotation alone does nothing. {@code @EnableScheduling} on
+ * {@code EnrollmentApplication} is what creates the {@code TaskScheduler} that
+ * finds these methods; without it they compile, deploy and never fire - which
+ * is a genuinely annoying afternoon, because there is no error to search for.
  *
- * <p>{@code persistent = false} keeps the timer in memory. A persistent timer
- * is stored in the database and survives a restart, which sounds better until
- * you notice every node in a cluster then fires the same job. Real answers are
- * a distributed lock or a scheduler that owns the cluster. See the fieldbook
- * chapter on scheduled work for the longer version.
+ * <p>The cron expression is Spring's SIX-field variant: second, minute, hour,
+ * day-of-month, month, day-of-week. Unix cron has five fields and starts at
+ * minutes, so a five-field expression pasted from a crontab is silently
+ * shifted by one position and runs at the wrong time. That is the single most
+ * common mistake with this annotation.
+ *
+ * <h2>One scheduler thread, and what that implies</h2>
+ * Spring's default {@code TaskScheduler} has a pool size of ONE, so scheduled
+ * methods across the whole application are serialised: a slow job delays the
+ * next one rather than running beside it. That happens to be what these sweeps
+ * want, and it is worth knowing before a long job starves a frequent one.
+ *
+ * <p>What Spring does NOT give you is cluster safety. Run two instances and
+ * both fire this job at 03:20. For a delete-by-predicate sweep that is merely
+ * wasteful, but the general answer is a distributed lock (ShedLock is the usual
+ * library) or a scheduler that owns the cluster (Quartz with a JDBC store).
+ * See the fieldbook chapter on scheduled work for the longer version.
  */
-@Singleton
-@ConcurrencyManagement(ConcurrencyManagementType.CONTAINER)
+@Component
 public class FieldbookMaintenanceJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(FieldbookMaintenanceJob.class);
 
-    @Inject
-    AuthSessionRepository sessions;
+    private final AuthSessionRepository sessions;
+    private final AccountService accounts;
+    private final Clock clock;
 
-    @Inject
-    AccountService accounts;
+    public FieldbookMaintenanceJob(AuthSessionRepository sessions, AccountService accounts, Clock clock) {
+        this.sessions = sessions;
+        this.accounts = accounts;
+        this.clock = clock;
+    }
 
-    @Inject
-    Clock clock;
-
-    @Schedule(hour = "3", minute = "20", second = "0", persistent = false,
-            info = "Delete fieldbook sessions that have expired")
-    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    /** 03:20 every night. */
+    @Scheduled(cron = "0 20 3 * * *")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sweepExpiredSessions() {
         int removed = sessions.deleteExpired(clock.instant());
         if (removed > 0) {
@@ -76,9 +85,8 @@ public class FieldbookMaintenanceJob {
      * how a nightly job starts deadlocking against itself at three in the
      * morning, which is the worst time to be reading a stack trace.
      */
-    @Schedule(hour = "3", minute = "30", second = "0", persistent = false,
-            info = "Delete spent and expired fieldbook password reset tokens")
-    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    @Scheduled(cron = "0 30 3 * * *")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sweepSpentPasswordResets() {
         int removed = accounts.sweepExpiredResets();
         if (removed > 0) {

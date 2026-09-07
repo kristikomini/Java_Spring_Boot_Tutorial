@@ -1,8 +1,5 @@
 package it.unicam.cs.enrollment.common.logging;
 
-import jakarta.enterprise.util.Nonbinding;
-import jakarta.interceptor.InterceptorBinding;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -10,10 +7,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * An INTERCEPTOR BINDING: annotate a class or method with {@code @Loggable} and
- * every invocation is timed and logged.
+ * A marker annotation: put {@code @Loggable} on a class or a method and every
+ * invocation is timed and logged.
  *
- * <h2>The problem interceptors solve</h2>
+ * <h2>The problem this solves</h2>
  * Timing and logging are CROSS-CUTTING CONCERNS: needed in many places, related
  * to none of them. Written by hand, every service method turns into
  * <pre>
@@ -26,32 +23,32 @@ import java.lang.annotation.Target;
  *   }
  * </pre>
  * The business logic drowns. This is what Aspect-Oriented Programming (AOP) was
- * invented for, and Jakarta EE ships it as interceptors.
+ * invented for, and Spring ships it as {@code spring-boot-starter-aop}.
  *
- * <h2>How the three pieces fit together</h2>
+ * <h2>How the two pieces fit together</h2>
  * <ol>
- *   <li>This annotation - the BINDING. It is a marker; it contains no logic.</li>
- *   <li>{@link LoggingInterceptor} - the BEHAVIOUR, annotated with
- *       {@code @Interceptor} and with this binding.</li>
- *   <li>The target class or method carrying {@code @Loggable}.</li>
+ *   <li>This annotation - a plain marker, with no logic in it at all.</li>
+ *   <li>{@link LoggingAspect} - the behaviour, an {@code @Aspect} whose
+ *       pointcut matches anything carrying this annotation.</li>
  * </ol>
- * The container weaves them together by generating a proxy. You will meet the
- * same pattern in {@code @Transactional}, {@code @Asynchronous} and
- * {@code @RolesAllowed} - all of them are interceptor bindings provided by the
- * platform.
  *
- * <h2>{@code @Inherited} and {@code @Nonbinding}</h2>
- * <ul>
- *   <li>{@code @Inherited} - a subclass of an annotated class is intercepted too.</li>
- *   <li>{@code @Nonbinding} - by default, ATTRIBUTE VALUES are part of the
- *       binding: {@code @Loggable(level="INFO")} and {@code @Loggable(level="DEBUG")}
- *       would be considered different bindings and would need different
- *       interceptors. {@code @Nonbinding} says "this attribute is data for the
- *       interceptor, not part of matching it".</li>
- * </ul>
+ * <h2>Why this matters beyond logging</h2>
+ * Spring implements the annotation by creating a PROXY around your bean: the
+ * container hands callers an object that wraps yours, runs the advice, and
+ * delegates. {@code @Transactional}, {@code @Cacheable}, {@code @Async} and
+ * {@code @PreAuthorize} all work exactly this way.
+ *
+ * <p>Which explains the single most common Spring bug there is: SELF-INVOCATION.
+ * If a method inside the class calls another method on {@code this}, the call
+ * never leaves the object, so it never passes through the proxy, so the
+ * annotation does nothing. A {@code @Transactional} method called from a
+ * neighbouring method in the same class runs with NO transaction, silently.
+ * Understanding this one aspect is what makes that behaviour obvious rather
+ * than mystifying.
+ *
+ * <p>{@code @Inherited} means a subclass of an annotated class is advised too.
  */
 @Inherited
-@InterceptorBinding
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Loggable {
@@ -65,13 +62,11 @@ public @interface Loggable {
      * later" is how organisations end up with credentials in their log
      * aggregator. Opt in per method, deliberately.
      */
-    @Nonbinding
     boolean logArguments() default false;
 
     /**
      * Calls slower than this (in milliseconds) are logged at WARN instead of
      * DEBUG. A cheap, always-on performance tripwire.
      */
-    @Nonbinding
     long slowCallThresholdMillis() default 500L;
 }

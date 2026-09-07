@@ -7,15 +7,13 @@ import it.unicam.cs.enrollment.mail.domain.MailStatus;
 import it.unicam.cs.enrollment.mail.domain.OutboxMessage;
 import it.unicam.cs.enrollment.mail.domain.RetryPolicy;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.Persistence;
 import jakarta.persistence.PersistenceException;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -37,6 +35,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * removes what it should and nothing else. None of those can be checked with a
  * mocked repository, and all three would be found by a user otherwise.
  */
+@DataJpaTest
+@Import(MailOutboxRepository.class)
+@ActiveProfiles("test")
 @DisplayName("MailOutboxRepository (H2)")
 class MailOutboxRepositoryIT {
 
@@ -44,43 +45,17 @@ class MailOutboxRepositoryIT {
     private static final RetryPolicy POLICY =
             new RetryPolicy(3, Duration.ofSeconds(30), Duration.ofMinutes(30));
 
-    private static EntityManagerFactory entityManagerFactory;
-
+    /**
+     * Each test runs in its own transaction and is ROLLED BACK afterwards, so
+     * the next one starts from the schema as it was created and no test can
+     * leave debris for another to trip over. Test isolation by transaction is
+     * the cheapest kind there is, and {@code @DataJpaTest} gives it away free.
+     */
+    @Autowired
     private EntityManager entityManager;
+
+    @Autowired
     private MailOutboxRepository repository;
-
-    @BeforeAll
-    static void createFactory() {
-        entityManagerFactory = Persistence.createEntityManagerFactory("enrollmentTestPU");
-    }
-
-    @AfterAll
-    static void closeFactory() {
-        if (entityManagerFactory != null) {
-            entityManagerFactory.close();
-        }
-    }
-
-    @BeforeEach
-    void setUp() {
-        entityManager = entityManagerFactory.createEntityManager();
-        repository = new MailOutboxRepository();
-        repository.useEntityManager(entityManager);
-        entityManager.getTransaction().begin();
-    }
-
-    @AfterEach
-    void tearDown() {
-        // Roll back rather than delete: the next test starts from the schema as
-        // it was created, and no test can leave debris for another one to trip
-        // over. Test isolation by transaction is the cheapest kind there is.
-        if (entityManager != null) {
-            if (entityManager.getTransaction().isActive()) {
-                entityManager.getTransaction().rollback();
-            }
-            entityManager.close();
-        }
-    }
 
     private OutboxMessage queue(String recipient, String dedupeKey, Instant dueAt) {
         OutboxMessage row = OutboxMessage.queue(

@@ -4,9 +4,8 @@ import it.unicam.cs.enrollment.domain.event.EnrollmentCreatedEvent;
 import it.unicam.cs.enrollment.domain.event.GradeRecordedEvent;
 import it.unicam.cs.enrollment.domain.model.Student;
 import it.unicam.cs.enrollment.repository.StudentRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
-import jakarta.inject.Inject;
+import org.springframework.stereotype.Service;
+import org.springframework.context.event.EventListener;
 import org.slf4j.Logger;
 
 import java.time.ZoneId;
@@ -22,18 +21,29 @@ import java.util.Optional;
  * {@code EnrollmentService} fires {@code EnrollmentCreatedEvent} and knows
  * nothing about mail; this class knows about mail and nothing about enrolling.
  * Deleting it removes every email from the system and breaks no test of the
- * enrollment rules. That is the payoff CDI events were introduced for, and it
- * is worth checking that it is real: search {@code EnrollmentService} for the
- * word "mail" and you will not find it.
+ * enrollment rules. That is the payoff application events were introduced for,
+ * and it is worth checking that it is real: search {@code EnrollmentService}
+ * for the word "mail" and you will not find it.
  *
- * <h2>{@code IN_PROGRESS}, not {@code AFTER_SUCCESS} - and why that is the
- * opposite of the usual advice</h2>
- * {@code EnrollmentNotificationListener} explains at length that an observer
- * with an external side effect must use {@code AFTER_SUCCESS}, so that a
- * rolled-back transaction cannot send an email about an enrollment that does
- * not exist. That advice is correct and this class ignores it deliberately.
+ * <h2>{@code @EventListener}, not {@code @TransactionalEventListener} - and why
+ * that is the opposite of the usual advice</h2>
+ * Spring gives you two annotations for this, and choosing between them is the
+ * whole lesson:
+ * <ul>
+ *   <li>{@code @EventListener} runs SYNCHRONOUSLY, inside the publisher's call
+ *       and therefore inside its transaction. The publisher does not continue
+ *       until the listener returns, and an exception here propagates back into
+ *       the publisher and rolls the whole thing back.</li>
+ *   <li>{@code @TransactionalEventListener(phase = AFTER_COMMIT)} defers until
+ *       the transaction has committed. The usual advice - and it is good advice
+ *       - is that a listener with an EXTERNAL side effect must use it, so that
+ *       a rolled-back transaction cannot send an email about an enrollment that
+ *       does not exist.</li>
+ * </ul>
+ * {@code EnrollmentNotificationListener} follows that advice. This class
+ * ignores it, deliberately.
  *
- * <p>The reason is that this observer has no external side effect. It writes a
+ * <p>The reason is that this listener has no external side effect. It writes a
  * ROW. Running inside the transaction is precisely what makes the outbox
  * pattern work:
  * <ul>
@@ -44,14 +54,17 @@ import java.util.Optional;
  *       impossible email is impossible, rather than merely unlikely.</li>
  * </ul>
  *
- * <p>An {@code AFTER_SUCCESS} observer that queued the mail would lose it if the
- * server died in the window between commit and observer - small, but the whole
- * point of the exercise is that a small window is still a window. The rule to
- * take away is not "always AFTER_SUCCESS"; it is "the phase depends on whether
- * the work is transactional", and moving the send behind a table is what turns
- * an untransactional side effect into a transactional one.
+ * <p>An {@code AFTER_COMMIT} listener that queued the mail would lose it if the
+ * process died in the window between commit and listener - small, but the whole
+ * point of the exercise is that a small window is still a window. Worse, a
+ * write attempted after commit has no transaction to join at all, so it needs
+ * {@code REQUIRES_NEW} and stops being atomic with the thing it describes.
+ *
+ * <p>The rule to take away is not "always AFTER_COMMIT"; it is "the phase
+ * depends on whether the work is transactional", and moving the send behind a
+ * table is what turns an untransactional side effect into a transactional one.
  */
-@ApplicationScoped
+@Service
 public class EnrollmentMailListener {
 
     private static final DateTimeFormatter DATE_FORMAT =
@@ -61,12 +74,6 @@ public class EnrollmentMailListener {
     private StudentRepository students;
     private Logger log;
 
-    /** Required by CDI for proxying. Never call it yourself. */
-    protected EnrollmentMailListener() {
-        // required by CDI
-    }
-
-    @Inject
     public EnrollmentMailListener(MailService mail, StudentRepository students, Logger log) {
         this.mail = mail;
         this.students = students;
@@ -81,7 +88,8 @@ public class EnrollmentMailListener {
      * queuing this twice can only ever be a mistake, and the unique constraint
      * turns that mistake into a no-op rather than a second email.
      */
-    public void onEnrollmentCreated(@Observes EnrollmentCreatedEvent event) {
+    @EventListener
+    public void onEnrollmentCreated(EnrollmentCreatedEvent event) {
         if (event.getStudentEmail() == null) {
             // Not an exception: a student with no address is a data problem, not
             // a reason to roll back their enrollment. Loud enough to fix, quiet
@@ -116,7 +124,8 @@ public class EnrollmentMailListener {
      * scales. A template language with conditionals in it becomes a second,
      * untested program that happens to live in the resources folder.
      */
-    public void onGradeRecorded(@Observes GradeRecordedEvent event) {
+    @EventListener
+    public void onGradeRecorded(GradeRecordedEvent event) {
         Optional<Student> student = students.findByStudentNumber(event.getStudentNumber());
         if (!student.isPresent() || student.get().getEmail() == null) {
             log.warn("No address for student {} - no exam-result mail will be sent",

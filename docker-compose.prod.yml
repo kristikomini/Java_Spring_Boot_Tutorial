@@ -89,7 +89,7 @@ services:
       # should still come up and answer with a 502 - a 502 is a diagnosable
       # answer, whereas a connection refused because Caddy never started is
       # indistinguishable from a DNS or firewall problem.
-      - wildfly
+      - app
 
     restart: unless-stopped
 
@@ -106,13 +106,13 @@ services:
   # ---------------------------------------------------------------------------
   # WildFly - the application server
   # ---------------------------------------------------------------------------
-  wildfly:
+  app:
     build:
-      # Context is the REPOSITORY ROOT, not docker/wildfly: the first stage of
+      # Context is the REPOSITORY ROOT, not docker/app: the first stage of
       # Dockerfile.prod needs pom.xml and src/ to build the WAR.
       context: .
-      dockerfile: docker/wildfly/Dockerfile.prod
-    container_name: enrollment-wildfly
+      dockerfile: docker/app/Dockerfile
+    container_name: enrollment-app
 
     # NO `ports:` KEY. Not commented out - absent.
     #
@@ -123,24 +123,29 @@ services:
     # nothing tells you.
 
     environment:
-      JAVA_OPTS: >-
-        -Xms256m
-        -Xmx768m
-        -Djava.net.preferIPv4Stack=true
-        -Djboss.as.management.blocking.timeout=600
+      # Boot activates the `prod` profile, so an application-prod.yml would
+      # layer over application.yml. Everything secret comes from the variables
+      # below rather than from any file baked into the image.
+      SPRING_PROFILES_ACTIVE: prod
+
+      # Swagger UI enumerates every endpoint and its parameters, which is a
+      # gift to whoever is scanning you. Off in production; the JSON at
+      # /v3/api-docs stays available for tooling.
+      SPRINGDOC_SWAGGER_UI_ENABLED: "false"
 
       # -------------------------------------------------------------------
       # DATABASE
       # -------------------------------------------------------------------
-      # These three are the expressions configure-prod.cli left unresolved.
-      # The host is the SERVICE NAME on the Docker network, and the port is
-      # the container's 5432 - neither is affected by the fact that nothing
-      # is published to the host.
-      ENROLLMENT_DB_URL: jdbc:postgresql://postgres:5432/enrollment
-      ENROLLMENT_DB_USER: enrollment
+      # RELAXED BINDING: SPRING_DATASOURCE_URL sets spring.datasource.url, so
+      # these three override application.yml with no file edit and no rebuild.
+      # The host is the SERVICE NAME on the Docker network, and the port is the
+      # container's 5432 - neither is affected by the fact that nothing is
+      # published to the host.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/enrollment
+      SPRING_DATASOURCE_USERNAME: enrollment
       # No default. A missing password stops the deploy here, at `up`, with a
-      # readable message - rather than at boot with a JNDI stack trace.
-      ENROLLMENT_DB_PASSWORD: ${ENROLLMENT_DB_PASSWORD:?set ENROLLMENT_DB_PASSWORD in .env.prod}
+      # readable message - rather than at boot with a connection stack trace.
+      SPRING_DATASOURCE_PASSWORD: ${ENROLLMENT_DB_PASSWORD:?set ENROLLMENT_DB_PASSWORD in .env.prod}
 
       # -------------------------------------------------------------------
       # MAIL
@@ -152,20 +157,19 @@ services:
       # while you are still finding out what this thing does in public.
       #
       # When a relay is configured and tested, set ENROLLMENT_MAIL_TRANSPORT
-      # to `smtp` in .env.prod. `smtp` fails loudly at startup if the mail
-      # session is missing, which is the behaviour you want once you have
-      # decided mail matters.
+      # to `smtp` in .env.prod. `smtp` fails loudly at startup if no SMTP host
+      # is set, which is the behaviour you want once you have decided mail
+      # matters.
       ENROLLMENT_MAIL_TRANSPORT: ${ENROLLMENT_MAIL_TRANSPORT:-log}
 
       # The SMTP_* values below are consumed by configure-prod.cli at BOOT,
       # not by the application - the mail session resource has to resolve
       # even when the transport is `log`, so they carry harmless defaults.
-      ENROLLMENT_SMTP_HOST: ${ENROLLMENT_SMTP_HOST:-localhost}
-      ENROLLMENT_SMTP_PORT: ${ENROLLMENT_SMTP_PORT:-587}
-      ENROLLMENT_SMTP_SSL: ${ENROLLMENT_SMTP_SSL:-false}
-      ENROLLMENT_SMTP_TLS: ${ENROLLMENT_SMTP_TLS:-true}
-      ENROLLMENT_SMTP_USER: ${ENROLLMENT_SMTP_USER:-}
-      ENROLLMENT_SMTP_PASSWORD: ${ENROLLMENT_SMTP_PASSWORD:-}
+      ENROLLMENT_MAIL_SMTP_HOST: ${ENROLLMENT_SMTP_HOST:-}
+      ENROLLMENT_MAIL_SMTP_PORT: ${ENROLLMENT_SMTP_PORT:-587}
+      ENROLLMENT_MAIL_SMTP_STARTTLS: ${ENROLLMENT_SMTP_TLS:-true}
+      ENROLLMENT_MAIL_SMTP_USERNAME: ${ENROLLMENT_SMTP_USER:-}
+      ENROLLMENT_MAIL_SMTP_PASSWORD: ${ENROLLMENT_SMTP_PASSWORD:-}
 
       ENROLLMENT_MAIL_FROM: ${ENROLLMENT_MAIL_FROM:-no-reply@localhost}
       ENROLLMENT_MAIL_FROM_NAME: ${ENROLLMENT_MAIL_FROM_NAME:-UNICAM Enrollment}
@@ -197,7 +201,9 @@ services:
       # deployment failed still listens on 8080 and returns 404. Caddy
       # returning 502 means this failed; Caddy returning 404 on every path
       # means this passed and the deployment did not.
-      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8080' || exit 1"]
+      # Actuator's readiness probe, which includes the database - a stronger
+      # signal than "the port is open".
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/enrollment/actuator/health/readiness || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -224,7 +230,7 @@ services:
       POSTGRES_PASSWORD: ${ENROLLMENT_DB_PASSWORD:?set ENROLLMENT_DB_PASSWORD in .env.prod}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
 
-    # NO `ports:` KEY - see the note on the wildfly service.
+    # NO `ports:` KEY - see the note on the app service.
     #
     # If you need psql, you do not need a published port: run it inside the
     # container, where the connection never touches the network at all.

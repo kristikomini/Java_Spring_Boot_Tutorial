@@ -2,224 +2,187 @@ package it.unicam.cs.enrollment.repository;
 
 import it.unicam.cs.enrollment.domain.model.Enrollment;
 import it.unicam.cs.enrollment.domain.model.EnrollmentStatus;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.TypedQuery;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * Data access for {@link Enrollment}, the association entity.
+ * The queries the enrollment rules depend on.
  *
- * <p>Notice that most methods take IDs rather than entities. A repository that
- * demands a fully loaded {@code Student} just to count rows forces the caller to
- * fetch data it does not need.
+ * <p>Every one of these is an aggregate or a filter the DATABASE performs. Read
+ * that against {@code Course.occupiedSeats()}, which answers the same question
+ * by loading every enrollment row into the JVM and streaming it. Both are in
+ * this codebase on purpose; only one of them belongs in a request path.
  */
-@ApplicationScoped
-public class EnrollmentRepository extends AbstractJpaRepository<Enrollment> {
+@Repository
+public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     /**
-     * The statuses that consume a seat. Kept here as a constant so the capacity
-     * query and {@link EnrollmentStatus#occupiesSeat()} state one rule in one
-     * place instead of two that can disagree.
-     */
-    private static final Set<EnrollmentStatus> SEAT_OCCUPYING_STATUSES =
-            EnumSet.copyOf(Arrays.stream(EnrollmentStatus.values())
-                    .filter(EnrollmentStatus::occupiesSeat)
-                    .collect(Collectors.toList()));
-
-    public EnrollmentRepository() {
-        super(Enrollment.class);
-    }
-
-    /**
-     * Has this student already enrolled in this course?
+     * The duplicate check. Derived from the name: {@code student} and
+     * {@code course} are association properties, and {@code Id} navigates into
+     * them - so this becomes {@code WHERE e.student.id = ?1 AND e.course.id = ?2}
+     * without a join to either table, because the foreign keys are already on the
+     * enrollments row.
      *
-     * <p>Used for the friendly duplicate check before insertion. The hard
-     * guarantee still comes from the UNIQUE constraint on
-     * {@code (student_id, course_id)} - see {@link Enrollment}.
+     * <p>Underscores are the explicit way to write that traversal
+     * ({@code findByStudent_IdAndCourse_Id}) and are worth knowing: when a
+     * property is genuinely called {@code studentId}, Spring Data has to guess
+     * whether you meant the field or the traversal, and the underscore is how you
+     * settle it.
      */
-    public Optional<Enrollment> findByStudentAndCourse(Long studentId, Long courseId) {
-        TypedQuery<Enrollment> query = em()
-                .createNamedQuery(Enrollment.FIND_BY_STUDENT_AND_COURSE, Enrollment.class)
-                .setParameter("studentId", studentId)
-                .setParameter("courseId", courseId);
-        return singleResult(query);
-    }
+    Optional<Enrollment> findByStudentIdAndCourseId(Long studentId, Long courseId);
 
     /**
-     * Counts seats currently taken on a course.
+     * THE SEAT COUNT.
      *
-     * <p>An AGGREGATE QUERY, not a collection walk. The alternative -
-     * {@code course.getEnrollments().size()} - loads every enrollment row into
-     * memory to produce one number. On a 300-student course that is 300 objects
-     * built and immediately discarded. Let the database do arithmetic; it is
-     * extremely good at it.
+     * <p>One row over the wire regardless of how many students are enrolled.
+     * Passing the occupying statuses as a parameter rather than hardcoding
+     * {@code IN ('ACTIVE','FAILED')} keeps the rule in
+     * {@link EnrollmentStatus#occupiesSeat()}, where it can be read and tested,
+     * rather than duplicated into a string.
+     *
+     * <p>{@code idx_enrollments_course_status} on (course_id, status) is the
+     * index that makes this fast, and the column ORDER of that index is not
+     * arbitrary - fieldbook chapter 07 explains why an index on (status,
+     * course_id) would be nearly useless for this query.
      */
-    public long countOccupiedSeats(Long courseId) {
-        return em().createNamedQuery(Enrollment.COUNT_OCCUPIED_SEATS, Long.class)
-                .setParameter("courseId", courseId)
-                .setParameter("occupyingStatuses", SEAT_OCCUPYING_STATUSES)
-                .getSingleResult();
-    }
+    @Query("SELECT COUNT(e) FROM Enrollment e "
+            + "WHERE e.course.id = :courseId AND e.status IN :statuses")
+    long countOccupiedSeats(@Param("courseId") Long courseId,
+                            @Param("statuses") List<EnrollmentStatus> statuses);
 
     /**
-     * A student's full transcript, with student, courses and professors fetched
-     * eagerly in the same query.
+     * The same count with the statuses supplied from the rule itself.
+     *
+     * <p>A {@code default} method on a Spring Data interface is ordinary Java:
+     * the framework only generates implementations for ABSTRACT methods, so
+     * anything with a body is simply inherited. It is the cheapest way to put a
+     * convenience on top of a generated query, and it is worth knowing that the
+     * option exists before reaching for a custom fragment.
      */
-    public List<Enrollment> findByStudentWithCourse(Long studentId) {
-        return em().createNamedQuery(Enrollment.FIND_BY_STUDENT_WITH_COURSE, Enrollment.class)
-                .setParameter("studentId", studentId)
-                .getResultList();
+    default long countOccupiedSeats(Long courseId) {
+        return countOccupiedSeats(courseId, EnrollmentStatus.occupyingSeats());
     }
 
     /**
-     * Loads one enrollment with every association the API response needs.
+     * Has this student passed a course with this code, in any year?
      *
-     * <p>Used instead of the plain {@code findById} throughout the service,
-     * because the REST layer maps the entity to a DTO AFTER the transaction has
-     * committed. At that point the persistence context is gone and any
-     * untouched lazy association throws {@code LazyInitializationException}.
-     *
-     * <p>Fetching what the use case needs while the transaction is still open is
-     * the correct fix. The two tempting alternatives are both traps: making
-     * associations EAGER punishes every other query, and keeping the transaction
-     * open across rendering (the "Open Session In View" pattern) hides N+1
-     * problems and holds database resources during I/O.
+     * <p>Note that it counts rather than fetching: the caller only needs a
+     * boolean, and loading an Enrollment to discard it would drag in the student
+     * and course proxies for nothing.
      */
-    public Optional<Enrollment> findByIdWithDetails(Long id) {
-        if (id == null) {
-            return Optional.empty();
-        }
-        TypedQuery<Enrollment> query = em()
-                .createNamedQuery(Enrollment.FIND_BY_ID_WITH_DETAILS, Enrollment.class)
-                .setParameter("id", id);
-        return singleResult(query);
-    }
+    @Query("SELECT COUNT(e) FROM Enrollment e "
+            + "WHERE e.student.id = :studentId "
+            + "AND e.course.code = :courseCode "
+            + "AND e.status = it.unicam.cs.enrollment.domain.model.EnrollmentStatus.COMPLETED")
+    long countCompletedByCourseCode(@Param("studentId") Long studentId,
+                                    @Param("courseCode") String courseCode);
 
     /**
-     * Counts occupied seats for MANY courses in a single {@code GROUP BY} query.
-     *
-     * <h3>Why this method exists</h3>
-     * The course list endpoint shows "seats available" for each of 20 courses.
-     * Calling {@link #countOccupiedSeats(Long)} in a loop would issue 20
-     * queries - the N+1 PROBLEM, arriving through the back door in the mapping
-     * layer rather than through a lazy association.
-     *
-     * <p>The fix is the same one you apply everywhere: turn N queries into one
-     * that takes a collection of ids, then look results up in a {@link Map}.
-     * Recognising this shape - "I am about to query inside a loop" - is one of
-     * the most valuable performance instincts to build.
-     *
-     * <p>Note the {@code Object[]} result: a JPQL query selecting several
-     * expressions returns an array per row. The type-safe alternative is a
-     * CONSTRUCTOR EXPRESSION, {@code SELECT new com.example.SeatCount(...)},
-     * which is nicer when the projection is reused.
-     *
-     * @return course id to occupied-seat count. Courses with zero enrollments do
-     *         NOT appear (GROUP BY produces no row for them), so callers must
-     *         use {@code getOrDefault(id, 0L)}.
+     * The roster. JOIN FETCH on both associations because the response DTO names
+     * the student and the course - without it this is the N+1 problem twice over.
      */
-    public Map<Long, Long> countOccupiedSeatsByCourse(Collection<Long> courseIds) {
-        if (courseIds == null || courseIds.isEmpty()) {
-            // Guard clause: an empty IN list is a syntax error on several
-            // databases, and skipping the round trip is free.
-            return Collections.emptyMap();
-        }
+    @Query("SELECT e FROM Enrollment e "
+            + "JOIN FETCH e.student "
+            + "JOIN FETCH e.course c "
+            + "JOIN FETCH c.professor "
+            + "WHERE e.course.id = :courseId AND e.status = :status "
+            + "ORDER BY e.enrolledAt ASC")
+    List<Enrollment> findByCourseAndStatus(@Param("courseId") Long courseId,
+                                           @Param("status") EnrollmentStatus status);
 
-        List<Object[]> rows = em().createQuery(
-                        "SELECT e.course.id, COUNT(e) FROM Enrollment e "
-                                + "WHERE e.course.id IN :courseIds "
-                                + "AND e.status IN :occupyingStatuses "
-                                + "GROUP BY e.course.id",
-                        Object[].class)
-                .setParameter("courseIds", courseIds)
-                .setParameter("occupyingStatuses", SEAT_OCCUPYING_STATUSES)
-                .getResultList();
-
-        Map<Long, Long> counts = new HashMap<>();
-        for (Object[] row : rows) {
-            counts.put((Long) row[0], (Long) row[1]);
-        }
-        return counts;
-    }
+    /** Everything needed to render one enrollment, in a single query. */
+    @Query("SELECT e FROM Enrollment e "
+            + "JOIN FETCH e.student "
+            + "JOIN FETCH e.course c "
+            + "JOIN FETCH c.professor "
+            + "WHERE e.id = :id")
+    Optional<Enrollment> findByIdWithDetails(@Param("id") Long id);
 
     /**
-     * Prerequisite check: has this student PASSED the course with the given code
-     * (in any academic year)?
+     * Seat counts for many courses at once - the projection that keeps the
+     * course LIST endpoint at a constant number of queries.
      *
-     * <p>Matching on the code rather than the course id is deliberate. A
-     * prerequisite is "you must have passed Programming 1", not "you must have
-     * passed the 2024 instance of Programming 1". Modelling that correctly
-     * matters more than the query itself.
+     * <p>Without this, rendering a page of 20 courses would ask
+     * {@link #countOccupiedSeats} twenty times. With it, once. The return type is
+     * {@code List<Object[]>} because JPQL has no tuple type; each row is
+     * {@code [courseId, count]} and the service turns it into a Map.
+     *
+     * <p>Spring Data can do better than Object[] - an interface or record
+     * projection gives you typed accessors - and a real codebase should use one.
+     * It is left raw here because it matches the hand-written version exactly,
+     * and because seeing Object[] once explains why the projections exist.
      */
-    public boolean hasCompletedCourseCode(Long studentId, String courseCode) {
-        Long count = em().createNamedQuery(Enrollment.HAS_COMPLETED_COURSE_CODE, Long.class)
-                .setParameter("studentId", studentId)
-                .setParameter("courseCode", courseCode)
-                .getSingleResult();
-        return count > 0;
-    }
+    @Query("SELECT e.course.id, COUNT(e) FROM Enrollment e "
+            + "WHERE e.course.id IN :courseIds AND e.status IN :statuses "
+            + "GROUP BY e.course.id")
+    List<Object[]> countOccupiedSeatsByCourse(@Param("courseIds") List<Long> courseIds,
+                                              @Param("statuses") List<EnrollmentStatus> statuses);
 
-    /** All enrollments on a course with a given status, ordered by student surname. */
-    public List<Enrollment> findByCourseAndStatus(Long courseId, EnrollmentStatus status) {
-        return em().createQuery(
-                        "SELECT e FROM Enrollment e "
-                                + "JOIN FETCH e.student s "
-                                + "JOIN FETCH e.course c "
-                                + "JOIN FETCH c.professor "
-                                + "WHERE e.course.id = :courseId AND e.status = :status "
-                                + "ORDER BY s.lastName ASC, s.firstName ASC",
-                        Enrollment.class)
-                .setParameter("courseId", courseId)
-                .setParameter("status", status)
-                .getResultList();
-    }
+    /**
+     * One student's whole transcript, with everything the API response renders.
+     *
+     * <p>Three {@code JOIN FETCH}es and no lazy loading afterwards: deciding
+     * the FETCH PLAN per use case - rather than making associations EAGER
+     * globally - is the difference between an application that scales and one
+     * that does not. An EAGER association is a decision made once, for every
+     * query, by somebody who could not know what any of them would need.
+     */
+    @Query("SELECT e FROM Enrollment e "
+            + "JOIN FETCH e.student "
+            + "JOIN FETCH e.course c "
+            + "JOIN FETCH c.professor "
+            + "WHERE e.student.id = :studentId "
+            + "ORDER BY e.enrolledAt DESC")
+    List<Enrollment> findByStudentWithCourse(@Param("studentId") Long studentId);
 
     /**
      * A BULK UPDATE: closes stale ACTIVE enrollments for courses whose academic
      * year has ended.
      *
+     * <h3>{@code @Modifying}, and what happens without it</h3>
+     * Spring Data assumes a {@code @Query} is a SELECT and calls
+     * {@code getResultList()} on it. An UPDATE reached that way throws at
+     * runtime, not at startup, with a message about the query not being a
+     * select. {@code @Modifying} switches it to {@code executeUpdate()} and is
+     * the annotation everybody forgets exactly once.
+     *
+     * <p>{@code clearAutomatically = true} matters more than it looks. A bulk
+     * update goes straight to the database and does not touch the persistence
+     * context, so any {@code Enrollment} already loaded in this transaction
+     * still holds the OLD status - and would overwrite the new one on flush.
+     * Clearing detaches everything, which is safe here precisely because this
+     * runs in a short transaction of its own that does nothing else.
+     *
      * <h3>Bulk operations bypass the persistence context - know the consequences</h3>
-     * {@code executeUpdate()} issues one {@code UPDATE ... WHERE ...} statement.
-     * That is enormously faster than loading 10,000 entities and mutating each.
-     * But:
+     * One {@code UPDATE ... WHERE ...} statement is enormously faster than
+     * loading 10,000 entities and mutating each. But:
      * <ul>
      *   <li>Entity lifecycle callbacks ({@code @PreUpdate}) do NOT run, so
-     *       {@code updated_at} must be set by hand in the statement.</li>
+     *       {@code updatedAt} must be set by hand in the statement.</li>
      *   <li>The {@code @Version} column is NOT incremented, so an entity another
      *       transaction is holding will not notice the change. Hibernate offers
      *       the HQL extension {@code UPDATE VERSIONED Enrollment e SET ...} to
      *       bump it; we stay on portable JPQL here and accept the limitation,
      *       which is safe because this job runs when nothing else is writing.</li>
-     *   <li>Entities already loaded in the persistence context become STALE.
-     *       Anything holding one keeps the old values.</li>
      * </ul>
-     * The rule: use bulk operations from a short, dedicated transaction (like our
-     * scheduled job) and not in the middle of a request that also manipulates the
-     * same entities.
+     * The rule: use bulk operations from a short, dedicated transaction (like
+     * the nightly job) and not in the middle of a request that also manipulates
+     * the same entities.
      *
      * @return the number of rows affected
      */
-    public int closeStaleEnrollments(int academicYearBefore) {
-        return em().createQuery(
-                        "UPDATE Enrollment e "
-                                + "SET e.status = :withdrawn, "
-                                + "    e.updatedAt = :now "
-                                + "WHERE e.status = :active "
-                                + "AND e.course.academicYear < :year")
-                .setParameter("withdrawn", EnrollmentStatus.WITHDRAWN)
-                .setParameter("active", EnrollmentStatus.ACTIVE)
-                .setParameter("now", java.time.Instant.now())
-                .setParameter("year", academicYearBefore)
-                .executeUpdate();
-    }
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Enrollment e "
+            + "SET e.status = it.unicam.cs.enrollment.domain.model.EnrollmentStatus.WITHDRAWN, "
+            + "    e.updatedAt = :now "
+            + "WHERE e.status = it.unicam.cs.enrollment.domain.model.EnrollmentStatus.ACTIVE "
+            + "AND e.course.academicYear < :year")
+    int closeStaleEnrollments(@Param("year") int academicYearBefore, @Param("now") Instant now);
 }

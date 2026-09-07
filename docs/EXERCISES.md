@@ -362,7 +362,7 @@ authentication one into steps.
 The Flyway one is now half done for you: `src/main/resources/db/migration` holds
 the baseline and the indexes, and fieldbook chapter 29 walks the three steps that
 finish it — `flyway:baseline`, then `validate` instead of `update` in
-`persistence.xml`, then adding a column and watching the deployment refuse.
+`application.yml`, then adding a field without a migration and watching startup refuse.
 
 Also worth doing: `./scripts/break.sh` (see [BREAKING.md](BREAKING.md)) — the
 inverse skill. These exercises ask you to make something work; that script asks

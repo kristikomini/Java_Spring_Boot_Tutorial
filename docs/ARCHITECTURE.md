@@ -143,7 +143,7 @@ it is in the wrong file.
  8.                                the AFTER_SUCCESS observer now runs
  9. LoggingInterceptor             logs the elapsed time
 10. EnrollmentMapper               entity → EnrollmentResponse
-11. JAX-RS                         201 Created + Location header
+11. Spring MVC                     201 Created + Location header
 12. CorrelationIdFilter            adds X-Correlation-Id, CLEARS the MDC
 ```
 
@@ -271,8 +271,8 @@ paths. Error bodies cross a trust boundary. Log the detail, return the reference
 | Method timing & tracing | CDI interceptor | `common/logging/LoggingInterceptor` |
 | Per-class loggers | CDI producer + `InjectionPoint` | `common/logging/LoggerProducer` |
 | Testable time | CDI producer | `common/ClockProducer` |
-| Request correlation | JAX-RS filter + SLF4J MDC | `api/filter/CorrelationIdFilter` |
-| Error rendering | JAX-RS exception mappers | `api/exception/` |
+| Request correlation | Servlet filter + SLF4J MDC | `web/filter/CorrelationIdFilter` |
+| Error rendering | `@RestControllerAdvice` | `web/error/RestExceptionHandler` |
 | Startup seeding | `@Startup @Singleton` EJB | `config/ApplicationBootstrap` |
 | Scheduled work | EJB timer (`@Schedule`) | `service/EnrollmentMaintenanceJob` |
 
@@ -381,7 +381,7 @@ for a confirmation email.
 
 `docker compose up -d` now also starts **Mailpit**, a fake SMTP server with a
 web inbox at <http://localhost:8225>. Every message the application sends lands
-there and goes no further. Without it — a native WildFly, say — the transport
+there and goes no further. Without it — running the jar directly, say — the transport
 falls back to writing the rendered email into the server log, says so at WARN,
 and reports itself as `log only` at `GET /api/mail/status`.
 

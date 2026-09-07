@@ -3,7 +3,7 @@ package it.unicam.cs.enrollment.fieldbook.repository;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
 import it.unicam.cs.enrollment.fieldbook.domain.PasswordResetToken;
 import it.unicam.cs.enrollment.repository.AbstractJpaRepository;
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -16,21 +16,13 @@ import java.util.Optional;
  * repository that grows a {@code findAll} nobody calls is a repository that
  * will eventually be used to load the whole table.
  */
-@ApplicationScoped
+@Repository
 public class PasswordResetTokenRepository extends AbstractJpaRepository<PasswordResetToken> {
 
     public PasswordResetTokenRepository() {
         super(PasswordResetToken.class);
     }
 
-    /**
-     * Test seam, package-private so only the integration test in this package
-     * can reach it. See {@code LearnerAccountRepository.useEntityManager} for
-     * why a two-line method is the way to re-export a protected setter.
-     */
-    void useEntityManager(jakarta.persistence.EntityManager entityManager) {
-        setEntityManager(entityManager);
-    }
 
     /**
      * Look one up by the fingerprint of the token in the link.

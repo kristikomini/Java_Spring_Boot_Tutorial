@@ -1,7 +1,9 @@
 package it.unicam.cs.enrollment.domain.model;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -75,8 +77,23 @@ public enum EnrollmentStatus {
         return ALLOWED_TRANSITIONS.get(this).isEmpty();
     }
 
-    /** Only an ACTIVE enrollment occupies a seat in the course. */
+    /** An ACTIVE or FAILED enrollment still occupies a seat in the course. */
     public boolean occupiesSeat() {
         return this == ACTIVE || this == FAILED;
+    }
+
+    /**
+     * The statuses that hold a seat, DERIVED from {@link #occupiesSeat()}
+     * rather than listed again.
+     *
+     * <p>Worth the four lines. The alternative - a hand-written
+     * {@code List.of(ACTIVE, FAILED)} next to the query that uses it - is a
+     * second copy of the rule, and the failure mode when a status is added is
+     * silent: the seat count is simply wrong, and nothing points at the list
+     * that was not updated. Computing it from the predicate means there is one
+     * definition and the compiler visits it.
+     */
+    public static List<EnrollmentStatus> occupyingSeats() {
+        return Arrays.stream(values()).filter(EnrollmentStatus::occupiesSeat).toList();
     }
 }

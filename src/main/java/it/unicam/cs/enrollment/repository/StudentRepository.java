@@ -1,219 +1,115 @@
 package it.unicam.cs.enrollment.repository;
 
-import it.unicam.cs.enrollment.common.Page;
-import it.unicam.cs.enrollment.common.PageRequest;
 import it.unicam.cs.enrollment.domain.model.Student;
 import it.unicam.cs.enrollment.domain.model.StudentStatus;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.TypedQuery;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Data access for {@link Student}.
+ * The whole repository. Four lines of body, and it already has findById, save,
+ * findAll, count, existsById, deleteById and the rest of JpaRepository.
  *
- * <h2>{@code @ApplicationScoped}: one instance for the whole application</h2>
- * The bean holds no mutable state - only the injected EntityManager proxy - so a
- * single shared instance is safe and avoids per-request allocation. This is the
- * correct default scope for stateless services and repositories.
+ * <p>Worth noticing what @Repository actually does here, because it is not what
+ * most people assume. Spring Data would register this interface with or without
+ * the annotation - @EnableJpaRepositories scanning finds it either way, and Boot
+ * enables that scanning automatically. What the annotation adds is exception
+ * translation: it marks the bean for a post-processor that converts provider
+ * exceptions (Hibernate ones, JDBC SQLExceptions) into Spring
+ * DataAccessException subclasses.
  *
- * <p>Historically this would have been an {@code @Stateless} EJB. CDI beans have
- * largely replaced session beans for this role: they are lighter, and since
- * {@code @Transactional} (from JTA 1.2) works on any CDI bean, the last real
- * reason to use an EJB here disappeared.
+ * <p>That translation is the reason RestExceptionHandler catches
+ * DataIntegrityViolationException rather than a Hibernate
+ * ConstraintViolationException - and it is a genuine architectural idea, not
+ * plumbing: your service layer depends on Spring exceptions, so swapping
+ * Hibernate for EclipseLink would not ripple through your catch blocks.
  */
-@ApplicationScoped
-public class StudentRepository extends AbstractJpaRepository<Student> {
+@Repository
+public interface StudentRepository extends JpaRepository<Student, Long> {
+
+    Optional<Student> findByStudentNumber(String studentNumber);
+
+    long countByStatus(StudentStatus status);
 
     /**
-     * CDI requires a no-argument constructor to create its client proxy for a
-     * normal-scoped bean. It calls {@code super} with the entity class, which is
-     * how {@link AbstractJpaRepository} works around generic type erasure.
-     */
-    public StudentRepository() {
-        super(Student.class);
-    }
-
-    /**
-     * Lookup by natural key, using the {@code @NamedQuery} declared on the
-     * entity.
+     * Whether an address is already in use.
      *
-     * <p>Named queries are parsed and validated when the persistence unit is
-     * built, i.e. at DEPLOY time. A typo in the JPQL fails the deployment
-     * instead of surfacing on a user request at 2am. Prefer them for every fixed
+     * <p>{@code @Query} rather than a derived name, because the address lives
+     * inside the {@link it.unicam.cs.enrollment.domain.model.Email} embeddable
+     * and the derived-query parser would want
+     * {@code existsByEmailValueIgnoreCase} - which works, and is a method name
+     * nobody can read. When the name gets longer than the query, write the
      * query.
      *
-     * <p>{@code setParameter} produces a JDBC BIND PARAMETER. This is not a
-     * stylistic choice: string-concatenating a value into a query is what SQL
-     * injection is. Bound parameters also let the database reuse its execution
-     * plan across calls.
+     * <p>The comparison is against the stored lower-case form, because
+     * {@code Email} normalises on construction. Uniqueness that depends on
+     * casing is a bug report waiting to happen: two accounts for
+     * {@code Mario@x.it} and {@code mario@x.it} are one person and one support
+     * ticket.
      */
-    public Optional<Student> findByStudentNumber(String studentNumber) {
-        if (studentNumber == null || studentNumber.isEmpty()) {
-            return Optional.empty();
-        }
-        TypedQuery<Student> query = em()
-                .createNamedQuery(Student.FIND_BY_STUDENT_NUMBER, Student.class)
-                .setParameter("studentNumber", studentNumber);
-        return singleResult(query);
-    }
+    @Query("SELECT COUNT(s) > 0 FROM Student s WHERE s.email.value = LOWER(:email)")
+    boolean existsByEmail(@Param("email") String email);
+
+    boolean existsByStudentNumber(String studentNumber);
 
     /**
-     * Existence check.
+     * One student with the whole transcript, in ONE query.
      *
-     * <p>Note it counts instead of loading the entity. Fetching a whole row plus
-     * its columns to then throw everything away and keep a boolean is wasteful;
-     * {@code COUNT} lets the database answer from an index without touching the
-     * table.
+     * <p>{@code LEFT JOIN FETCH} is the cure for the N+1 SELECT problem. Without
+     * it, loading a student and then touching {@code getEnrollments()} issues a
+     * second query - and doing that for twenty students is forty-one queries
+     * where two would do. The symptom is an endpoint that is fine in
+     * development and unusable with real data.
+     *
+     * <p>LEFT rather than inner, or a student with no enrollments would vanish
+     * from the result entirely. That is a genuinely common bug, and it looks
+     * like "the new student does not exist" rather than like a join problem.
+     *
+     * <p>Two fetches deep, because the caller renders the course of each
+     * enrollment. Note that fetching TWO collections in one query is what you
+     * must not do - Hibernate would produce a cartesian product, and older
+     * versions threw {@code MultipleBagFetchException} instead. Here
+     * {@code enrollments} is the only collection; {@code course} is a
+     * to-one and free.
      */
-    public boolean existsByStudentNumber(String studentNumber) {
-        Long count = em().createQuery(
-                        "SELECT COUNT(s) FROM Student s WHERE s.studentNumber = :studentNumber",
-                        Long.class)
-                .setParameter("studentNumber", studentNumber)
-                .getSingleResult();
-        return count > 0;
-    }
-
-    public boolean existsByEmail(String email) {
-        Long count = em().createQuery(
-                        "SELECT COUNT(s) FROM Student s WHERE s.email.value = :email",
-                        Long.class)
-                .setParameter("email", email == null ? null : email.toLowerCase(Locale.ROOT))
-                .getSingleResult();
-        return count > 0;
-    }
-
-    public long countByStatus(StudentStatus status) {
-        return em().createNamedQuery(Student.COUNT_BY_STATUS, Long.class)
-                .setParameter("status", status)
-                .getSingleResult();
-    }
+    @Query("SELECT DISTINCT s FROM Student s "
+            + "LEFT JOIN FETCH s.enrollments e "
+            + "LEFT JOIN FETCH e.course "
+            + "WHERE s.id = :id")
+    Optional<Student> findByIdWithEnrollments(@Param("id") Long id);
 
     /**
-     * DYNAMIC SEARCH - the canonical use case for the Criteria API.
+     * The list endpoint's filter: an optional name fragment, an optional status.
      *
-     * <p>Both filters are optional, so there are four possible {@code WHERE}
-     * clauses. The alternatives are worse:
-     * <ul>
-     *   <li>Four named queries - combinatorial explosion; a third filter would
-     *       mean eight.</li>
-     *   <li>String concatenation ({@code "WHERE 1=1" + maybe " AND ..."}) -
-     *       works, but is unchecked by the compiler and one careless
-     *       concatenation away from an injection vulnerability.</li>
-     *   <li>Criteria - each filter appends a {@link Predicate} to a list, and the
-     *       list is ANDed at the end. Type-safe and open to extension.</li>
-     * </ul>
+     * <h3>Optional filters without building the query by hand</h3>
+     * The JPQL equivalent of "ignore this filter when it is null" is the
+     * {@code :param IS NULL OR ...} idiom below. It is one readable query
+     * rather than four, and - unlike string concatenation - it cannot be made
+     * to inject SQL.
      *
-     * @param nameFragment case-insensitive fragment matched against first OR last
-     *                     name; {@code null} or blank means "no name filter"
-     * @param status       exact status filter; {@code null} means "any status"
+     * <p>It has a real cost worth knowing: the database plans ONE query for all
+     * four combinations of arguments, so the plan cannot be optimal for each.
+     * At small scale that is irrelevant; on a large table with a very selective
+     * filter it matters, and the answer is Spring Data's
+     * {@code Specification} API - {@code JpaSpecificationExecutor} builds the
+     * Criteria query dynamically, so each combination gets its own plan.
+     * That is the direct equivalent of the hand-written Criteria code this
+     * method replaced.
+     *
+     * <p>{@code Pageable} carries the sort, so the ordering lives at the call
+     * site rather than being baked in here.
      */
-    public Page<Student> search(String nameFragment, StudentStatus status, PageRequest pageRequest) {
-        CriteriaBuilder cb = em().getCriteriaBuilder();
-
-        // ---------------------------------------------------------------
-        // 1. The data query
-        // ---------------------------------------------------------------
-        CriteriaQuery<Student> query = cb.createQuery(Student.class);
-        Root<Student> root = query.from(Student.class);
-
-        List<Predicate> predicates = buildPredicates(cb, root, nameFragment, status);
-
-        query.select(root)
-             // toArray with a zero-length array is the standard idiom; the JIT
-             // optimises it and it is clearer than sizing the array by hand.
-             .where(predicates.toArray(new Predicate[0]))
-             .orderBy(cb.asc(root.get("lastName")), cb.asc(root.get("firstName")));
-
-        List<Student> content = em().createQuery(query)
-                .setFirstResult(pageRequest.getOffset())
-                .setMaxResults(pageRequest.getPageSize())
-                .getResultList();
-
-        // ---------------------------------------------------------------
-        // 2. The count query - the SAME predicates, applied to COUNT(*)
-        //
-        // A separate Root is required: a CriteriaQuery cannot be reused for a
-        // different result type, and reusing the Root across queries is
-        // undefined behaviour. Rebuilding the predicates against the new Root
-        // is the price of type safety here.
-        // ---------------------------------------------------------------
-        CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
-        Root<Student> countRoot = countQuery.from(Student.class);
-        List<Predicate> countPredicates = buildPredicates(cb, countRoot, nameFragment, status);
-        countQuery.select(cb.count(countRoot))
-                  .where(countPredicates.toArray(new Predicate[0]));
-
-        long total = em().createQuery(countQuery).getSingleResult();
-
-        return Page.of(content, pageRequest, total);
-    }
-
-    /**
-     * Extracted so the data query and the count query cannot drift apart - if
-     * they did, the page contents and the reported total would disagree, which
-     * is exactly the kind of bug nobody notices until a user complains that
-     * "page 3 is empty".
-     */
-    private List<Predicate> buildPredicates(CriteriaBuilder cb,
-                                            Root<Student> root,
-                                            String nameFragment,
-                                            StudentStatus status) {
-        List<Predicate> predicates = new ArrayList<>();
-
-        if (nameFragment != null && !nameFragment.trim().isEmpty()) {
-            String pattern = "%" + nameFragment.trim().toLowerCase(Locale.ROOT) + "%";
-            // LOWER() on both sides makes the match case-insensitive. Be aware
-            // this usually prevents the database from using a plain index; a
-            // production system would add a functional index on LOWER(last_name)
-            // or use full-text search.
-            predicates.add(cb.or(
-                    cb.like(cb.lower(root.get("firstName")), pattern),
-                    cb.like(cb.lower(root.get("lastName")), pattern)
-            ));
-        }
-
-        if (status != null) {
-            predicates.add(cb.equal(root.get("status"), status));
-        }
-
-        return predicates;
-    }
-
-    /**
-     * Loads a student together with all enrollments and their courses in ONE
-     * query.
-     *
-     * <p>This solves the N+1 SELECT PROBLEM. Without the fetch joins, reading a
-     * student's transcript costs: 1 query for the student, 1 for the collection
-     * of enrollments, then 1 per enrollment for its course. Thirty exams means
-     * thirty-two round trips. With {@code JOIN FETCH}, one.
-     *
-     * <p>{@code DISTINCT} is needed because joining a collection multiplies the
-     * root rows - a student with 5 enrollments comes back 5 times. In JPA 3 /
-     * Hibernate 6 duplicate parent references are removed automatically, but
-     * writing {@code DISTINCT} keeps the intent explicit and the query portable.
-     *
-     * <p>{@code LEFT JOIN} rather than an inner join, so a student with no
-     * enrollments is still returned.
-     */
-    public Optional<Student> findByIdWithEnrollments(Long id) {
-        TypedQuery<Student> query = em().createQuery(
-                        "SELECT DISTINCT s FROM Student s "
-                                + "LEFT JOIN FETCH s.enrollments e "
-                                + "LEFT JOIN FETCH e.course c "
-                                + "LEFT JOIN FETCH c.professor "
-                                + "WHERE s.id = :id",
-                        Student.class)
-                .setParameter("id", id);
-        return singleResult(query);
-    }
+    @Query("SELECT s FROM Student s "
+            + "WHERE (:nameFragment IS NULL "
+            + "       OR LOWER(s.lastName) LIKE LOWER(CONCAT('%', :nameFragment, '%')) "
+            + "       OR LOWER(s.firstName) LIKE LOWER(CONCAT('%', :nameFragment, '%'))) "
+            + "AND (:status IS NULL OR s.status = :status)")
+    Page<Student> search(@Param("nameFragment") String nameFragment,
+                         @Param("status") StudentStatus status,
+                         Pageable pageable);
 }

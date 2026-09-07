@@ -11,8 +11,8 @@ cannot fix at nine on a Sunday evening.
 > **If the server already runs Coolify, read [DEPLOY-COOLIFY.md](DEPLOY-COOLIFY.md)
 > instead.** Coolify installs Traefik on ports 80 and 443, so the Caddy service
 > in [`docker-compose.prod.yml`](../docker-compose.prod.yml) cannot bind them.
-> The application image and the WildFly configuration are identical on both
-> paths; only the proxy and the deploy mechanism differ. Sections 3, 4 and 13 of
+> The application image is identical on both paths; only the proxy and the
+> deploy mechanism differ. Sections 3, 4 and 13 of
 > this file — the server, the firewall and backups — still apply.
 
 ---
@@ -31,7 +31,7 @@ cannot fix at nine on a Sunday evening.
    │  one CX22 / CAX11 server, Ubuntu 24.04, Docker      │
    │                                                     │
    │   ┌─────────┐    ┌──────────┐    ┌──────────────┐   │
-   │   │  caddy  │───▶│ wildfly  │───▶│  postgres    │   │
+   │   │  caddy  │───▶│   app    │───▶│  postgres    │   │
    │   │ :80/443 │    │  :8080   │    │   :5432      │   │
    │   │ TLS     │    │ no       │    │ no published │   │
    │   │         │    │ published│    │ port         │   │
@@ -106,16 +106,17 @@ Roughly €4–5 per month all in, but check current pricing — it moves, and t
 IPv4 address is billed separately from the server.
 
 **On ARM.** The CAX servers are Ampere ARM64, and slightly cheaper for the same
-memory. Everything in this repository is architecture-neutral except one thing:
-the WildFly base image. Check it has an `arm64` manifest before you commit:
+memory. Everything here is architecture-neutral: `eclipse-temurin:21-jre`,
+`maven:3.9-eclipse-temurin-21`, `postgres:16-alpine` and `caddy:2-alpine` are
+all multi-arch, the JDBC driver is pure Java, and Maven emits identical
+bytecode either way. Take whichever is cheaper.
+
+If you ever add a base image that is not multi-arch, this is how you find out
+before the deploy does:
 
 ```bash
-docker buildx imagetools inspect quay.io/wildfly/wildfly:41.0.1.Final-jdk21
+docker buildx imagetools inspect eclipse-temurin:21-jre
 ```
-
-If `linux/arm64` is not in the list, take the CX22. Nothing else cares — the
-JDBC driver is pure Java, Maven emits identical bytecode, and `postgres:16-alpine`
-and `caddy:2-alpine` are both multi-arch.
 
 ---
 
@@ -334,8 +335,8 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f
 ```
 
 You are waiting for three things, in order: PostgreSQL reporting
-`database system is ready to accept connections`; WildFly reporting
-`WFLYSRV0025: WildFly ... started`; and Caddy reporting `certificate obtained
+`database system is ready to accept connections`; the application reporting
+`Started EnrollmentApplication in N seconds`; and Caddy reporting `certificate obtained
 successfully`.
 
 ---
@@ -401,7 +402,7 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
 Compose rebuilds the image, then replaces the containers whose definition
-changed. Expect roughly a minute of downtime while WildFly restarts. That is
+changed. Expect roughly a minute of downtime while the application restarts. That is
 acceptable for this; the machinery that avoids it (two application containers,
 health-checked, cut over by the proxy) is worth learning and is not worth
 building here.
@@ -474,7 +475,7 @@ choice for a public demonstration of a teaching project with no real data in
 it, and an indefensible one the moment that stops being true.
 
 **`jakarta.persistence.schema-generation.database.action=update`**
-([`persistence.xml`](../src/main/resources/META-INF/persistence.xml)) lets
+([`application.yml`](../src/main/resources/application.yml)) lets
 Hibernate alter the live schema at deploy time to match the entities. It never
 drops a column, cannot be reviewed before it runs, and has no rollback. The
 repository already contains the alternative — Flyway migrations in
@@ -501,39 +502,41 @@ put anything real in this database.
 
 | Symptom | Almost always |
 |---|---|
-| Caddy returns **502** | WildFly is not up yet, or failed to boot. `dcp logs wildfly`. |
-| **404 on every path**, including `/` | WildFly is up but the deployment failed. Look for a `.failed` file: `dcp exec wildfly ls /opt/jboss/wildfly/standalone/deployments` — the file contains the reason. |
-| WildFly logs **`WFLYCTL0211`** or "cannot resolve expression" | A variable in `.env.prod` is missing or misspelled, or you forgot `--env-file`. The message names the expression. |
+| Caddy returns **502** | The application is not up yet, or failed to boot. `dcp logs app`. |
+| **404 on every path**, including `/` | The context path. Everything is served under `/enrollment`, so `/` is genuinely nothing. Check the Caddyfile is proxying the whole path through. |
+| The app exits at startup with a `Description:` and an `Action:` | Boot's own failure analyser, and it is usually right. Most often the database is unreachable (Flyway cannot run, so the process exits rather than serving without a schema) or a variable in `.env.prod` is missing and you forgot `--env-file`. |
 | Caddy logs **`could not get certificate`** | DNS. Usually a stale or wrong AAAA record (§7), or port 80 closed in the firewall. |
-| Session cookie has no **`Secure`** flag | `proxy-address-forwarding` is off, or a `ports:` mapping was added to the wildfly service so it is no longer proxy-only. See `configure-prod.cli` §5. |
+| Session cookie has no **`Secure`** flag | `server.forward-headers-strategy` is not `framework`, so the application never sees `X-Forwarded-Proto` and believes the request arrived over plain HTTP. See `application.yml`. |
 | Container killed, exit code **137** | Out of memory. Check `free -h`; confirm the swapfile from §5 is active with `swapon --show`. |
-| Datasource errors on the **first** boot only | WildFly reached PostgreSQL before it finished initialising. The `depends_on: service_healthy` condition normally prevents this; a restart resolves it. |
+| Datasource errors on the **first** boot only | The application reached PostgreSQL before it finished initialising. The `depends_on: service_healthy` condition normally prevents this; a restart resolves it. |
 | Everything worked, now the disk is full | `docker system df`, then `docker system prune -a`. Old images from previous builds accumulate; nothing removes them for you. |
 
 To read the logs of one service:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f wildfly
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f app
 ```
 
 To get a shell inside a container:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec wildfly bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec app bash
 ```
 
-To reach the WildFly management console, which is deliberately not exposed:
+To reach Actuator, which is deliberately not exposed through the proxy:
 tunnel to it rather than publishing it. From your laptop, forward a local port
-to the server, then from the server into the container — or, more simply, run
-`jboss-cli` inside the container:
+to the server, then from the server into the container — or, more simply, curl
+it from inside the container:
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec wildfly /opt/jboss/wildfly/bin/jboss-cli.sh --connect
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec app \
+  curl -s http://localhost:8080/enrollment/actuator/health
 ```
 
-That works without a management user because it connects over the loopback
-interface, where WildFly's local authentication mechanism applies. It is also
-the reason the management port must never be published.
+That works because it connects over the loopback interface, reachable only from
+inside the container. It is also the reason Actuator must never be published:
+`/actuator/env` and `/actuator/configprops` contain your datasource URL, your
+username, and every environment variable the process can see.
 
 ---
 

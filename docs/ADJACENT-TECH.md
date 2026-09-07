@@ -94,7 +94,7 @@ eighteen months old, and app store review adds days to every fix. So:
 
 - **Breaking changes are genuinely breaking**, in a way they are not for a web
   client you can redeploy. This is what `/api/v1` and `/api/v2` in
-  `spring-service` exist to demonstrate, and mobile is the case where that
+  the API exists to demonstrate, and mobile is the case where that
   discipline stops being theoretical.
 - **Additive change is your main tool.** A tolerant client ignores fields it does
   not know, so adding is safe and removing is not. `CourseV2Response` documents
@@ -185,7 +185,7 @@ What is worth knowing:
   and type. `wsimport` (or the `cxf-codegen` Maven plugin) generates Java client
   classes from it. **This is design-first, twenty years earlier** — the same idea
   as an OpenAPI spec generating a client, which is the comparison to draw.
-- **JAX-WS** is the Jakarta API for it, exactly parallel to JAX-RS.
+- **JAX-WS** is the Jakarta API for it; `spring-ws` is the Spring equivalent.
   `@WebService` on a class, `@WebMethod` on a method.
 - **It is strongly typed and verbose.** The XML is large, the tooling is heavy,
   and the type safety is real. That trade was worth more in 2005 than now.

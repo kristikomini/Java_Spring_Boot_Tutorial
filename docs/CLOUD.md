@@ -5,7 +5,7 @@ service, object storage, identity and roles*. Those three ideas are the right
 ones and they are not enough to act on. This is the rest.
 
 > **What this document is not.** Nothing here has been deployed. Everything in
-> `spring-service/` and `notification-service/` runs locally and is tested; this
+> The application and `notification-service/` run locally and are tested; this
 > file is the design and the vocabulary for taking it to a provider, plus the
 > parts of the application that would have to change. Where something is a claim
 > rather than a demonstration, it says so.
@@ -106,7 +106,7 @@ already is that.
 ```bash
 # The shape of it. Not run - see the note at the top of this file.
 gcloud run deploy enrollment-spring \
-  --source spring-service \
+  --source . \
   --set-env-vars SPRING_PROFILES_ACTIVE=prod \
   --set-secrets SPRING_DATASOURCE_PASSWORD=enrollment-db-password:latest \
   --add-cloudsql-instances "$PROJECT:europe-west1:enrollment" \

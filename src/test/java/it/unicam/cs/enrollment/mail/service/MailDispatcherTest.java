@@ -58,13 +58,11 @@ class MailDispatcherTest {
 
     @BeforeEach
     void setUp() {
-        dispatcher = new MailDispatcher();
-        // Package-private field injection - see the comment on those fields for
-        // why an EJB cannot take its dependencies through a constructor.
-        dispatcher.processor = processor;
-        dispatcher.transport = transport;
-        dispatcher.config = config;
-        dispatcher.clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        // Constructor injection, so the test wires the collaborators the same
+        // way Spring does - no reflection, no field access, and the compiler
+        // notices if a dependency is added.
+        dispatcher = new MailDispatcher(processor, transport, config,
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         lenient().when(config.getBatchSize()).thenReturn(25);
         lenient().when(config.isEnabled()).thenReturn(true);

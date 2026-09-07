@@ -2,14 +2,6 @@
 # Build output - never commit compiled artifacts. The build regenerates them.
 # ---------------------------------------------------------------------------
 target/
-docker/deployments/*.war
-docker/deployments/*.deployed
-docker/deployments/*.failed
-docker/deployments/*.undeployed
-docker/deployments/*.isdeploying
-docker/deployments/*.pending
-docker/deployments/*.skipdeploy
-docker/deployments/*.dodeploy
 
 # ---------------------------------------------------------------------------
 # IDE metadata - personal to each developer, not to the project.

@@ -2,8 +2,7 @@ package it.unicam.cs.enrollment.fieldbook.repository;
 
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
 import it.unicam.cs.enrollment.repository.AbstractJpaRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
+import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
@@ -16,27 +15,13 @@ import java.util.Optional;
  * not about students or learners. Sharing infrastructure is fine; sharing a
  * domain model is what causes the trouble.
  */
-@ApplicationScoped
+@Repository
 public class LearnerAccountRepository extends AbstractJpaRepository<LearnerAccount> {
 
     public LearnerAccountRepository() {
         super(LearnerAccount.class);
     }
 
-    /**
-     * Test seam, package-private so that only the integration test in this
-     * package can reach it.
-     *
-     * <p>The inherited setter is {@code protected}, which lets a SUBCLASS call
-     * it but not an unrelated test class - protected access is granted to
-     * subclasses acting on themselves, not to anybody holding a reference. This
-     * two-line method is how a subclass re-exports it to its own package
-     * without widening it for everyone. Fiddly, and a fair illustration of why
-     * Java visibility is worth actually knowing rather than guessing at.
-     */
-    void useEntityManager(EntityManager entityManager) {
-        setEntityManager(entityManager);
-    }
 
     /**
      * Lookup by the login name. The query sign-in runs, and the only one it

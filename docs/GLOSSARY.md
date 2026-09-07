@@ -108,21 +108,30 @@ one producer give every class a logger named after that class.
 
 **Qualifier** — an annotation that distinguishes two beans of the same type.
 
-**Interceptor / interceptor binding** — Jakarta EE's aspect-oriented
-programming. The binding is the marker annotation; the interceptor is the
-behaviour. → `common/logging/Loggable.java`, `LoggingInterceptor.java`
+**Aspect / advice / pointcut** — aspect-oriented programming. The *aspect* is
+the class, the *advice* is the code that runs, the *pointcut* is the expression
+selecting where. → `common/logging/Loggable.java`, `LoggingAspect.java`
 
-**`@Priority`** — enables an interceptor globally and fixes its position in the
-chain. Lower runs further out.
+**`@Order`** — fixes an aspect's position in the chain. Lower runs further out,
+closer to the caller.
 
-**Self-invocation trap** — interceptors work through a proxy, so a method calling
-another annotated method **on the same instance** bypasses the interceptor
-entirely. Catches everyone once, in both Jakarta EE and Spring.
+**Self-invocation trap** — advice works through a proxy, so a method calling
+another annotated method **on the same instance** bypasses it entirely. No
+transaction starts, no log line is written, and nothing warns you. The single
+most common Spring bug. → `mail/service/OutboxProcessor.java`
 
-**CDI event / observer** — `Event<T>.fire()` and `@Observes`. Decouples "what
-happened" from "what should happen about it". → `EnrollmentNotificationListener`
+**Application event / listener** — `ApplicationEventPublisher.publishEvent()`
+and `@EventListener`. Decouples "what happened" from "what should happen about
+it". → `EnrollmentNotificationListener`
 
-**`TransactionPhase`** — when an observer runs relative to the transaction.
+**`@TransactionalEventListener`** — runs a listener relative to the transaction
+(`AFTER_COMMIT` by default) rather than inside it. Use it for external side
+effects; use plain `@EventListener` for work that must be atomic with the
+transaction, such as writing to an outbox.
+
+**`ObjectProvider<T>`** — a dependency resolved on demand rather than at startup.
+For collaborators that are optional, late, or plural.
+→ `fieldbook/security/AuthenticationInterceptor.java`
 `AFTER_SUCCESS` is the right choice for external side effects like email.
 
 ---
@@ -151,26 +160,32 @@ on a resource are ordered. The `courses` row plays this role for its own capacit
 
 ---
 
-## REST (JAX-RS)
+## REST (Spring MVC)
 
-**Resource** — a class serving a URI, annotated `@Path`.
+**Controller** — a class serving a URI, annotated `@RestController` (which is
+`@Controller` + `@ResponseBody`, so return values are serialised rather than
+treated as view names).
 **Sub-resource** — a nested path expressing ownership: `/students/42/enrollments`.
 
-**`@BeanParam`** — groups related query/path/header parameters into one class.
-→ `api/dto/PaginationParams.java`
+**Command object** — a POJO handler parameter Spring populates from the query
+string by matching setters. → `web/dto/PaginationParams.java`
 
-**Content negotiation** — `@Produces` / `@Consumes` plus the `Accept` and
-`Content-Type` headers.
+**Content negotiation** — `produces` / `consumes` on the mapping, plus the
+`Accept` and `Content-Type` headers.
 
-**Provider** — a JAX-RS extension: `@Provider` on a filter, an exception mapper,
-or a message body reader/writer.
+**`ResponseEntity<T>`** — return it when you need to choose a status or set a
+header; return the DTO directly when the status is always 200.
 
-**Filter vs interceptor (JAX-RS)** — *filters* see headers, URIs and status codes
-(auth, CORS, logging). *Interceptors* wrap the entity stream (compression,
-encryption). Different from CDI interceptors.
+**`@RestControllerAdvice`** — one class holding `@ExceptionHandler` methods for
+the whole application, replacing try/catch in every controller.
+→ `web/error/RestExceptionHandler.java`
 
-**`@PreMatching`** — run a request filter *before* routing, so even unmatched
-requests are covered.
+**Filter vs interceptor vs aspect** — a servlet *filter* runs outside Spring MVC
+and sees every request including static files, but not which handler will run
+(→ `CorrelationIdFilter`). A `HandlerInterceptor` runs inside the dispatcher and
+IS given the handler method, so it can read its annotations
+(→ `AuthenticationInterceptor`). An *aspect* wraps the method call itself, after
+arguments are bound.
 
 **Exception mapper** — one handler per exception type, replacing try/catch in
 every endpoint. → `api/exception/`
@@ -264,16 +279,26 @@ getter, or a class-level constraint. → `Enrollment.isHonoursConsistent()`
 **Maven scopes** — `compile` (default), `provided` (compile against it, do not
 package — the server supplies it), `runtime`, `test`.
 
-**WAR / JAR / EAR** — web archive, library, enterprise archive.
+**JAR / WAR / EAR** — library archive; web archive (the Jakarta EE unit of
+deployment); enterprise archive. This project ships an executable JAR.
 
 **Surefire vs Failsafe** — the Maven plugins that run `*Test` (unit, during
 `mvn test`) and `*IT` (integration, during `mvn verify`).
 
-**Deployment descriptor** — an XML configuration file: `persistence.xml`,
-`beans.xml`, `web.xml`.
+**Starter** — a pom with no code of its own that pulls in a coherent set of
+libraries plus the auto-configuration wiring them together.
 
-**JNDI** — the naming service the datasource is looked up through, so credentials
-live in server configuration rather than in your code.
+**Auto-configuration** — a `@Configuration` class applied only when its
+conditions hold (`@ConditionalOnClass`, `@ConditionalOnMissingBean`). Anything
+you declare yourself wins. `--debug` prints the full evaluation report.
+
+**Relaxed binding** — `spring.datasource.password` is settable as
+`SPRING_DATASOURCE_PASSWORD`, so every property can come from the environment
+with no adapter. It is why Kubernetes Secrets work with Boot out of the box.
+
+**Fat jar / `BOOT-INF`** — the executable jar layout: your classes in
+`BOOT-INF/classes`, every dependency as a nested jar in `BOOT-INF/lib`, and
+Boot's `JarLauncher` as the manifest `Main-Class`.
 
 **Connection pool** — reused database connections. Sizing it larger than the
 database can serve just moves the bottleneck.

@@ -14,8 +14,8 @@
 #   ./scripts/break.sh restore
 #
 # After breaking, rebuild and watch:
-#   mvn package                 # WildFly hot-redeploys in a second or two
-#   tail -f <wildfly>/standalone/log/server.log
+#   mvn spring-boot:run         # Ctrl-C and re-run to pick the change up
+#   docker compose logs -f app  # or read the console it is running in
 # =============================================================================
 set -euo pipefail
 
@@ -53,7 +53,7 @@ usage() {
   echo "  restore         put everything back"
   echo "  status          show what is currently broken"
   echo
-  dim "After any break:  mvn package   (WildFly redeploys automatically)"
+  dim "After any break:  restart the application to pick the change up"
 }
 
 case "${1:-}" in
@@ -92,7 +92,7 @@ n-plus-one)
   echo "  mvn package"
   echo "  # then count the SQL statements one list request produces:"
   echo "  curl -s 'http://localhost:8280/enrollment/api/courses?year=2025&size=10' >/dev/null"
-  echo "  grep -c 'DEBUG \[org.hibernate.SQL\]' <wildfly>/standalone/log/server.log"
+  echo "  grep -c 'org.hibernate.SQL' <the application log>"
   echo
   bold "What you should see"
   echo "  3 statements before the break, 7 after - with five courses. The extra"
@@ -120,7 +120,7 @@ no-lock)
   echo "  curl -s -X POST http://localhost:8280/enrollment/api/enrollments \\"
   echo "       -H 'Content-Type: application/json' \\"
   echo "       -d '{\"studentId\":102,\"courseId\":53}' > /dev/null"
-  echo "  grep -c 'FOR NO KEY UPDATE' <wildfly>/standalone/log/server.log"
+  echo "  grep -c 'FOR NO KEY UPDATE' <the application log>"
   echo
   bold "What you should see"
   echo "  The count stops increasing: that clause is gone from the SQL."

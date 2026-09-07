@@ -3,7 +3,7 @@ package it.unicam.cs.enrollment.fieldbook.repository;
 import it.unicam.cs.enrollment.fieldbook.domain.CardProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Repository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -27,16 +27,12 @@ import java.util.List;
  * that are wrong for the other. Reusing a base class you have to fight is worse
  * than declaring the {@code EntityManager} yourself.
  */
-@ApplicationScoped
+@Repository
 public class ProgressRepository {
 
-    @PersistenceContext(unitName = "enrollmentPU")
+    @PersistenceContext
     private EntityManager em;
 
-    /** Test seam, mirroring the other repositories in this package. */
-    void useEntityManager(EntityManager em) {
-        this.em = em;
-    }
 
     // ---------------------------------------------------------------- cards
 

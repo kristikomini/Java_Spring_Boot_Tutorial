@@ -68,7 +68,7 @@ matching the Java version you actually use, which for this project is 21.
 **More useful as a checklist than as a certificate.** The objectives — bean
 lifecycle, proxies and AOP, transaction propagation, Boot auto-configuration,
 Spring Data, testing slices, Actuator, Security — are precisely the list of
-things a Spring developer is expected to know, and `spring-service/` now
+things a Spring developer is expected to know, and this project now
 demonstrates most of them.
 
 **The gap between this repository and that syllabus is Spring Security**, which is

@@ -5,9 +5,8 @@ import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
 import it.unicam.cs.enrollment.fieldbook.domain.LearnerAccount;
 import it.unicam.cs.enrollment.fieldbook.domain.StickyNote;
 import it.unicam.cs.enrollment.fieldbook.repository.StickyNoteRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -32,7 +31,7 @@ import java.util.List;
  * {@code @Transactional} on it and an ownership check pasted into five methods.
  */
 @Loggable
-@ApplicationScoped
+@Service
 public class NoteService {
 
     /** More than anybody needs, and low enough that one account cannot fill a disk. */
@@ -40,33 +39,6 @@ public class NoteService {
 
     private StickyNoteRepository notes;
 
-    /**
-     * Required by CDI, and the reason is worth knowing because the error it
-     * produces names neither this constructor nor the annotation that needs it.
-     *
-     * <p>An {@code @ApplicationScoped} bean is NORMAL SCOPED, so what gets
-     * injected anywhere is never this object - it is a generated PROXY
-     * subclass that forwards to the contextual instance. To generate that
-     * subclass the container has to be able to instantiate it, and a subclass
-     * can only be instantiated through a superclass constructor it can call
-     * with no arguments.
-     *
-     * <p>Leave it out and the deployment fails, not the compile:
-     * <pre>WELD-001435: Normal scoped bean class ... is not proxyable
-     * because it has no no-args constructor</pre>
-     * reported against whatever injected it rather than against this class.
-     *
-     * <p>It also forces the fields below to be non-final, since this
-     * constructor leaves them unset. That is the cost of the proxy, it is why
-     * every service in this codebase looks like this, and it is the concrete
-     * form of the point the fieldbook makes about why the container avoids
-     * your constructors.
-     */
-    protected NoteService() {
-        // required by CDI
-    }
-
-    @Inject
     public NoteService(StickyNoteRepository notes) {
         this.notes = notes;
     }

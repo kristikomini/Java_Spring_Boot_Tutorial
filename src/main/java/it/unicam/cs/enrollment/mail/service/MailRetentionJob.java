@@ -1,14 +1,9 @@
 package it.unicam.cs.enrollment.mail.service;
 
-import jakarta.ejb.ConcurrencyManagement;
-import jakarta.ejb.ConcurrencyManagementType;
-import jakarta.ejb.Schedule;
-import jakarta.ejb.Singleton;
-import jakarta.ejb.TransactionAttribute;
-import jakarta.ejb.TransactionAttributeType;
-import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 /**
  * Deletes delivered mail once it is older than the retention window.
@@ -32,28 +27,33 @@ import org.slf4j.LoggerFactory;
  * somebody was promised and never received. Deleting the evidence of failure on
  * a schedule is how a failure stops being fixed.
  *
- * <h2>03:30, not 03:00</h2>
- * {@code EnrollmentMaintenanceJob} already sweeps at 03:00. Stacking every
- * nightly job on the same minute creates a load spike and, worse, makes any
- * lock contention between them look like a mystery. Spreading them by half an
- * hour costs nothing and is the kind of thing a team learns to do once.
+ * <h2>03:40, not 03:30</h2>
+ * {@code FieldbookMaintenanceJob} already sweeps at 03:20 and 03:30. Stacking
+ * every nightly job on the same minute creates a load spike and, worse, makes
+ * any lock contention between them look like a mystery. Spreading them by ten
+ * minutes costs nothing and is the kind of thing a team learns to do once.
+ *
+ * <h2>No {@code @Transactional} here, on purpose</h2>
+ * {@code MailService.purgeOldMessages} opens its own. The delete is one bulk
+ * statement and belongs in a transaction of its own, not in one that also spans
+ * this method's logging - and a transaction opened here would be the OUTER one,
+ * so the service's annotation would join it rather than replace it. That is
+ * Spring's default {@code REQUIRED} propagation, and misreading it is how
+ * people end up with one enormous transaction they did not intend.
  */
-@Singleton
-@ConcurrencyManagement(ConcurrencyManagementType.CONTAINER)
+@Component
 public class MailRetentionJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MailRetentionJob.class);
 
-    @Inject
-    MailService mail;
+    private final MailService mail;
 
-    @Schedule(hour = "3", minute = "30", second = "0", persistent = false,
-            info = "Mail outbox retention purge")
-    @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+    public MailRetentionJob(MailService mail) {
+        this.mail = mail;
+    }
+
+    @Scheduled(cron = "0 40 3 * * *")
     public void purge() {
-        // NOT_SUPPORTED, then MailService starts its own transaction: the delete
-        // is one bulk statement and belongs in a transaction of its own, not in
-        // one that also spans the timer callback's own bookkeeping.
         int deleted = mail.purgeOldMessages();
         LOG.info("Mail retention purge finished: {} delivered message(s) removed", deleted);
     }

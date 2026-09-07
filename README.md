@@ -1,11 +1,11 @@
-# UNICAM Course Enrollment Service
+# Java Spring Boot Tutorial
 
-A **Jakarta EE 11** reference application, built to be read.
+A **Spring Boot 3.5 / Java 21** reference application, built to be read.
 
 Every class in this project carries comments explaining *what* it does, *why* it
 is built that way, and *what the industry calls it*. The goal is not a working
 application — it is that you finish able to hold your own in a conversation
-about enterprise Java.
+about backend Java.
 
 **Domain:** university course enrollment. Students enrol in courses, subject to
 capacity limits, enrollment windows, prerequisites and academic standing. Exams
@@ -17,21 +17,24 @@ produce grades on the Italian 18–30 scale, with *30 e lode*.
 
 | Area | Concepts covered |
 |---|---|
-| **Persistence (JPA)** | Entities, `@MappedSuperclass`, embeddables, all four relationship types, self-referencing many-to-many, association entities, lazy vs eager, `JOIN FETCH`, the N+1 problem, named queries, the Criteria API, optimistic & pessimistic locking, bulk operations, dirty checking |
-| **Dependency injection (CDI)** | Scopes, producer methods, `InjectionPoint`, interceptors and interceptor bindings, events and observers, transactional observers |
-| **Transactions (JTA)** | `@Transactional`, propagation types, rollback rules, why checked exceptions do *not* roll back, self-invocation |
-| **REST (JAX-RS)** | Resources, sub-resources, `@BeanParam`, content negotiation, exception mappers, filters, correct status codes, RFC 7807 errors |
+| **Spring Boot** | Auto-configuration and how to read its report, starters, the `@SpringBootApplication` triple, profiles, relaxed property binding, Actuator |
+| **Persistence (Spring Data JPA)** | Derived queries, `@Query`, `@Modifying`, projections, `Pageable`, and the `EntityManager` escape hatch — plus entities, embeddables, all four relationship types, lazy vs eager, `JOIN FETCH`, the N+1 problem, optimistic & pessimistic locking, dirty checking |
+| **Dependency injection** | Constructor injection, scopes, `@Bean` factory methods, `ObjectProvider`, `@Primary` vs `@Qualifier`, and why proxies make self-invocation fail |
+| **Transactions** | `@Transactional`, propagation, rollback rules, why checked exceptions do *not* roll back, `readOnly`, self-invocation |
+| **REST (Spring MVC)** | `@RestController`, `ResponseEntity`, `@RestControllerAdvice`, interceptors vs filters vs aspects, content negotiation, correct status codes, RFC 7807 errors |
 | **Validation** | Built-in constraints, custom constraints, cross-field validation, validation at multiple layers |
-| **Architecture** | Layering, DTOs, mappers, the repository pattern, command objects, domain events, rich vs anemic domain models |
-| **Operations** | Correlation IDs, MDC logging, connection pooling, scheduled jobs, idempotent startup, Docker |
-| **Testing** | Unit vs integration tests, mocking, test data builders, boundary testing, parameterized tests, controlling the clock |
+| **Architecture** | Layering, DTOs, mappers (hand-written and MapStruct), the repository pattern, command objects, application events, rich vs anemic domain models |
+| **Operations** | Flyway migrations, correlation IDs, MDC logging, connection pooling, `@Scheduled` jobs, health probes, Prometheus metrics, Docker |
+| **Testing** | Unit vs slice vs integration tests, `@WebMvcTest`, `@DataJpaTest`, `@SpringBootTest`, Testcontainers, mocking, boundary testing, controlling the clock |
 
 ---
 
 ## The fieldbook
 
-`src/main/webapp/tutorial.html` is a 41-chapter course built around this
-codebase. Open it at **<http://localhost:8280/enrollment/tutorial.html>** once
+`src/main/resources/static/tutorial.html` is a 57-chapter course built around
+this codebase, and it starts from zero: chapters 02&ndash;07 teach the Java
+language itself — installing a JDK, compiling one file, objects, interfaces,
+exceptions — so the only prerequisite is inside the course. Open it at **<http://localhost:8280/enrollment/tutorial.html>** once
 the stack is up.
 
 It is not a document you read once. Each chapter ends with a **checkpoint** —
@@ -94,14 +97,14 @@ PATH — which is why `java -version` can disagree with `mvn -v`, and why `mvn -
 is the one to trust.
 
 ```bash
-# 1. Build — runs 184 tests and writes the WAR into docker/deployments/
+# 1. Build and test — 226 unit tests plus the integration tests
 mvn clean verify
 
-# 2. Start PostgreSQL, WildFly and Mailpit
+# 2. Start PostgreSQL, Mailpit and the application
 docker compose up -d --build
 
 # 3. Watch it come up (the first build takes a few minutes)
-docker compose logs -f wildfly
+docker compose logs -f app
 ```
 
 Then open **<http://localhost:8280/enrollment/>** for the API index, or:
@@ -113,39 +116,42 @@ curl http://localhost:8280/enrollment/api/courses/open
 | What | Where |
 |---|---|
 | API index | <http://localhost:8280/enrollment/> |
+| The fieldbook | <http://localhost:8280/enrollment/tutorial.html> |
 | API base | <http://localhost:8280/enrollment/api> |
-| Admin console | <http://localhost:9990> — `admin` / `Admin#2026` |
+| Swagger UI | <http://localhost:8280/enrollment/swagger-ui.html> |
+| Health & metrics | <http://localhost:8280/enrollment/actuator/health> |
 | PostgreSQL | `localhost:55433` — db `enrollment`, user `enrollment`, password `enrollment` |
 | Mail inbox (Mailpit) | <http://localhost:8225> — every email the application sends, and none of them leave your machine |
 
 > **Why 8280 and 55433?** Your machine already runs other projects on 8080,
 > 5432 and 55432. Only the *host* side of the port mapping changed — inside the
-> Docker network WildFly still reaches the database as `postgres:5432`, and the
-> application still serves on 8080 in its container. Changing a host port never
+> Docker network the application still reaches the database as `postgres:5432`,
+> and still serves on 8080 in its own container. Changing a host port never
 > requires changing application configuration, which is exactly the point of
 > container networking. Both are set in `docker-compose.yml`.
 
 ### The development loop
 
+Rebuilding a Docker image on every edit is slow. Run the database in Docker and
+the application from Maven instead:
+
 ```bash
-mvn package        # WildFly hot-redeploys within a second or two
+docker compose up -d postgres mailpit   # once
+
+mvn spring-boot:run                     # Ctrl-C, re-run — about three seconds
 ```
 
-Maven writes the WAR straight into `docker/deployments/`, which is bind-mounted
-into WildFly's deployment scanner, and then writes an `enrollment.war.dodeploy`
-marker beside it. The marker is the instruction: the scanner picks it up on its
-next pass, deploys, deletes it, and leaves `enrollment.war.deployed` behind (or
-`enrollment.war.failed`, containing the reason). No restart, no copying.
+There is no deployment step, no marker file and no scanner to understand: the
+application *is* the process. Stopping it stops the application; starting it
+starts one. That is the practical half of "the server lives inside the jar".
 
-> **Why a marker and not just the timestamp?** The scanner's default mode
-> redeploys whenever the archive looks newer than its own `.deployed` marker.
-> Across a Docker bind mount on Windows and macOS the marker loses its
-> sub-second precision on the way to disk while the WAR keeps its own, so the
-> WAR is *permanently* newer and the server redeploys itself every few seconds,
-> forever. It does not announce itself as an error: you see requests
-> intermittently 404, and 500s carrying `IJ000459: Transaction is not active`.
-> `docker/wildfly/configure.cli` §5 turns auto-deploy off to make deployment
-> explicit, and the pom writes the marker so `mvn package` stays one command.
+> **Faster still.** Add `spring-boot-devtools` and the application restarts
+> itself whenever a class file changes — usually under a second, because it
+> reloads only your classes and keeps the framework ones loaded. It is a
+> development-only dependency and Boot disables it inside a packaged jar.
+
+> **After a code change, `docker compose up -d` is not enough.** It reuses the
+> image it already built, so your edit is not in it. Use `--build`.
 
 ---
 
@@ -154,21 +160,17 @@ next pass, deploys, deletes it, and leaves `enrollment.war.deployed` behind (or
 ```
 JavaEE/
 ├── pom.xml                       The build. Read this first.
-├── docker-compose.yml            PostgreSQL + WildFly + Mailpit
-├── docker-compose.prod.yml       Caddy + WildFly + PostgreSQL, nothing else exposed
+├── docker-compose.yml            PostgreSQL + Mailpit + the application
+├── docker-compose.prod.yml       Caddy + the application + PostgreSQL, nothing else exposed
 ├── docker-compose.coolify.yml    The same, for a server already running Coolify
-├── docker/wildfly/
-│   ├── Dockerfile                WildFly + PostgreSQL driver
-│   ├── Dockerfile.prod           The same, building the WAR in and locking it down
-│   ├── configure.cli             Datasource, mail session, logging, deploy, as code
-│   └── configure-prod.cli        The same, with the development doors closed
+├── docker/app/Dockerfile         Multi-stage: Maven builds it, a JRE runs it
 ├── docker/caddy/Caddyfile        TLS, compression, security headers, proxy
 ├── scripts/api-tour.sh           41 assertions over the live API
 ├── docs/ARCHITECTURE.md          Layer-by-layer rationale
 ├── docs/GLOSSARY.md              The vocabulary
 ├── docs/EXERCISES.md             Four graded exercises, specified by failing tests
 ├── docs/BREAKING.md              Introduce classic bugs on purpose, and observe them
-├── docs/DEBUGGING.md             Attach a debugger to WildFly
+├── docs/DEBUGGING.md             Attach a debugger to the running application
 ├── docs/DEPLOY-HETZNER.md        Put it on a public HTTPS URL for about €5/month
 ├── docs/DEPLOY-COOLIFY.md        The same, when the server already runs Coolify
 ├── scripts/break.sh              The break-it tool
@@ -176,11 +178,13 @@ JavaEE/
 └── src/
     ├── main/
     │   ├── java/it/unicam/cs/enrollment/
-    │   │   ├── api/              ── REST LAYER ─────────────────────
-    │   │   │   ├── rest/           JAX-RS resources (the endpoints)
+    │   │   ├── EnrollmentApplication.java   main(). The whole startup sequence.
+    │   │   │
+    │   │   ├── web/              ── HTTP LAYER ─────────────────────
+    │   │   │   ├── *Controller     @RestController (the endpoints)
     │   │   │   ├── dto/            Request & response shapes
     │   │   │   ├── mapper/         Entity ↔ DTO translation
-    │   │   │   ├── exception/      Exception → HTTP status
+    │   │   │   ├── error/          Exception → HTTP status, in one advice
     │   │   │   └── filter/         Correlation IDs, request logging
     │   │   │
     │   │   ├── service/          ── APPLICATION LAYER ──────────────
@@ -188,12 +192,21 @@ JavaEE/
     │   │   │   └── *Service        Business rules, transactions, events
     │   │   │
     │   │   ├── repository/       ── PERSISTENCE LAYER ──────────────
-    │   │   │                       Queries. No business logic.
+    │   │   │                       Spring Data interfaces, plus one
+    │   │   │                       hand-written base class for the
+    │   │   │                       queries they cannot express.
     │   │   │
     │   │   ├── domain/           ── DOMAIN LAYER (the core) ────────
     │   │   │   ├── model/          Entities, value objects, enums
-    │   │   │   ├── event/          Domain events
+    │   │   │   ├── event/          Application events
     │   │   │   └── validation/     Custom constraints
+    │   │   │
+    │   │   ├── fieldbook/         ── THE COURSE'S OWN BACKEND ───────
+    │   │   │   ├── domain/         Accounts, progress, notes, sessions
+    │   │   │   ├── repository/     Its queries
+    │   │   │   ├── security/       Password hashing, sessions, CSRF
+    │   │   │   ├── service/        Registration, progress, mastery
+    │   │   │   └── api/            /api/fieldbook/**
     │   │   │
     │   │   ├── mail/              ── THE MAILING SYSTEM ─────────────
     │   │   │   ├── domain/         Outbox row, retry policy, message
@@ -202,21 +215,24 @@ JavaEE/
     │   │   │   ├── transport/      SMTP and log-only, behind one port
     │   │   │   └── api/            The mailbox endpoints
     │   │   │
-    │   │   ├── common/             Shared: pagination, Clock, logging
-    │   │   ├── config/             Bootstrap, JAX-RS activation, seeding
+    │   │   ├── reporting/          Analytics queries and a refresh job
+    │   │   ├── document/           A MongoDB read model (profile: mongo)
+    │   │   ├── notification/       An outbound HTTP call, with a breaker
+    │   │   ├── exercises/          The reader's homework
+    │   │   ├── common/             Shared: pagination, logging aspect
+    │   │   ├── config/             Clock, cache, CORS, OpenAPI, MVC, seeding
     │   │   └── exception/          The application's exception hierarchy
     │   │
-    │   ├── resources/META-INF/persistence.xml
-    │   ├── resources/mail/templates/   The email wording, one file each
-    │   ├── resources/db/migration/     Flyway V1…V4 (V4 is the outbox)
-    │   ├── wildfly/                The .dodeploy marker Maven copies
-    │   └── webapp/                 index, the fieldbook, the account pages,
-    │       └── WEB-INF/            beans.xml, web.xml, jboss-*.xml
+    │   └── resources/
+    │       ├── application.yml         Every setting, heavily commented
+    │       ├── db/migration/           Flyway V1…V6
+    │       ├── mail/templates/         The email wording, one file each
+    │       └── static/                 index, the fieldbook, the account pages
     │
     └── test/java/…                 Unit tests (*Test) and integration (*IT)
 ```
 
-**The dependency rule:** arrows point *inward*. `api` may import `service`;
+**The dependency rule:** arrows point *inward*. `web` may import `service`;
 `service` may import `domain`; `domain` imports nothing of ours. That is what
 lets the domain be tested with plain JUnit and reused from a job, a CLI or a
 message consumer — never just a web app.
@@ -413,7 +429,7 @@ That `correlationId` also appears in the `X-Correlation-Id` response header and
 on **every server-side log line** for the request. Grep for it:
 
 ```bash
-docker compose logs wildfly | grep a3f9c2e1
+docker compose logs app | grep a3f9c2e1
 ```
 
 ---
@@ -504,17 +520,18 @@ variable (`ENROLLMENT_MAIL_XXX`), resolved in that order by `MailConfig`:
 | `max-attempts` | `5` | Then the message is dead-lettered, not deleted |
 | `retention-days` | `30` | Delivered mail is purged nightly; dead letters are kept |
 
-Running WildFly natively, without the Mailpit container, there is no mail
-session — so the transport falls back to writing the whole rendered email into
-the server log, warns that it has done so, and reports itself as `log only`.
+Running the application from Maven, without the Mailpit container, no SMTP host
+is configured — so the transport falls back to writing the whole rendered email
+into the log, warns that it has done so, and reports itself as `log only` at
+`/enrollment/api/mail/status`.
 
 ---
 
 ## Testing
 
 ```bash
-mvn test      # 137 unit tests — no database, no Docker, ~10 seconds
-mvn verify    # + 47 integration tests against in-memory H2
+mvn test      # 226 unit and slice tests — no database, no Docker
+mvn verify    # + the integration tests
 ```
 
 The split is by filename, and it is a convention worth keeping:
@@ -527,9 +544,19 @@ The split is by filename, and it is a convention worth keeping:
 
 > **Note on H2.** It starts in milliseconds and needs no Docker, which is why
 > repository tests can run on every build. But H2 is *not* PostgreSQL — dialects,
-> locking and error messages all differ. The professional next step is
-> **Testcontainers**, which starts a real PostgreSQL for the test run. Every
-> concept in these tests carries over unchanged.
+> locking and error messages all differ. `EnrollmentApiIT` therefore uses
+> **Testcontainers** to start a real PostgreSQL for the run; it is skipped
+> automatically when Docker is not available, so the rest of the suite still
+> passes on a machine without it.
+
+Three kinds of test are worth telling apart, because Spring gives you a
+different tool for each:
+
+| kind | annotation | what starts | what it proves |
+| --- | --- | --- | --- |
+| unit | none | nothing | one class, everything else mocked |
+| slice | `@WebMvcTest`, `@DataJpaTest` | one layer | routing and JSON; or the mappings and queries |
+| integration | `@SpringBootTest` | the whole context | that the pieces are wired together correctly |
 
 ---
 
@@ -537,12 +564,13 @@ The split is by filename, and it is a convention worth keeping:
 
 Read the code in this order and each file will explain the next.
 
-1. **`pom.xml`** — what the project is and what it depends on. Note `provided` scope.
+1. **`pom.xml`** — what the project is and what it depends on. Note the parent, and how few versions there are.
+1. **`EnrollmentApplication.java`** — six lines, and everything follows from them.
 2. **`domain/model/BaseEntity.java`** — surrogate keys, `@Version`, why `equals` is hard.
 3. **`domain/model/Course.java`** — every relationship type in one file.
 4. **`domain/model/Enrollment.java`** — the association entity and its state machine.
-5. **`repository/AbstractJpaRepository.java`** — `persist` vs `merge`, locking, Criteria.
-6. **`repository/StudentRepository.java`** — named queries vs dynamic Criteria queries.
+5. **`repository/CourseRepository.java`** — derived queries, `@Query`, `@Lock`, `Pageable`.
+6. **`repository/AbstractJpaRepository.java`** — the escape hatch: `persist` vs `merge`, locking, Criteria.
 7. **`service/EnrollmentService.java`** — ⭐ *the heart of the application.*
 8. **`api/rest/EnrollmentResource.java`** — how little a resource should do.
 9. **`api/exception/*Mapper.java`** — errors handled in one place, not fifty.
@@ -564,10 +592,10 @@ practise, roughly in the order worth doing them:
 |---|---|
 | **[docs/EXERCISES.md](docs/EXERCISES.md)** | Six stubs and 98 failing tests that specify them: a JPQL query, a domain rule with exacting boundaries, an atomic transfer use case, the endpoint that exposes it, the ten coding katas a junior interview actually asks, and an aggregate report with `JOIN`/`GROUP BY`/`HAVING`. Answer key included. `mvn test -Pexercises` |
 | **[docs/BREAKING.md](docs/BREAKING.md)** | `./scripts/break.sh` introduces one classic bug at a time — a broken fetch plan, a silent N+1, a missing row lock, a test that lies — and puts it back. |
-| **[docs/DEBUGGING.md](docs/DEBUGGING.md)** | Attach to WildFly on port 8787 and step over the closing brace of `enroll()` to watch entities detach. |
-| **[docs/DEPLOY-HETZNER.md](docs/DEPLOY-HETZNER.md)** | Put the whole stack on a public HTTPS URL for about €5 a month: one VPS, Caddy in front of WildFly in front of PostgreSQL. The interesting part is not the deploy, it is the subtraction — the production stack is the development one with the admin console, the exposed database and the mail catcher taken away, and with the two settings that make a session cookie actually `Secure` behind a proxy turned on. |
-| **[The fieldbook](src/main/webapp/tutorial.html)** | A 41-chapter course at `/enrollment/tutorial.html`, with a sidebar that groups the chapters into twelve parts and a plain-language box beside every hard idea. It runs from the language contracts underneath Java, through SQL, JPA, CDI and REST, into Spring Boot, and out the other side into Maven, migrations, Git, CI, Agile, SOLID, modern Java, the front end, containers, reading code you did not write, and the English you need to work in a team — with ten hands-on labs among them: a lost-update race, a HashMap bucket visualiser, a lazy-stream stepper, an entity-state explorer, a cascade explorer and a connection-pool simulator. |
-| **[The account layer](src/main/webapp/area-riservata.html)** | The avatar menu and account panel in `tutorial.html`, plus `area-riservata.html` — the front end onto `/api/fieldbook/auth/**`. Signing in and creating an account happen in the panel, so there is one place credentials are typed and one place to get that right. The reserved area holds the mastery ring, a twelve-week study calendar, the chapter table, the notes, and the buttons that change the password, revoke every session and delete the account. Each form annotates what the server actually does with what you typed. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md). |
+| **[docs/DEBUGGING.md](docs/DEBUGGING.md)** | Attach to the running application on port 5005 and step over the closing brace of `enroll()` to watch entities detach. |
+| **[docs/DEPLOY-HETZNER.md](docs/DEPLOY-HETZNER.md)** | Put the whole stack on a public HTTPS URL for about €5 a month: one VPS, Caddy in front of the application in front of PostgreSQL. The interesting part is not the deploy, it is the subtraction — the production stack is the development one with the exposed database and the mail catcher taken away, and with the two settings that make a session cookie actually `Secure` behind a proxy turned on. |
+| **[The fieldbook](src/main/resources/static/tutorial.html)** | A 57-chapter course at `/enrollment/tutorial.html`, with a sidebar that groups the chapters into parts and a plain-language box beside every hard idea. It runs from `javac Hello.java` and the eight primitive types, through the language contracts underneath Java, through SQL, JPA, dependency injection and REST, into what Spring Boot auto-configures for you, and out the other side into Maven, migrations, Git, CI, Agile, SOLID, modern Java, the front end, containers, reading code you did not write, and the English you need to work in a team — with ten hands-on labs among them: a lost-update race, a HashMap bucket visualiser, a lazy-stream stepper, an entity-state explorer, a cascade explorer and a connection-pool simulator. |
+| **[The account layer](src/main/resources/static/area-riservata.html)** | The avatar menu and account panel in `tutorial.html`, plus `area-riservata.html` — the front end onto `/api/fieldbook/auth/**`. Signing in and creating an account happen in the panel, so there is one place credentials are typed and one place to get that right. The reserved area holds the mastery ring, a twelve-week study calendar, the chapter table, the notes, and the buttons that change the password, revoke every session and delete the account. Each form annotates what the server actually does with what you typed. See [docs/ACCOUNTS.md](docs/ACCOUNTS.md). |
 | **The fieldbook's Cheat sheet** | 202 golden rules, grouped by chapter. Each reason is hidden until you tap it, and the page prints as a revision sheet. |
 | **The fieldbook's Self-test** | 91 retrieval-practice questions, plus a revision queue drawn from all 239 questions on the page. Verdicts persist in `localStorage`, missed questions come back in ten minutes and known ones drop out for up to three weeks, so twenty minutes a day beats an all-nighter. |
 | **The fieldbook's chapters 36–38** | What junior Java adverts in Bologna, Modena, Milano and Tirana actually ask for — ranked by how often each requirement appears, with pay, contract types and a map from every requirement to the chapter that answers it — then the CV, the repository and the email that get you the interview, then a 148-question interview bank filterable by topic and by priority. |
@@ -579,24 +607,21 @@ honest 60/60 signal about the application itself.
 
 ## Troubleshooting
 
-**Deployment failed.** Read the marker file — it contains the reason:
+**The application exits at startup.** Read the last few lines — Boot prints a
+`Description:` and an `Action:` for most startup failures, and they are usually
+correct:
 
 ```bash
-cat docker/deployments/enrollment.war.failed
-docker compose logs wildfly --tail 100
+docker compose logs app --tail 100
 ```
 
-**Endpoints 404 or 500 at random, and work again a second later.** The server is
-redeploying itself in a loop. Confirm it:
+The two common causes are the database not being reachable (Flyway cannot run,
+so the process exits rather than serving without a schema) and a Hibernate
+validation failure, which means an entity and its table disagree — add a
+migration rather than editing an applied one.
 
-```bash
-docker compose logs wildfly --since 60s | grep -cE 'Redeployed|Replaced deployment'
-```
-
-Zero is correct when you have not just run `mvn package`. Anything around ten
-means the deployment scanner is in the timestamp loop described under
-[The development loop](#the-development-loop) — rebuild the image so the
-`configure.cli` setting is applied: `docker compose up -d --build`.
+**My change has no effect.** `docker compose up -d` reuses the image it already
+built. Rebuild it: `docker compose up -d --build`.
 
 **`mvn` not recognised.** Open a new terminal (the PATH change applies to new
 sessions), or run `& "$env:USERPROFILE\tools\apache-maven-3.9.9\bin\mvn.cmd" verify`.
@@ -613,7 +638,8 @@ mvn clean verify
 docker compose up -d --build
 ```
 
-**Inspect the schema Hibernate generated.** Connect any SQL client to
+**Inspect the schema.** Flyway owns it — read
+`src/main/resources/db/migration` first, then connect any SQL client to
 `localhost:55433` (`enrollment`/`enrollment`/`enrollment`) — looking at the real
 tables is the fastest way to understand a mapping.
 
@@ -646,8 +672,8 @@ not have `fail_on_pagination_over_collection_fetch` enabled the way the real one
 did.
 
 *The lesson:* a "safety" measure can introduce a bug, and a test configuration
-that differs from production will happily prove the wrong thing. The test
-`persistence.xml` now mirrors the production settings that affect behaviour.
+that differs from production will happily prove the wrong thing. The `-test`
+profile now mirrors the production settings that affect behaviour.
 
 ---
 
@@ -658,8 +684,8 @@ teaches the wrong lesson.
 
 - **The enrollment API has no authentication.** Every `/api/students`,
   `/api/courses` and `/api/enrollments` endpoint is public, deliberately: it is
-  the specimen fieldbook chapter 15 dissects. Real systems add `@RolesAllowed`
-  plus JWT or OIDC.
+  the specimen fieldbook chapter 15 dissects. Real systems add Spring Security
+  with `@PreAuthorize` plus JWT or OIDC.
 
   The *fieldbook* endpoints under `/api/fieldbook/**` are a different matter —
   those are authenticated, and are the worked example of what chapter 15 asks
@@ -691,14 +717,13 @@ Each of these is a good next exercise.
 
 ## Repository layout
 
-Four independent projects, one repository. Every existing build command still
-works unchanged — none of the new projects is a Maven module of the root POM.
+Three independent projects, one repository. None of the others is a Maven
+module of the root POM — each builds on its own.
 
 | Project | What it is | Build | Port |
 |---|---|---|---|
-| *(root)* | The Jakarta EE application on WildFly | `mvn package` | 8280 |
-| `spring-service/` | The same API on Spring Boot, same PostgreSQL schema | `mvn package -f spring-service/pom.xml` | 8281 |
-| `notification-service/` | The notification listener, extracted | `mvn package -f notification-service/pom.xml` | 8282 |
+| *(root)* | The application, and the fieldbook it serves | `mvn package` | 8280 |
+| `notification-service/` | The notification listener, extracted into its own service | `mvn package -f notification-service/pom.xml` | 8282 |
 | `angular-client/` | An Angular front end for the API | `npm --prefix angular-client run build` | 4280 |
 
 ### See it all running, with nothing installed
@@ -707,7 +732,7 @@ works unchanged — none of the new projects is a Maven module of the root POM.
 mvn spring-boot:run -f notification-service/pom.xml
 ```
 ```bash
-mvn spring-boot:run -f spring-service/pom.xml -Dspring-boot.run.profiles=demo
+mvn spring-boot:run -Dspring-boot.run.profiles=demo
 ```
 ```bash
 npm --prefix angular-client start
@@ -716,7 +741,7 @@ npm --prefix angular-client start
 No PostgreSQL, no MongoDB, no Docker. The `demo` profile runs on in-memory H2
 with seed data, including a course deliberately one seat from full so the 409
 path is reachable. Then <http://localhost:4280>, or
-<http://localhost:8281/swagger-ui.html>.
+<http://localhost:8280/enrollment/swagger-ui.html>.
 
 ### The documents
 

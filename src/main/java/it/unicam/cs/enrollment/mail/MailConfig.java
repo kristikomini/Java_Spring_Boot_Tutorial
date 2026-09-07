@@ -2,7 +2,7 @@ package it.unicam.cs.enrollment.mail;
 
 import it.unicam.cs.enrollment.mail.domain.RetryPolicy;
 import jakarta.annotation.PostConstruct;
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,32 +32,43 @@ import java.util.Optional;
  * override the ambient one. The translation between the two spellings is
  * mechanical: lower-case dots become upper-case underscores.
  *
- * <p>Jakarta EE has a standard for this - MicroProfile Config, with
- * {@code @ConfigProperty} injection - and a real project on WildFly would use
- * it. It is done by hand here so that the mechanism is visible rather than
+ * <p>Spring Boot has a much better answer for this, and you should normally use
+ * it: {@code @ConfigurationProperties(prefix = "enrollment.mail")} binds a whole
+ * class of fields from {@code application.yml}, environment variables, command
+ * line arguments and four other sources, with type conversion, validation and
+ * IDE completion - and RELAXED BINDING, which is why
+ * {@code enrollment.mail.from} and {@code ENROLLMENT_MAIL_FROM} are the same
+ * property without anybody writing the translation.
+ *
+ * <p>It is done by hand HERE so that the mechanism is visible rather than
  * annotation-shaped: twenty lines of {@code System.getProperty} with a fallback
- * is all that any config library is, underneath.
+ * is all that any config library is, underneath. Read this class once, then use
+ * {@code @ConfigurationProperties} forever - {@code NotificationClient} shows
+ * the ordinary way with {@code @Value}, and the {@code resilience4j} block in
+ * {@code application.yml} shows what properly bound configuration looks like.
  *
  * <h2>Read once, at startup</h2>
- * {@code @ApplicationScoped} plus final fields means a change to the
- * environment needs a redeploy. That is a real limitation and a deliberate one:
+ * A singleton bean resolving in {@code @PostConstruct} means a change to the
+ * environment needs a restart. That is a real limitation and a deliberate one:
  * configuration that can change under a running request is configuration two
  * halves of one operation can disagree about. Where live reconfiguration is
  * genuinely needed, it belongs in a database table with an audit trail, not in
- * a re-read of the environment.
+ * a re-read of the environment. (Spring Cloud Config plus
+ * {@code @RefreshScope} is the framework answer, and it carries exactly that
+ * caveat.)
  */
-@ApplicationScoped
+@Component
 public class MailConfig {
 
     private static final Logger LOG = LoggerFactory.getLogger(MailConfig.class);
 
     private static final String PREFIX = "enrollment.mail.";
 
-    /** How a transport is chosen. See {@code MailTransportProducer}. */
+    /** How a transport is chosen. See {@code MailTransportConfig}. */
     public enum TransportMode {
-        /** Use SMTP if the mail session is actually there, otherwise log. */
+        /** Use SMTP if a host is actually configured, otherwise log. */
         AUTO,
-        /** Insist on SMTP; fail loudly at startup if it is missing. */
+        /** Insist on SMTP; fail loudly at startup if no host is set. */
         SMTP,
         /** Never open a socket - write the message to the server log. */
         LOG
@@ -65,7 +76,11 @@ public class MailConfig {
 
     private boolean enabled;
     private TransportMode transportMode;
-    private String sessionJndiName;
+    private String smtpHost;
+    private int smtpPort;
+    private String smtpUsername;
+    private String smtpPassword;
+    private boolean smtpStartTls;
     private String fromAddress;
     private String fromName;
     private String subjectPrefix;
@@ -80,7 +95,11 @@ public class MailConfig {
     void resolve() {
         this.enabled = booleanValue("enabled", true);
         this.transportMode = enumValue("transport", TransportMode.AUTO);
-        this.sessionJndiName = stringValue("session-jndi", "java:jboss/mail/Enrollment");
+        this.smtpHost = stringValue("smtp-host", null);
+        this.smtpPort = intValue("smtp-port", 1025, 1, 65535);
+        this.smtpUsername = stringValue("smtp-username", null);
+        this.smtpPassword = stringValue("smtp-password", null);
+        this.smtpStartTls = booleanValue("smtp-starttls", false);
         this.fromAddress = stringValue("from", "no-reply@enrollment.unicam.test");
         this.fromName = stringValue("from-name", "UNICAM Enrollment");
         this.subjectPrefix = stringValue("subject-prefix", "");
@@ -96,9 +115,12 @@ public class MailConfig {
         // a question the log already answered, instead of an archaeology
         // exercise across three repositories. Note that nothing secret is
         // printed - a password would be logged as its presence, never its value.
-        LOG.info("Mail configuration: enabled={} transport={} from={} <{}> redirectTo={} "
-                        + "publicBaseUrl={} maxAttempts={} batchSize={} retentionDays={}",
-                enabled, transportMode, fromName, fromAddress,
+        LOG.info("Mail configuration: enabled={} transport={} smtp={} auth={} from={} <{}> "
+                        + "redirectTo={} publicBaseUrl={} maxAttempts={} batchSize={} retentionDays={}",
+                enabled, transportMode,
+                smtpHost == null ? "(not configured)" : smtpHost + ":" + smtpPort,
+                smtpUsername == null ? "none" : "yes",
+                fromName, fromAddress,
                 redirectTo == null ? "(none)" : redirectTo,
                 publicBaseUrl == null ? "(from the request)" : publicBaseUrl,
                 maxAttempts, batchSize, retentionDays);
@@ -204,9 +226,46 @@ public class MailConfig {
         return transportMode;
     }
 
-    /** JNDI name of the {@code jakarta.mail.Session} the server provides. */
-    public String getSessionJndiName() {
-        return sessionJndiName;
+    /**
+     * The SMTP host, or empty when none is configured.
+     *
+     * <p>{@code Optional} rather than a nullable getter, because "there is no
+     * mail server here" is the NORMAL case on a laptop and the transport
+     * selection in {@code MailTransportConfig} has to branch on it. A getter
+     * that returns null invites a caller to forget.
+     */
+    public Optional<String> getSmtpHost() {
+        return Optional.ofNullable(smtpHost).filter(h -> !h.trim().isEmpty());
+    }
+
+    public int getSmtpPort() {
+        return smtpPort;
+    }
+
+    public Optional<String> getSmtpUsername() {
+        return Optional.ofNullable(smtpUsername).filter(u -> !u.trim().isEmpty());
+    }
+
+    /**
+     * The SMTP password.
+     *
+     * <p>Note that it is read like any other value and never logged - see the
+     * startup line above, which reports only whether authentication is
+     * configured. A password in a log file is a password in whatever system
+     * ships your logs, and that system almost certainly has weaker access
+     * control than this one.
+     */
+    public Optional<String> getSmtpPassword() {
+        return Optional.ofNullable(smtpPassword).filter(p -> !p.isEmpty());
+    }
+
+    public boolean isSmtpStartTls() {
+        return smtpStartTls;
+    }
+
+    /** {@code host:port}, for log lines and the mailbox status endpoint. */
+    public String describeSmtpTarget() {
+        return getSmtpHost().map(h -> h + ":" + smtpPort).orElse("(not configured)");
     }
 
     public String getFromAddress() {

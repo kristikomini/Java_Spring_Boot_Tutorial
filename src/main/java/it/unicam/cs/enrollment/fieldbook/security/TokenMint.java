@@ -1,6 +1,6 @@
 package it.unicam.cs.enrollment.fieldbook.security;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Component;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -30,7 +30,7 @@ import java.util.Base64;
  * here would buy nothing and would cost a PBKDF2 round trip on every single
  * authenticated request.
  */
-@ApplicationScoped
+@Component
 public class TokenMint {
 
     /** 32 bytes = 256 bits. Comfortably past any brute-force argument. */

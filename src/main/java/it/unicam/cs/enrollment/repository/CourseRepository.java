@@ -1,153 +1,159 @@
 package it.unicam.cs.enrollment.repository;
 
-import it.unicam.cs.enrollment.common.Page;
-import it.unicam.cs.enrollment.common.PageRequest;
 import it.unicam.cs.enrollment.domain.model.Course;
 import it.unicam.cs.enrollment.domain.model.Semester;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.TypedQuery;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Data access for {@link Course}.
+ * ============================================================================
+ * THE REPOSITORY YOU DO NOT WRITE
+ * ============================================================================
+ * Open ../../../../../../../../src/main/java/it/unicam/cs/enrollment/repository/CourseRepository.java
+ * beside this file. That one is a class of about 80 lines: it extends
+ * AbstractJpaRepository, holds an injected EntityManager, and each method builds
+ * a TypedQuery, sets parameters and calls getResultList().
  *
- * <p>The interesting method here is {@link #findByIdWithPessimisticLock}, which
- * is what makes the capacity rule actually correct under concurrency.
+ * <p>This is an INTERFACE with no implementation anywhere in the repository.
+ * At startup Spring Data creates a proxy that implements it, and the proxy knows
+ * what to do because of three different mechanisms visible below. Being able to
+ * name all three is the difference between "Spring Data is magic" and knowing
+ * what you are looking at.
+ *
+ * <p>1. INHERITED METHODS. {@code JpaRepository<Course, Long>} already provides
+ *    findById, findAll, save, delete, count, existsById and about twenty more.
+ *    The whole of AbstractJpaRepository, gone - which is the honest summary of
+ *    why teams pick Spring Data.
+ *
+ * <p>2. DERIVED QUERIES. {@code findByCodeAndAcademicYear} has no body and no
+ *    annotation. Spring Data parses the METHOD NAME - findBy, then the property
+ *    {@code code}, then And, then {@code academicYear} - and generates the JPQL.
+ *    It validates the property names against the entity metamodel at startup, so
+ *    a typo fails the application on boot, not on the first request.
+ *
+ * <p>3. EXPLICIT {@code @Query}. When the name would become unreadable, or when
+ *    you need JOIN FETCH (which no method name can express), write the JPQL. This
+ *    is the SAME JPQL as the named queries on the Jakarta EE entity, moved from
+ *    the entity to the repository.
+ *
+ * <p>THE THING TO SAY IN AN INTERVIEW: derived queries are wonderful until the
+ * name is longer than the query. {@code findByCodeAndAcademicYearAndSemesterOrderByTitleAsc}
+ * is a real method name that real codebases contain, and it is worse than the
+ * four lines of JPQL it replaces. The rule most teams settle on is: derive it
+ * while the name stays readable, annotate it after that.
  */
-@ApplicationScoped
-public class CourseRepository extends AbstractJpaRepository<Course> {
-
-    public CourseRepository() {
-        super(Course.class);
-    }
-
-    public Optional<Course> findByCodeAndYear(String code, int academicYear) {
-        TypedQuery<Course> query = em()
-                .createNamedQuery(Course.FIND_BY_CODE_AND_YEAR, Course.class)
-                .setParameter("code", code)
-                .setParameter("academicYear", academicYear);
-        return singleResult(query);
-    }
-
-    /** Courses whose enrollment window contains {@code now}. */
-    public List<Course> findOpenForEnrollment(Instant now) {
-        return em().createNamedQuery(Course.FIND_OPEN_FOR_ENROLLMENT, Course.class)
-                .setParameter("now", now)
-                .getResultList();
-    }
+@Repository
+public interface CourseRepository extends JpaRepository<Course, Long> {
 
     /**
-     * Loads a course with everything the detail view needs: its professor AND
-     * its prerequisites, in one query.
+     * Mechanism 2 - derived from the method name. No body, no JPQL.
      *
-     * <p>That exception is the single most-encountered JPA error, and the cure is
-     * always the same: decide UP FRONT what the use case needs, and fetch it in
-     * the query. Do not "fix" it by making the association EAGER, and do not fix
-     * it by keeping the transaction open while rendering the response (the
-     * "Open Session In View" anti-pattern).
-     *
-     * <h3>How this method got its second fetch join</h3>
-     * It originally fetched only {@code prerequisites}, because that is what the
-     * enrollment rule needs. But the REST layer maps the same entity to a
-     * response, and {@code CourseMapper} reads {@code course.getProfessor()} -
-     * so {@code GET /courses/{id}} failed in the running server with
-     * {@code LazyInitializationException: could not initialize proxy [Professor#1]}.
-     *
-     * <p>The lesson is the one that makes lazy loading hard in practice: a fetch
-     * plan is a contract between the query and EVERY consumer of its result. Add
-     * a consumer that touches one more association and the query must change
-     * with it. That is why each mapper in this project documents its
-     * preconditions, and why {@code CourseRepositoryIT} clears the persistence
-     * context before asserting - it reproduces the detached conditions the REST
-     * layer actually maps under.
-     *
-     * <p>{@code JOIN FETCH} for the professor (mandatory, so an inner join is
-     * correct) and {@code LEFT JOIN FETCH} for the prerequisites (a course
-     * usually has none, and an inner join would return no row at all).
+     * <p>Returning {@code Optional<Course>} rather than {@code Course} is Spring
+     * Data honouring the same contract the hand-written repository implements
+     * with its {@code singleResult} helper: absence is a normal result, and the
+     * caller is made to say what it means. The JPA alternative,
+     * {@code getSingleResult()}, throws NoResultException - an exception for a
+     * case that is not exceptional.
      */
-    public Optional<Course> findByIdWithPrerequisites(Long id) {
-        TypedQuery<Course> query = em().createQuery(
-                        "SELECT DISTINCT c FROM Course c "
-                                + "JOIN FETCH c.professor "
-                                + "LEFT JOIN FETCH c.prerequisites "
-                                + "WHERE c.id = :id",
-                        Course.class)
-                .setParameter("id", id);
-        return singleResult(query);
-    }
+    Optional<Course> findByCodeAndAcademicYear(String code, int academicYear);
+
+    /** Also derived. Spring Data understands the {@code exists} prefix too. */
+    boolean existsByCodeAndAcademicYear(String code, int academicYear);
 
     /**
-     * Loads the course FOR UPDATE, so the capacity check is race-free.
+     * Mechanism 3 - explicit JPQL, because of the JOIN FETCH.
      *
-     * <h3>Why this is necessary</h3>
-     * The last seat of a course is a CONTENDED RESOURCE. Consider two students
-     * enrolling at the same instant with 1 seat left:
-     * <pre>
-     *   T1: count seats -> 29 of 30      T2: count seats -> 29 of 30
-     *   T1: 29 &lt; 30, ok                  T2: 29 &lt; 30, ok
-     *   T1: INSERT enrollment            T2: INSERT enrollment
-     *   COMMIT                           COMMIT        -&gt; 31 students. Bug.
-     * </pre>
-     * Optimistic locking does not help: neither transaction modified the course
-     * row, so no version changed. The unique constraint does not help either -
-     * these are two different students.
-     *
-     * <p>Taking a pessimistic lock on the COURSE row makes the second
-     * transaction wait until the first commits, so it sees the true count. The
-     * course row is used as the serialisation point for its own capacity - a
-     * standard technique worth recognising.
+     * <p>This is the N+1 fix, and it is the single most valuable line in the
+     * file. Without {@code JOIN FETCH c.professor}, listing 20 courses runs one
+     * query for the courses and then 20 more - one per course - the moment the
+     * mapper asks for {@code course.getProfessor().fullName()}. With it, one
+     * query. Fieldbook chapter 08 has the experiment; the important part is that
+     * NO METHOD NAME CAN EXPRESS THIS. Fetching strategy is not a filter, so
+     * deriving queries from names cannot reach it, and this is precisely where
+     * teams that only ever use derived queries end up with a slow application
+     * and no idea why.
      */
-    public Optional<Course> findByIdWithPessimisticLock(Long id) {
-        return findByIdForUpdate(id);
-    }
+    @Query("SELECT c FROM Course c JOIN FETCH c.professor "
+            + "WHERE c.enrollmentOpensAt <= :now AND c.enrollmentClosesAt > :now "
+            + "ORDER BY c.code ASC")
+    List<Course> findOpenForEnrollment(@Param("now") Instant now);
 
-    /** Catalogue browsing, filtered by academic year and optionally by semester. */
-    public Page<Course> findByYearAndSemester(int academicYear,
-                                              Semester semester,
-                                              PageRequest pageRequest) {
-        // Two fixed shapes rather than a Criteria build: with a single optional
-        // filter, a small branch is more readable than the Criteria ceremony.
-        // Reach for Criteria when the number of combinations stops being trivial.
-        String jpql = "SELECT c FROM Course c JOIN FETCH c.professor "
-                + "WHERE c.academicYear = :academicYear "
-                + (semester != null ? "AND c.semester = :semester " : "")
-                + "ORDER BY c.code ASC";
+    /**
+     * LEFT JOIN FETCH, because a course may legitimately have no prerequisites
+     * and an inner join would silently drop it from the result. That one word is
+     * a bug people ship regularly.
+     *
+     * <p>{@code DISTINCT} because fetching a collection multiplies the rows: a
+     * course with three prerequisites comes back as three identical Course rows.
+     * Hibernate would hand you the same object three times in the list.
+     */
+    @Query("SELECT DISTINCT c FROM Course c "
+            + "JOIN FETCH c.professor "
+            + "LEFT JOIN FETCH c.prerequisites "
+            + "WHERE c.id = :id")
+    Optional<Course> findByIdWithPrerequisites(@Param("id") Long id);
 
-        TypedQuery<Course> query = em().createQuery(jpql, Course.class)
-                .setParameter("academicYear", academicYear);
-        if (semester != null) {
-            query.setParameter("semester", semester);
-        }
+    /**
+     * THE PESSIMISTIC LOCK - the mechanism the whole seat-counting rule rests on.
+     *
+     * <p>{@code @Lock(PESSIMISTIC_WRITE)} makes Hibernate emit
+     * {@code SELECT ... FOR UPDATE}. The row is held until the transaction ends,
+     * so a second request asking for the same course blocks rather than reading a
+     * seat count that is about to be wrong. This is what stops two students
+     * taking the last seat simultaneously.
+     *
+     * <p>The Jakarta EE version says the same thing as
+     * {@code em.find(Course.class, id, LockModeType.PESSIMISTIC_WRITE)}. Identical
+     * SQL, identical semantics, three words of annotation instead of a method
+     * call - which is a fair summary of the whole framework difference.
+     *
+     * <p>THE TRAP: this only works if a transaction is already open. Call it
+     * outside one and, depending on the provider, you get either an exception or
+     * a lock that is released immediately and protects nothing. The lock belongs
+     * to the transaction, not to the query.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Course c WHERE c.id = :id")
+    Optional<Course> findByIdForUpdate(@Param("id") Long id);
 
-        List<Course> content = query
-                .setFirstResult(pageRequest.getOffset())
-                .setMaxResults(pageRequest.getPageSize())
-                .getResultList();
-
-        String countJpql = "SELECT COUNT(c) FROM Course c "
-                + "WHERE c.academicYear = :academicYear "
-                + (semester != null ? "AND c.semester = :semester" : "");
-
-        TypedQuery<Long> countQuery = em().createQuery(countJpql, Long.class)
-                .setParameter("academicYear", academicYear);
-        if (semester != null) {
-            countQuery.setParameter("semester", semester);
-        }
-
-        return Page.of(content, pageRequest, countQuery.getSingleResult());
-    }
-
-    public boolean existsByCodeAndYear(String code, int academicYear) {
-        Long count = em().createQuery(
-                        "SELECT COUNT(c) FROM Course c "
-                                + "WHERE c.code = :code AND c.academicYear = :academicYear",
-                        Long.class)
-                .setParameter("code", code)
-                .setParameter("academicYear", academicYear)
-                .getSingleResult();
-        return count > 0;
-    }
+    /**
+     * PAGINATION, which is where Spring Data saves the most code.
+     *
+     * <p>The hand-written version needs about 25 lines: build the JPQL, set
+     * firstResult and maxResults, then build a SECOND count query with the same
+     * WHERE clause, run it, and assemble a Page. Getting the two WHERE clauses
+     * out of step is a classic bug - the list is filtered and the total is not.
+     *
+     * <p>Here, {@code Pageable} in and {@code Page} out. Spring Data derives the
+     * count query from this one automatically.
+     *
+     * <p>Except when it cannot. A JOIN FETCH plus a Pageable is the known sharp
+     * edge: the derived count query inherits the fetch join and either fails or
+     * counts wrongly, and Hibernate may resort to paginating IN MEMORY - it logs
+     * "firstResult/maxResults specified with collection fetch; applying in
+     * memory", which means it loaded every matching row before discarding all but
+     * twenty. On a large table that is an outage. The fix is
+     * {@code countQuery}, written out explicitly below, which is why this method
+     * has two queries after all - but declared once, next to each other, where
+     * they can be seen to agree.
+     */
+    @Query(value = "SELECT c FROM Course c JOIN FETCH c.professor "
+            + "WHERE c.academicYear = :academicYear "
+            + "AND (:semester IS NULL OR c.semester = :semester)",
+            countQuery = "SELECT COUNT(c) FROM Course c "
+                    + "WHERE c.academicYear = :academicYear "
+                    + "AND (:semester IS NULL OR c.semester = :semester)")
+    Page<Course> findByYearAndOptionalSemester(@Param("academicYear") int academicYear,
+                                               @Param("semester") Semester semester,
+                                               Pageable pageable);
 }

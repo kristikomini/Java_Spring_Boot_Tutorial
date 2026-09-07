@@ -93,7 +93,7 @@
 	# ---------------------------------------------------------------------
 	# The application
 	# ---------------------------------------------------------------------
-	# `wildfly` is the service name from docker-compose.prod.yml, resolved by
+	# `app` is the service name from docker-compose.prod.yml, resolved by
 	# Docker's embedded DNS on the internal network - the same mechanism that
 	# lets the datasource say `postgres`. 8080 is the CONTAINER's port; there
 	# is no published port to speak of.
@@ -103,7 +103,7 @@
 	# section 5), which is what makes the session cookie come back marked
 	# Secure and the login throttle see real client IPs. The two settings are
 	# a pair: neither is correct without the other.
-	reverse_proxy wildfly:8080
+	reverse_proxy app:8080
 
 	# ---------------------------------------------------------------------
 	# Access log

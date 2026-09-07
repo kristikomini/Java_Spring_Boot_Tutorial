@@ -7,32 +7,33 @@ another.
 
 ---
 
-## 1. Start WildFly with the debug agent
+## 1. Start the application with the debug agent
 
-Stop the server, then start it with `--debug`:
+Stop it, then start it with the JDWP agent attached:
 
 ```bash
-standalone.bat --debug 8787 -Djboss.socket.binding.port-offset=200
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
 ```
 
-That opens a JDWP listener on **8787**. The port offset does *not* apply to it —
-`--debug` is a JVM flag, not a socket binding, so it stays 8787 regardless.
-
-You will see this near the top of the output:
+That opens a JDWP listener on **5005**, the conventional port. You will see this
+near the top of the output:
 
 ```
-Listening for transport dt_socket at address: 8787
+Listening for transport dt_socket at address: 5005
 ```
 
-The server starts normally and serves traffic as usual. The agent only costs you
-anything once a debugger actually attaches.
+The application starts normally and serves traffic as usual. The agent only
+costs you anything once a debugger actually attaches.
 
-> **Suspend on startup?** `--debug` starts the server immediately.
-> If you need to debug something that happens *during* deployment — `DataSeeder`,
-> `ApplicationBootstrap`, a CDI producer — you need the JVM to wait for you:
-> set `JAVA_OPTS` to include
-> `-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:8787`
-> and the server will not boot until your debugger connects.
+> **Suspend on startup?** `suspend=n` above means "start immediately".
+> If you need to debug something that happens *during* startup — `DemoDataSeeder`,
+> a `@Bean` method, an auto-configuration condition — change it to `suspend=y`
+> and the JVM will not proceed until your debugger connects.
+
+> **Debugging the container instead.** Add
+> `JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"`
+> to the `app` service in `docker-compose.yml` and publish `"5005:5005"`.
+> Never in production: an open JDWP port is remote code execution by design.
 
 ---
 
@@ -41,8 +42,8 @@ anything once a debugger actually attaches.
 ### IntelliJ IDEA
 
 1. **Run → Edit Configurations → + → Remote JVM Debug**
-2. Host `localhost`, Port `8787`, leave the rest at defaults
-3. Name it something like *WildFly 8787*, then **Debug**
+2. Host `localhost`, Port `5005`, leave the rest at defaults
+3. Name it something like *Enrollment 5005*, then **Debug**
 
 The console should say `Connected to the target VM`.
 
@@ -56,11 +57,11 @@ Create `.vscode/launch.json` (VS Code offers to scaffold this for you):
   "configurations": [
     {
       "type": "java",
-      "name": "Attach to WildFly",
+      "name": "Attach to the application",
       "request": "attach",
       "hostName": "localhost",
-      "port": 8787,
-      "projectName": "enrollment-service"
+      "port": 5005,
+      "projectName": "spring-boot-tutorial"
     }
   ]
 }
@@ -70,7 +71,7 @@ Requires the *Extension Pack for Java*. Press **F5** to attach.
 
 ### Eclipse
 
-**Run → Debug Configurations → Remote Java Application**, port `8787`,
+**Run → Debug Configurations → Remote Java Application**, port `5005`,
 connection type *Standard (Socket Attach)*.
 
 ---
@@ -152,11 +153,11 @@ It is the shortest path to understanding detachment, and it runs in seconds.
 
 ## Troubleshooting
 
-**`Connection refused` on 8787.** The server was not started with `--debug`.
+**`Connection refused` on 5005.** The application was not started with the JDWP agent.
 Check the startup output for `Listening for transport dt_socket`.
 
 **Breakpoints show as unverified / hollow.** The IDE compiled different bytecode
-than the server is running. Run `mvn package`, let WildFly redeploy, reattach.
+than the one running. Restart the application and reattach.
 
 **The server seems frozen.** It is — you are stopped on a breakpoint on a request
 thread. Other requests queue behind it. Resume, or disconnect the debugger.

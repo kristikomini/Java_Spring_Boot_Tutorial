@@ -1,6 +1,6 @@
 package it.unicam.cs.enrollment.mail.service;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -63,7 +63,7 @@ import java.util.regex.Pattern;
  * {@code <script>...} has just been given a stored XSS in whatever web client
  * renders the message.
  */
-@ApplicationScoped
+@Service
 public class MailTemplates {
 
     /** Template keys, so a typo is a compile error rather than a runtime one. */

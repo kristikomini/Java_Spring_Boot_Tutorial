@@ -1,7 +1,5 @@
 package it.unicam.cs.enrollment.service;
 
-import it.unicam.cs.enrollment.common.Page;
-import it.unicam.cs.enrollment.common.PageRequest;
 import it.unicam.cs.enrollment.common.logging.Loggable;
 import it.unicam.cs.enrollment.domain.model.Email;
 import it.unicam.cs.enrollment.domain.model.Student;
@@ -10,9 +8,10 @@ import it.unicam.cs.enrollment.exception.DuplicateResourceException;
 import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
 import it.unicam.cs.enrollment.repository.StudentRepository;
 import it.unicam.cs.enrollment.service.command.CreateStudentCommand;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 
 /**
@@ -23,17 +22,12 @@ import org.slf4j.Logger;
  * look like this one, and that is fine: not every class needs to be interesting.
  */
 @Loggable
-@ApplicationScoped
+@Service
 public class StudentService {
 
-    private StudentRepository studentRepository;
-    private Logger log;
+    private final StudentRepository studentRepository;
+    private final Logger log;
 
-    protected StudentService() {
-        // required by CDI
-    }
-
-    @Inject
     public StudentService(StudentRepository studentRepository, Logger log) {
         this.studentRepository = studentRepository;
         this.log = log;
@@ -78,7 +72,7 @@ public class StudentService {
         return student;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Student findById(Long id) {
         return studentRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", id));
@@ -92,21 +86,33 @@ public class StudentService {
      * "findById that loads everything" would punish every caller who wanted only
      * the name.
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public Student findByIdWithEnrollments(Long id) {
         return studentRepository.findByIdWithEnrollments(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", id));
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Student findByStudentNumber(String studentNumber) {
         return studentRepository.findByStudentNumber(studentNumber)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", "student number", studentNumber));
     }
 
-    @Transactional
-    public Page<Student> search(String nameFragment, StudentStatus status, PageRequest pageRequest) {
-        return studentRepository.search(nameFragment, status, pageRequest);
+    /**
+     * The list endpoint, with two optional filters.
+     *
+     * <p>Blank is normalised to {@code null} HERE rather than in the query,
+     * because {@code ?name=} - an empty parameter, which is what a cleared
+     * search box sends - means "no filter" and not "match the empty string".
+     * A {@code LIKE '%%'} would match everything anyway; the reason to
+     * normalise is that the two cases should be one code path, not two that
+     * happen to agree.
+     */
+    @Transactional(readOnly = true)
+    public Page<Student> search(String nameFragment, StudentStatus status, Pageable pageable) {
+        String filter = (nameFragment == null || nameFragment.trim().isEmpty())
+                ? null : nameFragment.trim();
+        return studentRepository.search(filter, status, pageable);
     }
 
     /**

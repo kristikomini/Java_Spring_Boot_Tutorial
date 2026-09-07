@@ -7,7 +7,7 @@ Audit date: 2026-09-04. Sources:
 2. A graduate-academy advert (microservices, Angular, API, container, cloud,
    blockchain, AI/ML, mobile, IoT, certifications) — section D.
 
-The course was 41 chapters built around one Jakarta EE application on WildFly.
+The course began as 41 chapters built around one Jakarta EE application on WildFly; it is now 57 chapters around a Spring Boot one, the first six of which teach the Java language from nothing.
 It answered the adverts' *ideas* well and their *stack* only on paper.
 
 It is now **47 chapters across four runnable projects** — the Jakarta EE WAR, a
@@ -29,7 +29,7 @@ This file records what was missing, what has been closed, and what has not.
 | Translate requirements into solutions with design/dev teams | **covered** | ch. 22 Agile · 24 English · 34 Reading code |
 | Scalable microservices-based applications | **partial — concepts only** | ch. 33 gives boundaries, sagas, pods. No service is ever built or called. |
 | …using modern technologies (e.g. **Spring Boot**) | **partial — paper only** | ch. 16–18 teach Spring properly, but `grep springframework pom.xml` returns nothing. Nothing compiles, nothing runs, no test proves it. |
-| Design, develop and **optimize REST APIs** | **covered** | ch. 12 JAX-RS · 13 The boundary · 25 Performance. Real code, real error contract, RFC 7807, correlation IDs. |
+| Design, develop and **optimize REST APIs** | **covered** | ch. 12 REST · 13 The boundary · 25 Performance. Real code, real error contract, RFC 7807, correlation IDs. |
 | Communication between **distributed services** | **missing** | No service-to-service call anywhere: no client, no timeout, no retry, no fallback. |
 | Innovation aligned with **Data & Analytics** trends | **missing** | The domain framing is absent. No reporting/aggregation chapter, no batch, no analytical query beyond ch. 07's `GROUP BY`. |
 
@@ -62,11 +62,12 @@ Ranked by what actually changes a junior's employability against this advert.
 ### B1 — Spring Boot must stop being a reading exercise · **DONE (code), 2026-09-05**
 
 The advert names Spring Boot explicitly. Chapters 16–18 were good prose about a
-framework the repository did not contain. Built as `spring-service/` — an
+framework the repository did not contain. That module has since become the
+project itself; what follows records how it was built. It began as an
 independent Maven project in this repository, so the root WAR build is
-untouched. See [spring-service/README.md](../spring-service/README.md).
+untouched. It is now the root project.
 
-- [x] A second Maven module — `spring-service/` — a real Spring Boot app against
+- [x] A second Maven module — since promoted to the root — a real Spring Boot app against
       the **same PostgreSQL schema**. Same entities, same rules. Spring Boot
       3.5.0, Java 21, port 8281.
 - [x] Port endpoints exactly: `GET /api/courses`, `/courses/open`,
@@ -88,13 +89,13 @@ untouched. See [spring-service/README.md](../spring-service/README.md).
 
 **Still open on B1:**
 
-- [ ] Run `mvn verify -f spring-service/pom.xml` on a machine with a working
+- [ ] Run `mvn verify` on a machine with a working
       Docker daemon. The 11 integration tests compile and skip correctly but
       have **never been executed** — the daemon was unresponsive on the machine
       they were written on. Until that passes, the "same schema" claim rests on
       a manual column-by-column reading of `V1__baseline_schema.sql`, not on
       `ddl-auto: validate`. This is the highest-value thing to do next.
-- [ ] Watch for a Hibernate version difference: WildFly 41 ships Hibernate
+- [ ] (Historical, while two implementations coexisted) Watch for a Hibernate version difference: WildFly 41 shipped Hibernate
       7.4.5, Spring Boot 3.5.0 ships 6.6.x. Both should map
       `@Enumerated(STRING)` to `varchar` and `Instant` to
       `timestamp with time zone` on PostgreSQL, but only `validate` against the
@@ -104,7 +105,7 @@ untouched. See [spring-service/README.md](../spring-service/README.md).
 
 ### B2 — NoSQL, for real · **DONE, 2026-09-05**
 
-Built in `spring-service/.../document/`, plus a `mongo` service in
+Built in `src/main/java/it/unicam/cs/enrollment/document/`, plus a `mongo` service in
 `docker-compose.yml`.
 
 - [x] Document modelling against a relational mind, written out on
@@ -142,7 +143,7 @@ BigDecimal earns its place for money and for anything summed.
 ### B3 — Distributed communication · **DONE, 2026-09-05**
 
 Everything ch. 33 promises and never shows, now built as `notification-service/`
-— a third independent Maven project — plus the client side in `spring-service`.
+— a third independent Maven project — plus the client side in the root project.
 
 - [x] The notification listener extracted into a second deployable: the exact
       cut ch. 33 marks "a good cut", ~90 lines of application code.
@@ -233,7 +234,7 @@ reaches the user.
 
 ### B5 — Data & Analytics · **DONE, 2026-09-05**
 
-Built in `spring-service/.../reporting/`, plus migration
+Built in `src/main/java/it/unicam/cs/enrollment/reporting/`, plus migration
 `V6__course_statistics.sql` in the root project.
 
 - [x] Window functions, executed and asserted: `RANK` vs `DENSE_RANK` over a

@@ -4,15 +4,36 @@
     {
       "name": "angular-client",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["ng", "serve", "--port", "4280"],
+      "runtimeArgs": [
+        "ng",
+        "serve",
+        "--port",
+        "4280"
+      ],
       "port": 4280,
       "cwd": "angular-client"
     },
     {
       "name": "fieldbook",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "http-server", "src/main/webapp", "-p", "4285", "-c-1"],
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "src/main/resources/static",
+        "-p",
+        "4285",
+        "-c-1"
+      ],
       "port": 4285
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "mvn",
+      "runtimeArgs": [
+        "spring-boot:run"
+      ],
+      "port": 8280,
+      "url": "http://localhost:8280"
     }
   ]
 }

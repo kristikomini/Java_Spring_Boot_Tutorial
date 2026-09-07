@@ -11,7 +11,7 @@ someone else's code you already know the shape of the cause.
 ```bash
 ./scripts/break.sh list
 ./scripts/break.sh fetch-plan
-mvn package        # WildFly hot-redeploys
+mvn spring-boot:run   # Ctrl-C and re-run to pick the change up
 ./scripts/break.sh restore
 ```
 
@@ -24,7 +24,7 @@ discard your own work.
 ## The four breaks
 
 All of the numbers below were measured against this application running on
-WildFly 41 with the seeded dataset. You should see the same.
+Spring Boot 3.5 with the seeded dataset. You should see the same.
 
 ### `fetch-plan` — fails loudly
 

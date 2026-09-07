@@ -1,8 +1,5 @@
 package it.unicam.cs.enrollment.service;
 
-import it.unicam.cs.enrollment.common.logging.Loggable;
-import it.unicam.cs.enrollment.domain.event.EnrollmentCreatedEvent;
-import it.unicam.cs.enrollment.domain.event.GradeRecordedEvent;
 import it.unicam.cs.enrollment.domain.model.Course;
 import it.unicam.cs.enrollment.domain.model.Enrollment;
 import it.unicam.cs.enrollment.domain.model.EnrollmentStatus;
@@ -10,172 +7,153 @@ import it.unicam.cs.enrollment.domain.model.Student;
 import it.unicam.cs.enrollment.exception.BusinessRuleViolationException;
 import it.unicam.cs.enrollment.exception.DuplicateResourceException;
 import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
+import it.unicam.cs.enrollment.notification.EnrollmentCreatedEvent;
 import it.unicam.cs.enrollment.repository.CourseRepository;
 import it.unicam.cs.enrollment.repository.EnrollmentRepository;
 import it.unicam.cs.enrollment.repository.StudentRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
- * The application's core USE CASES for enrollments.
+ * ============================================================================
+ * THE SAME EIGHT BUSINESS RULES, ON THE OTHER FRAMEWORK
+ * ============================================================================
+ * Diff {@link #enroll} against
+ * it.unicam.cs.enrollment.service.EnrollmentService.enroll. The two method
+ * bodies are line-for-line the same shape, in the same order, raising the same
+ * exceptions with the same error codes. That is the point of this module: the
+ * business logic did not care which framework it was in.
  *
- * <h2>What belongs in a service layer</h2>
- * The service is the ORCHESTRATOR. It owns:
- * <ul>
- *   <li>the TRANSACTION BOUNDARY - one business operation, one transaction;</li>
- *   <li>rules that span several entities ("does this student meet the
- *       prerequisites for that course?") - a rule about one entity alone belongs
- *       ON that entity, which is why the state machine lives in
- *       {@link EnrollmentStatus} and not here;</li>
- *   <li>translating domain-level failures into the application's exception
- *       vocabulary;</li>
- *   <li>publishing domain events.</li>
- * </ul>
- * It must NOT know about HTTP. No {@code Response}, no status codes, no
- * {@code HttpServletRequest}. That separation is what lets the same service be
- * driven by a REST endpoint, a scheduled job, a message consumer or a test.
+ * <p>WHAT CHANGED, exactly, and nothing else:
  *
- * <h2>Constructor injection</h2>
- * Dependencies arrive through the constructor rather than being set on fields.
- * This is worth insisting on:
- * <ul>
- *   <li>the object is fully formed the moment it exists - no half-initialised
- *       state;</li>
- *   <li>a unit test just calls {@code new EnrollmentService(mockA, mockB, ...)}
- *       with no container and no reflection;</li>
- *   <li>a constructor with eight parameters is visibly painful, which is useful
- *       feedback that the class is doing too much. Field injection hides that
- *       smell.</li>
- * </ul>
- * The {@code protected} no-argument constructor exists purely so the container
- * can build its client proxy for this normal-scoped bean.
+ * <pre>
+ *   Jakarta EE                              Spring
+ *   -------------------------------------   -------------------------------------
+ *   {@literal @}ApplicationScoped                      {@literal @}Service
+ *   {@literal @}Inject on the constructor              nothing (single constructor is enough)
+ *   jakarta.transaction.Transactional       org.springframework...Transactional
+ *   Event<T>.fire(...)                      ApplicationEventPublisher (not used here)
+ *   {@literal @}Loggable interceptor                   an ordinary Logger field
+ * </pre>
+ *
+ * <p>TWO NOTES ON {@code @Transactional}, because they are asked in interviews.
+ *
+ * <p>First, the DEFAULT ROLLBACK RULE is the same in both: roll back on
+ * unchecked exceptions, commit on checked ones. People expect Spring to differ
+ * here and it does not. The attribute names differ ({@code rollbackFor} versus
+ * {@code rollbackOn}) and that is all. Since every exception thrown below is
+ * unchecked, the rollback happens either way.
+ *
+ * <p>Second, THE SELF-INVOCATION TRAP is identical and is worth being able to
+ * describe. Both containers implement {@code @Transactional} with a PROXY: the
+ * bean injected elsewhere is not this object, it is a wrapper that opens a
+ * transaction and then delegates. So if {@link #enroll} called another
+ * {@code @Transactional} method on {@code this}, the call would go straight to
+ * the real object and bypass the wrapper entirely - no new transaction, no
+ * warning, no error. It is the reason {@code private @Transactional} silently
+ * does nothing in both frameworks. Fieldbook chapter 11 has the diagram.
  */
-@Loggable
-@ApplicationScoped
+@Service
 public class EnrollmentService {
 
-    private StudentRepository studentRepository;
-    private CourseRepository courseRepository;
-    private EnrollmentRepository enrollmentRepository;
+    private static final Logger log = LoggerFactory.getLogger(EnrollmentService.class);
 
     /**
-     * {@code Event<T>} is the CDI event publisher. Injecting it, rather than
-     * calling observers directly, is what keeps this service unaware of who
-     * listens.
+     * The statuses that hold a seat, computed once. Passed into the count query
+     * so the rule lives in the enum rather than in a JPQL string.
      */
-    private Event<EnrollmentCreatedEvent> enrollmentCreatedEvent;
-    private Event<GradeRecordedEvent> gradeRecordedEvent;
+    private static final List<EnrollmentStatus> OCCUPYING_STATUSES =
+            EnrollmentStatus.occupyingSeats();
 
-    /** Injected so that every time-dependent rule below is testable. */
-    private Clock clock;
+    private final StudentRepository studentRepository;
+    private final CourseRepository courseRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final Clock clock;
 
-    /** Supplied by {@code LoggerProducer}, already named after this class. */
-    private Logger log;
+    /**
+     * The Spring answer to the CDI {@code Event<T>} the Jakarta EE service
+     * injects.
+     *
+     * <p>Publishing to an in-process publisher rather than calling the HTTP
+     * client directly is the point: this service does not know that
+     * notifications now live on another machine. The LISTENER knows, and the
+     * listener is the only thing that would change if they moved back.
+     */
+    private final ApplicationEventPublisher events;
 
-    /** Required by CDI for proxying. Never call it yourself. */
-    protected EnrollmentService() {
-        // required by CDI
-    }
-
-    @Inject
+    /**
+     * CONSTRUCTOR INJECTION, with no annotation at all.
+     *
+     * <p>Since Spring 4.3 a bean with exactly one constructor needs no
+     * {@code @Autowired} - the container has no other candidate to choose from.
+     * The Jakarta EE version does need {@code @Inject}, which is the only
+     * difference.
+     *
+     * <p>Constructor injection over field injection, for three reasons that are
+     * worth being able to list: the fields can be {@code final}, so the object
+     * cannot be half-built; a test can construct it with mocks and no container
+     * at all (see EnrollmentServiceTest); and a constructor with nine parameters
+     * is visibly a class doing too much, whereas nine {@code @Autowired} fields
+     * hide it.
+     */
     public EnrollmentService(StudentRepository studentRepository,
                              CourseRepository courseRepository,
                              EnrollmentRepository enrollmentRepository,
-                             Event<EnrollmentCreatedEvent> enrollmentCreatedEvent,
-                             Event<GradeRecordedEvent> gradeRecordedEvent,
                              Clock clock,
-                             Logger log) {
+                             ApplicationEventPublisher events) {
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
-        this.enrollmentCreatedEvent = enrollmentCreatedEvent;
-        this.gradeRecordedEvent = gradeRecordedEvent;
         this.clock = clock;
-        this.log = log;
+        this.events = events;
     }
 
-    // ==================================================================
-    // USE CASE: enrol a student in a course
-    // ==================================================================
-
     /**
-     * Enrols a student, enforcing every business rule in order.
+     * Enroll a student on a course, subject to every rule the domain has.
      *
-     * <h3>{@code @Transactional} - the single most important annotation here</h3>
-     * The container starts a JTA transaction before the method body and commits
-     * it after. If a RuntimeException escapes, it rolls back instead - so a
-     * failure halfway through cannot leave a half-written enrollment behind.
-     * That all-or-nothing property is ATOMICITY, the A in ACID.
-     *
-     * <p>{@code TxType.REQUIRED} is the default and the right one 95% of the
-     * time: join the caller's transaction if there is one, otherwise start a new
-     * one. Worth knowing the others:
-     * <ul>
-     *   <li>{@code REQUIRES_NEW} - always a fresh, independent transaction. Use
-     *       when work must survive the caller rolling back, e.g. an audit
-     *       record.</li>
-     *   <li>{@code MANDATORY} - throws unless a transaction is already running.
-     *       A way to state "I am not a transaction boundary".</li>
-     *   <li>{@code SUPPORTS} / {@code NOT_SUPPORTED} / {@code NEVER} - rarer.</li>
-     * </ul>
-     *
-     * <h3>Why the ordering of the checks matters</h3>
-     * Student eligibility is checked first because it is cheap and needs no
-     * lock: there is no point serialising every request on the course row just
-     * to discover the student was suspended.
-     *
-     * <p>The row lock is taken next - before the window, duplicate, capacity and
-     * prerequisite checks - because the {@code Course} those checks read is the
-     * very row that has to be locked. Loading it unlocked and locking it later
-     * would read the row twice and act on the first, stale copy in between.
-     *
-     * <p>The cost is that four checks run while the lock is held, lengthening
-     * the window in which other enrollments for this course queue behind us. The
-     * benefit is that the capacity check is trustworthy. Which checks belong
-     * inside a lock and which belong outside it is a judgement call, not a rule.
-     *
-     * @return the newly created, persisted enrollment
-     * @throws ResourceNotFoundException      student or course does not exist
-     * @throws DuplicateResourceException     already enrolled
-     * @throws BusinessRuleViolationException any domain rule refused
+     * <p>THE ORDER OF THE CHECKS IS THE DESIGN. The lock is taken on the course
+     * BEFORE the seats are counted, and it is held until the method returns, so
+     * no other transaction can slip an insert between the count and the save.
+     * Reverse those two lines and the application still passes every test and
+     * oversells the last seat under load - a bug that only appears with real
+     * concurrency, which is precisely why fieldbook chapter 11 spends a chapter
+     * on it.
      */
     @Transactional
     public Enrollment enroll(Long studentId, Long courseId) {
         Instant now = clock.instant();
 
-        // --- 1. The student must exist and be eligible ---------------------
+        // 1. The student must exist...
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Student", studentId));
 
+        // 2. ...and be allowed to enroll at all.
         if (!student.canEnroll()) {
             throw BusinessRuleViolationException.studentNotEligible(
                     student.getStudentNumber(), student.getStatus().name());
         }
 
-        // --- 2. Lock the course row ----------------------------------------
-        // SELECT ... FOR UPDATE. From here until commit, no other transaction
-        // can enrol anyone in this course, which is what makes the capacity
-        // check below trustworthy. See CourseRepository for the race it prevents.
-        Course course = courseRepository.findByIdWithPessimisticLock(courseId)
+        // 3. SELECT ... FOR UPDATE. Everything after this line is serialised
+        //    against other transactions touching the same course.
+        Course course = courseRepository.findByIdForUpdate(courseId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Course", courseId));
 
-        // --- 3. The enrollment window must be open -------------------------
+        // 4. The window is a rule the Course owns; the clock is an input.
         if (!course.isEnrollmentOpen(now)) {
             throw BusinessRuleViolationException.enrollmentWindowClosed(course.getCode());
         }
 
-        // --- 4. No double enrollment ---------------------------------------
-        // A friendly early check. The UNIQUE constraint on
-        // (student_id, course_id) is the actual guarantee.
-        enrollmentRepository.findByStudentAndCourse(studentId, courseId)
+        // 5. A friendly 409 for the duplicate. The unique constraint on
+        //    (student_id, course_id) is what actually guarantees it - this check
+        //    only makes the error readable.
+        enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId)
                 .ifPresent(existing -> {
                     throw new DuplicateResourceException(
                             "Student " + student.getStudentNumber()
@@ -183,41 +161,50 @@ public class EnrollmentService {
                                     + " (status: " + existing.getStatus() + ")");
                 });
 
-        // --- 5. Capacity ---------------------------------------------------
-        long occupied = enrollmentRepository.countOccupiedSeats(courseId);
+        // 6. The seat count, from the database, under the lock taken in step 3.
+        long occupied = enrollmentRepository.countOccupiedSeats(courseId, OCCUPYING_STATUSES);
         if (occupied >= course.getCapacity()) {
             throw BusinessRuleViolationException.courseFull(course.getCode(), course.getCapacity());
         }
 
-        // --- 6. Prerequisites ----------------------------------------------
+        // 7. Prerequisites.
         verifyPrerequisites(student, course);
 
-        // --- 7. Create and persist -----------------------------------------
+        // 8. Only now is anything written.
         Enrollment enrollment = Enrollment.create(student, course, now);
         enrollmentRepository.save(enrollment);
 
-        // flush() sends the INSERT now rather than at commit. That matters here:
-        // if the unique constraint fires we want the failure INSIDE this method,
-        // where the stack trace still points at the enrollment logic, not later
-        // during commit where it surfaces from deep inside the container.
+        // saveAndFlush would do this in one call; the explicit flush is kept to
+        // mirror the Jakarta EE version. It forces the INSERT now rather than at
+        // commit, so a unique-constraint violation surfaces HERE, inside this
+        // method, where the stack trace still points at the enrollment - instead
+        // of at whatever line happened to trigger the flush later.
         enrollmentRepository.flush();
 
         log.info("Student {} enrolled in course {} ({} of {} seats now taken)",
-                student.getStudentNumber(), course.getCode(), occupied + 1, course.getCapacity());
+                student.getStudentNumber(), course.getCode(),
+                occupied + 1, course.getCapacity());
 
-        // --- 8. Announce what happened --------------------------------------
-        // fire() is synchronous: observers run on this thread, inside this
-        // transaction. If an observer throws, the enrollment rolls back too.
-        // That is sometimes exactly right (an audit record must not be lost) and
-        // sometimes wrong (a failing email should not undo an enrollment).
-        // See EnrollmentNotificationListener for how transactional observers let
-        // you choose.
-        enrollmentCreatedEvent.fire(new EnrollmentCreatedEvent(
+        // THE SEAM. The Jakarta EE version fires a CDI event here and a mail
+        // listener observes it in the same JVM. This publishes to the Spring
+        // in-process publisher, and EnrollmentEventPublisher - annotated
+        // @TransactionalEventListener(AFTER_COMMIT) - turns it into an HTTP call
+        // to a separate service.
+        //
+        // NOTICE WHAT THIS METHOD DOES NOT KNOW. There is no URL here, no
+        // timeout, no retry, no circuit breaker, and no mention that a network
+        // exists. Publishing an event is the same line it would be if the
+        // listener were still in this JVM, which is what makes the boundary
+        // movable: extracting notifications required changing the LISTENER, not
+        // the business logic.
+        //
+        // That is the practical version of what chapter 33 means by cutting
+        // where the business is loosely coupled. The seam was already here; the
+        // extraction only had to follow it.
+        events.publishEvent(EnrollmentCreatedEvent.of(
                 enrollment.getId(),
-                student.getId(),
                 student.getStudentNumber(),
-                student.getEmail() != null ? student.getEmail().getValue() : null,
-                course.getId(),
+                student.getEmail() != null ? student.getEmail().getValue() : "unknown@unicam.it",
                 course.getCode(),
                 course.getTitle(),
                 now));
@@ -225,27 +212,12 @@ public class EnrollmentService {
         return enrollment;
     }
 
-    /**
-     * Every prerequisite course code must have been PASSED by this student.
-     *
-     * <p>Note the cost: one query per prerequisite. With the two or three
-     * prerequisites a real course has, that is fine and the code stays readable.
-     * If courses had fifty, you would rewrite it as a single query with
-     * {@code WHERE c.code IN :codes} and compare the returned set. Knowing when
-     * a loop of queries is acceptable, and when it is the N+1 problem in
-     * disguise, is a judgement call worth practising.
-     *
-     * <p>{@code course.getPrerequisites()} triggers a lazy load here. We are
-     * inside the transaction, so it works. It could not be JOIN FETCHed in step
-     * 2 above, because combining a fetch join with {@code FOR UPDATE} makes the
-     * lock cover the joined rows as well - and several databases simply reject
-     * the combination.
-     */
     private void verifyPrerequisites(Student student, Course course) {
         List<String> missing = course.getPrerequisites().stream()
                 .map(Course::getCode)
-                .filter(code -> !enrollmentRepository.hasCompletedCourseCode(student.getId(), code))
-                .collect(Collectors.toList());
+                .filter(code -> enrollmentRepository
+                        .countCompletedByCourseCode(student.getId(), code) == 0)
+                .toList();
 
         if (!missing.isEmpty()) {
             throw BusinessRuleViolationException.prerequisitesNotMet(
@@ -253,88 +225,60 @@ public class EnrollmentService {
         }
     }
 
-    // ==================================================================
-    // USE CASE: register an exam result
-    // ==================================================================
+    /**
+     * {@code readOnly = true} is the one Spring transaction attribute with no
+     * direct Jakarta EE equivalent, and it earns its place twice over.
+     *
+     * <p>Hibernate skips dirty checking for the whole persistence context, which
+     * on a list endpoint means it does not walk every loaded entity comparing it
+     * against its snapshot at flush time. And the JDBC connection is marked
+     * read-only, which on a replicated PostgreSQL lets the driver route the query
+     * to a replica.
+     *
+     * <p>It is not a security control. A read-only transaction will happily
+     * execute a native UPDATE; it is a hint about intent, not a permission.
+     */
+    @Transactional(readOnly = true)
+    public Enrollment findById(Long enrollmentId) {
+        return enrollmentRepository.findByIdWithDetails(enrollmentId)
+                .orElseThrow(() -> ResourceNotFoundException.of("Enrollment", enrollmentId));
+    }
 
     /**
-     * Records a passing grade (18-30, optionally with honours).
+     * One student's transcript.
      *
-     * <h3>Exception translation between layers</h3>
-     * The entity throws plain {@code IllegalArgumentException} /
-     * {@code IllegalStateException}, because the domain model must not depend on
-     * application-specific types. The service catches those and rethrows them as
-     * {@link BusinessRuleViolationException}, which the REST layer knows how to
-     * turn into a 409.
+     * <p>The existence check is not redundant with the query below. Without it,
+     * asking for the enrollments of a student who does not exist returns an
+     * empty list - indistinguishable from a real student who has enrolled in
+     * nothing, and a 200 where the honest answer is a 404.
+     */
+    @Transactional(readOnly = true)
+    public List<Enrollment> findByStudent(Long studentId) {
+        if (!studentRepository.existsById(studentId)) {
+            throw ResourceNotFoundException.of("Student", studentId);
+        }
+        return enrollmentRepository.findByStudentWithCourse(studentId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Enrollment> findByCourse(Long courseId, EnrollmentStatus status) {
+        return enrollmentRepository.findByCourseAndStatus(
+                courseId, status != null ? status : EnrollmentStatus.ACTIVE);
+    }
+
+    /**
+     * Withdraw, releasing the seat.
      *
-     * <p>Each layer speaking its own vocabulary, with an explicit translation at
-     * the boundary, is what keeps the layers independently reusable. Always pass
-     * the original exception as the {@code cause} so the stack trace survives.
+     * <p>There is no repository save call, and that is not an omission. The
+     * entity is MANAGED inside this transaction, so Hibernate compares it against
+     * its loaded snapshot at commit and writes an UPDATE for what changed. Dirty
+     * checking, and it works identically in both frameworks. Fieldbook chapter 09
+     * is the long version; the short version is that {@code save()} on an
+     * already-managed entity is a no-op that many codebases call anyway.
      */
     @Transactional
-    public Enrollment recordPass(Long enrollmentId, int grade, boolean withHonours) {
-        Enrollment enrollment = requireEnrollment(enrollmentId);
-        Instant now = clock.instant();
-
-        try {
-            enrollment.recordPass(grade, withHonours, now);
-        } catch (IllegalArgumentException e) {
-            throw BusinessRuleViolationException.invalidGrade(e.getMessage());
-        } catch (IllegalStateException e) {
-            throw BusinessRuleViolationException.illegalStateTransition(e.getMessage());
-        }
-
-        log.info("Recorded grade {} for enrollment {} (student {}, course {})",
-                enrollment.formattedGrade(), enrollmentId,
-                enrollment.getStudent().getStudentNumber(), enrollment.getCourse().getCode());
-
-        gradeRecordedEvent.fire(new GradeRecordedEvent(
-                enrollment.getId(),
-                enrollment.getStudent().getStudentNumber(),
-                enrollment.getCourse().getCode(),
-                enrollment.getGrade(),
-                enrollment.isWithHonours(),
-                true,
-                now));
-
-        // NOTE: there is no repository.save() call here, and that is not an
-        // oversight. `enrollment` is a MANAGED entity: it belongs to the current
-        // persistence context, so JPA compares it against its loaded snapshot at
-        // commit time and writes an UPDATE for whatever changed. This is called
-        // DIRTY CHECKING, and it is the mechanism that surprises newcomers most.
-        return enrollment;
-    }
-
-    /** Records a failed exam. The enrollment stays, so the student can retake it. */
-    @Transactional
-    public Enrollment recordFailure(Long enrollmentId) {
-        Enrollment enrollment = requireEnrollment(enrollmentId);
-        Instant now = clock.instant();
-
-        try {
-            enrollment.recordFailure(now);
-        } catch (IllegalStateException e) {
-            throw BusinessRuleViolationException.illegalStateTransition(e.getMessage());
-        }
-
-        log.info("Recorded exam failure for enrollment {}", enrollmentId);
-
-        gradeRecordedEvent.fire(new GradeRecordedEvent(
-                enrollment.getId(),
-                enrollment.getStudent().getStudentNumber(),
-                enrollment.getCourse().getCode(),
-                null, false, false, now));
-
-        return enrollment;
-    }
-
-    // ==================================================================
-    // USE CASE: withdraw / retake
-    // ==================================================================
-
-    @Transactional
     public Enrollment withdraw(Long enrollmentId) {
-        Enrollment enrollment = requireEnrollment(enrollmentId);
+        Enrollment enrollment = findById(enrollmentId);
         try {
             enrollment.withdraw(clock.instant());
         } catch (IllegalStateException e) {
@@ -346,70 +290,27 @@ public class EnrollmentService {
     }
 
     /**
-     * Re-activates a FAILED enrollment so the student can sit the exam again.
+     * Record a passing grade.
      *
-     * <p>No capacity check: the student already holds the seat (see
-     * {@link EnrollmentStatus#occupiesSeat()}), so re-activating cannot push the
-     * course over capacity. Being able to justify the ABSENCE of a check is as
-     * important as the checks themselves.
+     * <p>The entity raises plain Java exceptions - IllegalArgumentException for a
+     * grade out of range, IllegalStateException for an impossible transition -
+     * because the domain must not know what HTTP is. Translating them into
+     * business exceptions is this layer doing its job. It is the same reason the
+     * controller does not throw ResponseStatusException: each layer speaks its
+     * own vocabulary and translates at the boundary.
      */
     @Transactional
-    public Enrollment retake(Long enrollmentId) {
-        Enrollment enrollment = requireEnrollment(enrollmentId);
+    public Enrollment recordPass(Long enrollmentId, int grade, boolean withHonours) {
+        Enrollment enrollment = findById(enrollmentId);
         try {
-            enrollment.retake();
+            enrollment.recordPass(grade, withHonours, clock.instant());
+        } catch (IllegalArgumentException e) {
+            throw BusinessRuleViolationException.invalidGrade(e.getMessage());
         } catch (IllegalStateException e) {
             throw BusinessRuleViolationException.illegalStateTransition(e.getMessage());
         }
-        log.info("Enrollment {} re-activated for a retake", enrollmentId);
+        log.info("Recorded grade {} for enrollment {}",
+                enrollment.formattedGrade(), enrollmentId);
         return enrollment;
-    }
-
-    // ==================================================================
-    // Queries
-    // ==================================================================
-
-    /**
-     * {@code @Transactional} on a read as well.
-     *
-     * <p>Reads need a transaction too: it is what gives the persistence context
-     * a defined lifetime, and what stops lazy loading from throwing
-     * {@code LazyInitializationException} halfway through. It also means a
-     * multi-statement read sees one consistent snapshot rather than data that
-     * shifts under it.
-     */
-    @Transactional
-    public List<Enrollment> findByStudent(Long studentId) {
-        if (!studentRepository.existsById(studentId)) {
-            throw ResourceNotFoundException.of("Student", studentId);
-        }
-        return enrollmentRepository.findByStudentWithCourse(studentId);
-    }
-
-    @Transactional
-    public List<Enrollment> findByCourse(Long courseId, EnrollmentStatus status) {
-        return enrollmentRepository.findByCourseAndStatus(
-                courseId, status != null ? status : EnrollmentStatus.ACTIVE);
-    }
-
-    @Transactional
-    public Enrollment findById(Long enrollmentId) {
-        return requireEnrollment(enrollmentId);
-    }
-
-    /**
-     * A tiny private helper used by every method above.
-     *
-     * <p>Extracting "load it or throw 404" removes six identical
-     * {@code orElseThrow} lines. Repetition like that is not just verbose - it is
-     * where inconsistencies breed, because one of the six eventually gets a
-     * slightly different message or forgets to throw at all.
-     */
-    private Enrollment requireEnrollment(Long enrollmentId) {
-        // findByIdWithDetails, not findById: the REST layer maps this entity to
-        // a DTO after the transaction has closed, so student and course must
-        // already be loaded. See EnrollmentRepository.findByIdWithDetails.
-        return enrollmentRepository.findByIdWithDetails(enrollmentId)
-                .orElseThrow(() -> ResourceNotFoundException.of("Enrollment", enrollmentId));
     }
 }

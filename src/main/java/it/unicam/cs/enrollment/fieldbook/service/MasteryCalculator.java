@@ -2,7 +2,7 @@ package it.unicam.cs.enrollment.fieldbook.service;
 
 import it.unicam.cs.enrollment.fieldbook.domain.CardProgress;
 import it.unicam.cs.enrollment.fieldbook.domain.ChapterProgress;
-import jakarta.enterprise.context.ApplicationScoped;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -55,7 +55,7 @@ import java.util.Map;
  * repository itself - that difference is most of what "dependency injection
  * improves testability" actually means in practice.
  */
-@ApplicationScoped
+@Service
 public class MasteryCalculator {
 
     static final double W_READ = 0.15;

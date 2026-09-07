@@ -1,6 +1,6 @@
 package it.unicam.cs.enrollment.mail.service;
 
-import it.unicam.cs.enrollment.api.filter.CorrelationIdFilter;
+import it.unicam.cs.enrollment.web.filter.CorrelationIdFilter;
 import it.unicam.cs.enrollment.common.Page;
 import it.unicam.cs.enrollment.common.PageRequest;
 import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
@@ -9,9 +9,8 @@ import it.unicam.cs.enrollment.mail.domain.MailMessage;
 import it.unicam.cs.enrollment.mail.domain.MailStatus;
 import it.unicam.cs.enrollment.mail.domain.OutboxMessage;
 import it.unicam.cs.enrollment.mail.repository.MailOutboxRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.MDC;
 
@@ -42,7 +41,7 @@ import java.util.Optional;
  * boundaries, and different reasons to be woken up. Splitting them is most of
  * what makes the thing reliable.
  */
-@ApplicationScoped
+@Service
 public class MailService {
 
     private MailOutboxRepository outbox;
@@ -51,17 +50,11 @@ public class MailService {
     private Clock clock;
     private Logger log;
 
-    /** Required by CDI for proxying. Never call it yourself. */
-    protected MailService() {
-        // required by CDI
-    }
-
     /**
      * Constructor injection, matching the rest of the service layer: the
      * dependencies are visible in one signature, they can be made final, and a
      * unit test builds one with five mocks and no container.
      */
-    @Inject
     public MailService(MailOutboxRepository outbox,
                        MailTemplates templates,
                        MailConfig config,

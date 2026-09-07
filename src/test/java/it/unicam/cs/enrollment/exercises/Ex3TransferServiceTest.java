@@ -81,11 +81,11 @@ class Ex3TransferServiceTest {
 
         when(studentRepository.findById(STUDENT_ID)).thenReturn(Optional.of(student));
         when(courseRepository.findById(FROM_ID)).thenReturn(Optional.of(from));
-        when(courseRepository.findByIdWithPessimisticLock(TO_ID)).thenReturn(Optional.of(to));
+        when(courseRepository.findByIdForUpdate(TO_ID)).thenReturn(Optional.of(to));
         when(courseRepository.findById(TO_ID)).thenReturn(Optional.of(to));
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, FROM_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, FROM_ID))
                 .thenReturn(Optional.of(Enrollment.create(student, from, NOW)));
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, TO_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, TO_ID))
                 .thenReturn(Optional.empty());
         when(enrollmentRepository.countOccupiedSeats(TO_ID)).thenReturn(0L);
         when(enrollmentRepository.save(any(Enrollment.class)))
@@ -120,7 +120,7 @@ class Ex3TransferServiceTest {
     @DisplayName("withdraws the source enrollment")
     void withdrawsSource() {
         Enrollment source = Enrollment.create(student, from, NOW);
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, FROM_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, FROM_ID))
                 .thenReturn(Optional.of(source));
 
         service.transfer(STUDENT_ID, FROM_ID, TO_ID);
@@ -136,7 +136,7 @@ class Ex3TransferServiceTest {
         service.transfer(STUDENT_ID, FROM_ID, TO_ID);
 
         verify(courseRepository)
-                .findByIdWithPessimisticLock(TO_ID);
+                .findByIdForUpdate(TO_ID);
     }
 
     // ------------------------------------------------------------------
@@ -156,7 +156,7 @@ class Ex3TransferServiceTest {
     @Test
     @DisplayName("unknown target course -> ResourceNotFoundException")
     void unknownTargetCourse() {
-        when(courseRepository.findByIdWithPessimisticLock(TO_ID)).thenReturn(Optional.empty());
+        when(courseRepository.findByIdForUpdate(TO_ID)).thenReturn(Optional.empty());
         when(courseRepository.findById(TO_ID)).thenReturn(Optional.empty());
 
         assertThatExceptionOfType(ResourceNotFoundException.class)
@@ -175,7 +175,7 @@ class Ex3TransferServiceTest {
     @Test
     @DisplayName("no enrollment in the source course -> ResourceNotFoundException")
     void notEnrolledInSource() {
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, FROM_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, FROM_ID))
                 .thenReturn(Optional.empty());
 
         assertThatExceptionOfType(ResourceNotFoundException.class)
@@ -188,7 +188,7 @@ class Ex3TransferServiceTest {
     void sourceNotActive() {
         Enrollment completed = Enrollment.create(student, from, NOW);
         completed.recordPass(30, false, NOW);
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, FROM_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, FROM_ID))
                 .thenReturn(Optional.of(completed));
 
         assertThatExceptionOfType(BusinessRuleViolationException.class)
@@ -199,7 +199,7 @@ class Ex3TransferServiceTest {
     @Test
     @DisplayName("already enrolled in the target -> DuplicateResourceException")
     void alreadyInTarget() {
-        when(enrollmentRepository.findByStudentAndCourse(STUDENT_ID, TO_ID))
+        when(enrollmentRepository.findByStudentIdAndCourseId(STUDENT_ID, TO_ID))
                 .thenReturn(Optional.of(Enrollment.create(student, to, NOW)));
 
         assertThatExceptionOfType(DuplicateResourceException.class)
@@ -211,7 +211,7 @@ class Ex3TransferServiceTest {
     @DisplayName("target course is full -> BusinessRuleViolationException")
     void targetFull() {
         Course tiny = aCourse("CS201", 2, NOW.minus(7, ChronoUnit.DAYS), NOW.plus(7, ChronoUnit.DAYS));
-        when(courseRepository.findByIdWithPessimisticLock(TO_ID)).thenReturn(Optional.of(tiny));
+        when(courseRepository.findByIdForUpdate(TO_ID)).thenReturn(Optional.of(tiny));
         when(courseRepository.findById(TO_ID)).thenReturn(Optional.of(tiny));
         when(enrollmentRepository.countOccupiedSeats(TO_ID)).thenReturn(2L);
 
@@ -225,7 +225,7 @@ class Ex3TransferServiceTest {
     void targetWindowClosed() {
         Course closed = aCourse("CS201", 100,
                 NOW.minus(30, ChronoUnit.DAYS), NOW.minus(10, ChronoUnit.DAYS));
-        when(courseRepository.findByIdWithPessimisticLock(TO_ID)).thenReturn(Optional.of(closed));
+        when(courseRepository.findByIdForUpdate(TO_ID)).thenReturn(Optional.of(closed));
         when(courseRepository.findById(TO_ID)).thenReturn(Optional.of(closed));
 
         assertThatExceptionOfType(BusinessRuleViolationException.class)

@@ -9,9 +9,8 @@ import it.unicam.cs.enrollment.exception.ResourceNotFoundException;
 import it.unicam.cs.enrollment.repository.CourseRepository;
 import it.unicam.cs.enrollment.repository.EnrollmentRepository;
 import it.unicam.cs.enrollment.repository.StudentRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -59,7 +58,7 @@ import java.time.Instant;
  *       then change state. It keeps the method readable and means the rollback
  *       is a safety net rather than your primary mechanism.</li>
  *   <li><strong>Locking.</strong> Use
- *       {@code courseRepository.findByIdWithPessimisticLock} for the
+ *       {@code courseRepository.findByIdForUpdate} for the
  *       <em>target</em> course. The seat count you read must not change under
  *       you before you insert. Chapter 3 covers why.</li>
  *   <li><strong>Rich domain model.</strong> Do not set status fields by hand.
@@ -72,7 +71,7 @@ import java.time.Instant;
  * <ul>
  *   <li>{@code clock.instant()} gives you {@code now}. Never
  *       {@code Instant.now()} - the tests pin the clock.</li>
- *   <li>{@code enrollmentRepository.findByStudentAndCourse(studentId, courseId)}
+ *   <li>{@code enrollmentRepository.findByStudentIdAndCourseId(studentId, courseId)}
  *       returns {@code Optional<Enrollment>}.</li>
  *   <li>{@code enrollmentRepository.countOccupiedSeats(courseId)} versus
  *       {@code course.getCapacity()} decides "is it full".</li>
@@ -80,26 +79,19 @@ import java.time.Instant;
  *       the same problems and is the reference implementation to learn from.</li>
  * </ul>
  */
-@ApplicationScoped
+@Service
 public class Ex3TransferService {
 
-    @Inject
-    StudentRepository studentRepository;
+    private final StudentRepository studentRepository;
+    private final CourseRepository courseRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final Clock clock;
 
-    @Inject
-    CourseRepository courseRepository;
-
-    @Inject
-    EnrollmentRepository enrollmentRepository;
-
-    @Inject
-    Clock clock;
-
-    /** CDI needs a no-arg constructor, and RESTEasy needs it to be public. */
-    public Ex3TransferService() {
-    }
-
-    /** Constructor injection, used by the tests. */
+    /**
+     * Constructor injection. Spring uses this automatically because it is the
+     * ONLY constructor - {@code @Autowired} has been optional in that case
+     * since Spring 4.3, and leaving it off is the modern idiom.
+     */
     public Ex3TransferService(StudentRepository studentRepository,
                               CourseRepository courseRepository,
                               EnrollmentRepository enrollmentRepository,

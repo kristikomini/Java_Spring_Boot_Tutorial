@@ -4,9 +4,9 @@ import it.unicam.cs.enrollment.mail.MailConfig;
 import it.unicam.cs.enrollment.mail.domain.MailMessage;
 import it.unicam.cs.enrollment.mail.domain.OutboxMessage;
 import it.unicam.cs.enrollment.mail.repository.MailOutboxRepository;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 
 import java.time.Instant;
@@ -36,19 +36,22 @@ import java.util.Optional;
  *   void processOne(Long id) { ... }   // &lt;-- and the annotation does NOTHING
  *   </pre>
  *
- * <p>It does nothing because interceptors - {@code @Transactional},
- * {@code @Loggable}, security, everything in CDI and EJB - are implemented by a
- * PROXY that wraps the bean. Callers hold the proxy; the bean's own {@code this}
- * is the naked instance behind it. A self-call goes straight to the method and
- * never passes the proxy, so no transaction is started, no log line is written,
- * no security check runs. The code looks right, compiles, deploys, and quietly
- * behaves as if the annotation were a comment.
+ * <p>It does nothing because Spring's declarative features -
+ * {@code @Transactional}, {@code @Cacheable}, {@code @Async},
+ * {@code @PreAuthorize}, the {@code @Loggable} aspect in this codebase - are
+ * all implemented by a PROXY that wraps the bean. Callers hold the proxy; the
+ * bean's own {@code this} is the naked instance behind it. A self-call goes
+ * straight to the method and never passes the proxy, so no transaction is
+ * started, no log line is written, no security check runs. The code looks
+ * right, compiles, starts, and quietly behaves as if the annotation were a
+ * comment.
  *
- * <p>It is one of the most common Jakarta EE and Spring bugs there is, and the
+ * <p>SELF-INVOCATION is the single most common Spring bug there is, and the
  * cure is always the same: move the annotated method to a DIFFERENT bean and
- * inject it, so the call goes through a proxy. That is exactly why this class
- * exists, and splitting it also happens to leave two classes each of which does
- * one thing.
+ * inject it, so the call goes through a proxy. (Self-injection and
+ * {@code AopContext.currentProxy()} both work and both read as workarounds for
+ * a class doing two jobs.) That is exactly why this class exists, and splitting
+ * it also happens to leave two classes each of which does one thing.
  *
  * <h2>Transaction boundaries, spelled out</h2>
  * <pre>
@@ -63,19 +66,13 @@ import java.util.Optional;
  * pool and take the whole application down with it. Never hold a transaction
  * across an external call.
  */
-@ApplicationScoped
+@Service
 public class OutboxProcessor {
 
     private MailOutboxRepository outbox;
     private MailConfig config;
     private Logger log;
 
-    /** Required by CDI for proxying. Never call it yourself. */
-    protected OutboxProcessor() {
-        // required by CDI
-    }
-
-    @Inject
     public OutboxProcessor(MailOutboxRepository outbox, MailConfig config, Logger log) {
         this.outbox = outbox;
         this.config = config;
@@ -83,13 +80,13 @@ public class OutboxProcessor {
     }
 
     /** Ids of messages whose time has come. Its own transaction, deliberately short. */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<Long> findDue(Instant now, int limit) {
         return outbox.findDueIds(now, limit);
     }
 
     /** Ids of messages abandoned mid-send by a dispatcher that is no longer running. */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<Long> findStuck(Instant now, int limit) {
         return outbox.findStuckIds(now.minus(config.getStuckAfter()), limit);
     }
@@ -112,7 +109,7 @@ public class OutboxProcessor {
      * before touching it again. Handing back a value makes that safe by
      * construction instead of by remembering.
      */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<MailMessage> claim(Long id, Instant now) {
         Optional<OutboxMessage> found = outbox.findById(id);
         if (!found.isPresent()) {
@@ -132,13 +129,13 @@ public class OutboxProcessor {
     }
 
     /** The transport accepted it. */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordSuccess(Long id, Instant now) {
         outbox.findById(id).ifPresent(row -> row.markSent(now));
     }
 
     /** The transport refused it; the entity decides between retry and dead-letter. */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordFailure(Long id, String error, boolean permanent, Instant now) {
         outbox.findById(id).ifPresent(row -> {
             row.markFailed(error, permanent, config.getRetryPolicy(), now);
@@ -149,7 +146,7 @@ public class OutboxProcessor {
     }
 
     /** Hand an abandoned message back to the queue. */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean release(Long id, Instant now) {
         Optional<OutboxMessage> found = outbox.findById(id);
         if (!found.isPresent() || !found.get().isStuck(now, config.getStuckAfter())) {

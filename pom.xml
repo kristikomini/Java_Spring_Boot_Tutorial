@@ -1,456 +1,355 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ============================================================================
-  THE PROJECT OBJECT MODEL (POM)
+  THE BUILD FILE
   ============================================================================
-  This single file is the "contract" of a Maven project. It answers four
-  questions that every Java team needs answered the same way:
+  A Maven POM answers four questions, and it is worth reading it with those in
+  mind rather than as configuration soup.
 
-    1. WHO am I?          -> groupId / artifactId / version  (the "GAV coordinates")
-    2. WHAT do I produce? -> <packaging>war</packaging>
+    1. WHO am I?          -> <groupId> + <artifactId> + <version>
+    2. WHAT do I produce? -> <packaging>jar</packaging>
     3. WHAT do I need?    -> <dependencies>
-    4. HOW am I built?    -> <build><plugins>
+    4. HOW is it built?   -> <build><plugins>
 
-  Anyone who clones this repo runs `mvn verify` and gets a byte-identical
-  build. That reproducibility is the whole point of a build tool.
+  The single most important line in this file is the <parent>. Spring Boot's
+  starter parent is a curated BOM - a Bill Of Materials - that has already
+  chosen and tested a compatible version of Hibernate, Jackson, Tomcat, SLF4J,
+  JUnit, Mockito and about three hundred other things. That is why almost no
+  dependency below carries a <version> tag. You are not being lazy by omitting
+  them; you are deliberately deferring to a combination somebody else has
+  already integration-tested.
+
+  The second most important idea is DEPENDENCY SCOPE. `compile` (the default)
+  means "I need this to build and to run". `runtime` means "not on the compiler's
+  classpath, but ship it" - the PostgreSQL driver is the canonical example,
+  because your code should be talking to JDBC interfaces, never to
+  `org.postgresql` classes. `test` means "tests only, never shipped".
+  If you can move a dependency to `runtime`, the compiler will then enforce
+  that you did not accidentally import from it.
   ============================================================================
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
     <modelVersion>4.0.0</modelVersion>
 
     <!--
-      GAV COORDINATES - the globally unique address of this artifact.
-      groupId    : reverse-DNS of the owning organisation. Never invent a random
-                   name here; in industry it maps to your company domain.
-      artifactId : the module name. Kebab-case is the convention.
-      version    : SNAPSHOT = "under development, may change at any time".
-                   A release version (1.0.0) is immutable once published.
+      THE PARENT.
+
+      Inheriting from spring-boot-starter-parent gets you three things at once:
+      the dependency management described above, sensible plugin configuration
+      (the compiler is already set to your Java version, resources are already
+      filtered), and the `spring-boot-maven-plugin` wired to repackage the jar
+      into an executable one.
+
+      `<relativePath/>` - empty on purpose - tells Maven "do not look for this
+      parent in the directory above me, go to the repository". Without it Maven
+      wastes time checking `../pom.xml` and prints a warning.
     -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.0</version>
+        <relativePath/>
+    </parent>
+
     <groupId>it.unicam.cs.enrollment</groupId>
-    <artifactId>enrollment-service</artifactId>
+    <artifactId>spring-boot-tutorial</artifactId>
     <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
 
-    <!--
-      war = Web ARchive. A zip with a WEB-INF/ folder that an application
-      server (WildFly, Payara, WebLogic, TomEE...) knows how to deploy.
-      The alternatives you will meet: jar (library), ear (enterprise archive,
-      legacy), pom (aggregator module).
-    -->
-    <packaging>war</packaging>
-
-    <name>UNICAM Course Enrollment Service</name>
+    <name>Java Spring Boot Tutorial</name>
     <description>
-        A Jakarta EE 11 reference application demonstrating a layered
-        enterprise architecture: JPA persistence, CDI, EJB, JAX-RS,
-        Bean Validation and JTA transactions.
+        A Spring Boot reference application, built to be read: a university
+        course enrollment service with JPA persistence, Spring MVC, validation,
+        transactions and scheduled work - plus the fieldbook, a course that
+        teaches the whole thing chapter by chapter.
     </description>
 
-    <!--
-      PROPERTIES
-      Centralised constants. Declaring every dependency version here (instead
-      of inline) is standard practice: one place to bump versions, and tools
-      like Dependabot/Renovate can parse it.
-    -->
     <properties>
+        <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!--
-          `maven.compiler.release` (Java 9+) is strictly better than the older
-          source/target pair: it also validates that you only call APIs that
-          exist in that JDK version, so you cannot accidentally compile against
-          a newer JDK's methods and blow up at runtime.
+          The exercise tests are the reader's homework. They fail until the
+          exercise is solved, so a normal `mvn test` must not run them - see
+          the `exercises` profile at the bottom for how to turn them on.
         -->
-        <maven.compiler.release>21</maven.compiler.release>
-
-        <!-- JUnit 5 tags excluded from a normal build. The "exercise" tests in
-             src/test/.../exercises are meant to fail until you solve them, so
-             they must not pollute the application's own pass/fail signal.
-             The `exercises` profile below flips this to run only those. -->
         <excluded.test.groups>exercise</excluded.test.groups>
 
-        <!--
-          Jakarta EE platform.
-
-          THIS FILE HAS TWO KINDS OF VERSION, AND THEY UPGRADE BY DIFFERENT RULES.
-          Getting the distinction wrong is the most common way a working Jakarta
-          EE build starts failing for reasons that look unrelated.
-
-            (a) SERVER-MIRRORED. Anything the application server also ships -
-                the EE API, Hibernate, RESTEasy, Hibernate Validator, Yasson.
-                These are `provided` or `test` here precisely BECAUSE WildFly
-                owns them at runtime, so the number below is not a free choice:
-                it is a copy of what our WildFly ships, kept in step so that a
-                unit test and a deployed request execute the same code. Bumping
-                one of these on its own does not upgrade anything - it only
-                makes the test classpath drift away from production, which is
-                how you get a green build and a broken deployment. They move
-                when, and only when, the WildFly tag in docker/wildfly/Dockerfile
-                moves. Today that tag is 41.0.1.Final, which ships:
-
-                    Jakarta EE 11 (jakarta.persistence 3.2.0,
-                                   jakarta.ws.rs 4.0.0, CDI 4.1.0)
-                    Hibernate ORM        7.4.5.Final
-                    Hibernate Validator  9.1.1.Final
-                    RESTEasy             7.0.3.Final
-                    Yasson               3.0.4
-
-            (b) BUILD-LOCAL. Anything that exists only on your machine and never
-                inside the WAR - JUnit, Mockito, AssertJ, H2, the Maven plugins,
-                the Flyway plugin and its JDBC driver. Nothing in production
-                depends on these, so they upgrade freely and often should.
-
-          The ceiling on both is `maven.compiler.release` above. That baseline
-          is now 21, which is what unlocked this whole row of versions: Jakarta
-          EE 11, Hibernate 7, Hibernate Validator 9, RESTEasy 7, Expressly 6 and
-          Flyway 13 all require Java 17 as a minimum, and none of them could be
-          adopted while the project compiled for 11. The Java version is not a
-          cosmetic setting - it is the gate on the entire dependency tree.
-        -->
-        <version.jakartaee.api>11.0.0</version.jakartaee.api>
-
-        <!-- Logging facade. Provided by WildFly at runtime. -->
-        <version.slf4j>2.0.19</version.slf4j>
-
-        <!-- Test stack. Build-local (b) - upgrade at will. -->
-        <version.junit.jupiter>5.14.4</version.junit.jupiter>   <!-- 6.x needs Java 17 -->
-        <version.mockito>5.23.0</version.mockito>
-        <version.assertj>3.27.7</version.assertj>               <!-- 4.x needs Java 17 -->
-        <version.h2>2.4.240</version.h2>
-
-        <!-- Test stack. Server-mirrored (a) - these track WildFly 41.0.1.Final
-             and must not be bumped independently of the Dockerfile tag. -->
-        <version.hibernate>7.4.5.Final</version.hibernate>
-        <version.hibernate.validator>9.1.1.Final</version.hibernate.validator>
-        <version.expressly>6.0.0</version.expressly>
-        <version.yasson>3.0.4</version.yasson>
-        <version.resteasy>7.0.3.Final</version.resteasy>
-
-        <!--
-          Schema migrations. Deliberately a BUILD-time tool here, not a runtime
-          dependency: nothing Flyway-related is packaged into the WAR. See the
-          `flyway` profile at the bottom of this file, and the fieldbook's
-          migrations chapter for why startup-time migration races on a
-          replicated deployment.
-
-          Flyway 10 was a repackaging as much as a release: support for each
-          database moved OUT of flyway-core into its own artifact. So the plugin
-          alone can no longer speak to PostgreSQL - `flyway-database-postgresql`
-          has to be declared beside the JDBC driver in the profile below, or
-          every goal fails with "No database found to handle jdbc:postgresql".
-          Nothing warns you at configuration time.
-        -->
+        <!-- Versions the parent does not manage, so they must be stated. -->
+        <version.springdoc>2.8.5</version.springdoc>
+        <version.mapstruct>1.6.3</version.mapstruct>
+        <version.resilience4j>2.3.0</version.resilience4j>
+        <version.flapdoodle>4.20.0</version.flapdoodle>
         <version.plugin.flyway>13.5.0</version.plugin.flyway>
         <version.postgresql.driver>42.7.13</version.postgresql.driver>
-
-        <!-- Build plugins -->
-        <version.plugin.compiler>3.16.0</version.plugin.compiler>
-        <version.plugin.war>3.5.1</version.plugin.war>
-        <version.plugin.surefire>3.6.0</version.plugin.surefire>
-        <version.plugin.failsafe>3.6.0</version.plugin.failsafe>
-        <version.plugin.clean>3.5.0</version.plugin.clean>
-        <version.plugin.resources>3.5.0</version.plugin.resources>
-
-        <!--
-          Where `mvn package` drops the .war. We point it at a folder that
-          docker-compose bind-mounts into WildFly's deployment scanner, so a
-          rebuild hot-redeploys with no container restart.
-        -->
-        <deployment.directory>${project.basedir}/docker/deployments</deployment.directory>
     </properties>
 
     <dependencies>
 
-        <!-- ================================================================
-             THE PLATFORM API  -  scope: provided
-             ================================================================
-             This one artifact contains every Jakarta EE 11 API: JPA, CDI,
-             EJB, JAX-RS, Bean Validation, JSON-B, Servlet, JTA...
+        <!--
+          ====================================================================
+          THE STARTERS
+          ====================================================================
+          A "starter" contains no code of its own. It is a pom whose only job
+          is to pull in a coherent set of libraries plus the auto-configuration
+          that wires them together. `spring-boot-starter-web` alone brings in
+          Spring MVC, Jackson, validation glue and an embedded Tomcat, and
+          arranges for an HTTP port to be listening when `main()` runs.
 
-             `provided` is the single most important scope to understand here.
-             It means: "compile against it, but do NOT package it into the WAR,
-             because the application server already provides the implementation
-             at runtime."
-
-             If you shipped these classes inside your WAR you would get
-             ClassCastExceptions and LinkageErrors, because the server would
-             load its copy and yours simultaneously.
+          This is the single biggest day-to-day difference from a Jakarta EE
+          build, where those pieces come from the application server instead
+          and are therefore `provided` rather than bundled.
         -->
         <dependency>
-            <groupId>jakarta.platform</groupId>
-            <artifactId>jakarta.jakartaee-api</artifactId>
-            <version>${version.jakartaee.api}</version>
-            <scope>provided</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- ================================================================
-             LOGGING FACADE  -  scope: provided
-             ================================================================
-             SLF4J is an *interface only*. At runtime WildFly binds it to its
-             own JBoss LogManager. This "facade" pattern is universal in the
-             JVM world: your code never depends on a concrete logging engine,
-             so ops can swap Logback/Log4j2/JUL without touching source.
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          Actuator adds operational endpoints - /actuator/health, /metrics,
+          /info - without you writing any of them. In production a readiness
+          probe hitting /actuator/health/readiness is how the orchestrator
+          knows whether to send traffic to this instance.
         -->
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${version.slf4j}</version>
-            <scope>provided</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- ================================================================
-             TEST DEPENDENCIES  -  scope: test
-             ================================================================
-             `test` scope is on the test classpath only; never shipped.
+        <!--
+          Aspect-oriented programming, used here by the @Loggable aspect in
+          common/logging. Spring's declarative features - @Transactional,
+          @Cacheable, @Async - are all built on the same proxying machinery,
+          so understanding this one aspect explains the rest of them.
         -->
-
-        <!-- JUnit 5 ("Jupiter") - the test engine and assertions. -->
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${version.junit.jupiter}</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!--
+          Mail. The fieldbook's password-reset flow queues messages in an
+          outbox table and a scheduled job delivers them, so this is here for
+          the jakarta.mail API that mail/transport/SmtpMailTransport talks to
+          directly. Locally there is no SMTP server and the logging transport
+          is used instead - see MailConfig.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!--
+          Flyway runs the SQL migrations in src/main/resources/db/migration on
+          startup, so the schema is versioned in git next to the code that
+          expects it. `spring.jpa.hibernate.ddl-auto` stays `validate`: Flyway
+          owns the schema, Hibernate only checks that the entities agree with
+          it. Letting Hibernate generate the schema is fine for a demo and a
+          liability for anything that holds real data.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Interactive API documentation at /swagger-ui.html, generated from the controllers. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${version.springdoc}</version>
+        </dependency>
+
+        <!-- Prometheus scrape endpoint, exposed through Actuator. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          MapStruct generates the entity -> DTO mapper implementations at
+          COMPILE time from the interfaces in web/mapper. Generated code you
+          can read and step through, with no reflection at runtime; see the
+          annotationProcessorPaths block further down, which is what actually
+          switches the generator on.
+        -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${version.mapstruct}</version>
+        </dependency>
+
+        <!--
+          MongoDB, used by the read-model projection in `document`. It is off
+          unless the `mongo` profile is active - the point of the package is to
+          show a document store beside the relational one, not to require it.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <!-- Circuit breaker and retry around the outbound notification call. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${version.resilience4j}</version>
+        </dependency>
+
+        <!--
+          `runtime`, not `compile`. Application code never names a PostgreSQL
+          class - it talks to JDBC and JPA interfaces - and this scope is how
+          the compiler enforces that.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          ====================================================================
+          TEST DEPENDENCIES
+          ====================================================================
+          `spring-boot-starter-test` is JUnit 5, AssertJ, Mockito, Hamcrest,
+          JSONassert and Spring's own test support in one line.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Mockito - creates fake collaborators so a unit test exercises
-             exactly one class and nothing else. -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${version.mockito}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>${version.mockito}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- AssertJ - fluent assertions. `assertThat(x).isEqualTo(y)` reads
-             like English and produces far better failure messages. -->
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <version>${version.assertj}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- A JAX-RS IMPLEMENTATION, for tests only.
-             `jakarta.jakartaee-api` is `provided`: it gives you the interfaces
-             to compile against, and nothing that runs. In production WildFly
-             supplies RESTEasy. In a plain JUnit test there is no server, so
-             `Response.ok(...).build()` fails with
-
-                 ClassNotFoundException: Provider for
-                 jakarta.ws.rs.ext.RuntimeDelegate cannot be found
-
-             This dependency plays the container's part on the test classpath.
-             It is the `provided` scope lesson from fieldbook chapter 1, met in
-             practice: an annotation-only classpath cannot execute anything.
-             Used by the exercise tests in src/test/.../exercises. -->
-        <dependency>
-            <groupId>org.jboss.resteasy</groupId>
-            <artifactId>resteasy-core</artifactId>
-            <version>${version.resteasy}</version>
-            <scope>test</scope>
-            <exclusions>
-                <!-- RESTEasy drags in BOTH jandex artifacts: the legacy
-                     org.jboss:jandex:2.4.4 and io.smallrye:jandex:3.1.2. They
-                     share the package name org.jboss.jandex, so whichever wins
-                     the classpath order decides. Hibernate calls
-                     Indexer.indexWithSummary(), which exists only in 3.x, so the
-                     legacy jar shadowing it breaks every JPA test with a
-                     NoSuchMethodError - an error that names neither jandex nor
-                     RESTEasy. Excluding the old coordinate leaves 3.1.2 alone.
-
-                     Worth remembering: two jars can share a package, and then
-                     "which class is loaded" is decided by build order rather
-                     than by anything you wrote. This is exactly the problem
-                     WildFly's modular classloader (see configure.cli) exists to
-                     prevent at runtime. -->
-                <exclusion>
-                    <groupId>org.jboss</groupId>
-                    <artifactId>jandex</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Hibernate + H2: lets repository tests run against a real (in-memory)
-             SQL database in milliseconds, with no Docker and no app server.
-             In production WildFly supplies Hibernate itself - that is why this
-             is test-scoped and not provided. -->
-        <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
-            <version>${version.hibernate}</version>
-            <scope>test</scope>
-        </dependency>
+        <!--
+          In-memory database, for the fast slice tests AND for the `demo`
+          profile - `mvn spring-boot:run -Dspring-boot.run.profiles=demo`
+          starts the whole application on H2 with seed data and no Docker.
+          That second use is why the scope is `runtime` rather than `test`:
+          with `test` the demo profile fails at startup with
+          "Cannot load driver class: org.h2.Driver", which is a genuinely
+          confusing error for a missing scope.
+        -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <version>${version.h2}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- An embedded MongoDB for the document tests, so CI needs no Mongo. -->
+        <dependency>
+            <groupId>de.flapdoodle.embed</groupId>
+            <artifactId>de.flapdoodle.embed.mongo.spring3x</artifactId>
+            <version>${version.flapdoodle}</version>
             <scope>test</scope>
         </dependency>
 
         <!--
-          Yasson - the reference implementation of Jakarta JSON Binding.
-
-          Needed for a subtle reason worth understanding. `provided` dependencies
-          ARE on the test classpath (they have to be - the code would not
-          compile otherwise). So during tests Hibernate sees the JSON-B *API*
-          from jakarta.jakartaee-api, decides it can support JSON column mapping,
-          and calls JsonbBuilder.create() - which throws, because an API with no
-          implementation behind it is useless. The startup then fails with
-          "Could not initialize class ...JakartaJsonIntegration".
-
-          At runtime this never happens: WildFly ships Yasson. Supplying it here
-          simply makes the test classpath resemble the real one. This mismatch
-          between "compiles against" and "runs against" is a classic source of
-          works-on-my-machine bugs.
+          Testcontainers starts a REAL PostgreSQL in Docker for the integration
+          tests. The distinction matters: H2 in Postgres-compatibility mode
+          will happily accept SQL that Postgres rejects, so a test suite that
+          only ever sees H2 gives you confidence you have not earned.
         -->
         <dependency>
-            <groupId>org.eclipse</groupId>
-            <artifactId>yasson</artifactId>
-            <version>${version.yasson}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Hibernate Validator = the reference implementation of Bean
-             Validation. Needed to unit-test our custom constraints outside a
-             container. Expressly is the Jakarta Expression Language engine it
-             uses to interpolate {placeholders} in violation messages. -->
-        <dependency>
-            <groupId>org.hibernate.validator</groupId>
-            <artifactId>hibernate-validator</artifactId>
-            <version>${version.hibernate.validator}</version>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.glassfish.expressly</groupId>
-            <artifactId>expressly</artifactId>
-            <version>${version.expressly}</version>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- SLF4J needs a binding on the test classpath or it logs nothing.
-             `simple` prints to stdout, which is all a test run needs. -->
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${version.slf4j}</version>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
-        <!--
-          finalName controls the artifact filename. Because WildFly derives the
-          web context root from it, `enrollment.war` is served at
-          http://localhost:8080/enrollment
-        -->
         <finalName>enrollment</finalName>
 
         <plugins>
+            <!--
+              Repackages the plain jar into an executable one with a nested
+              class loader, so `java -jar target/enrollment.jar` starts the
+              whole application - embedded Tomcat included. This is the plugin
+              that makes "the server lives inside the jar" true.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>${version.plugin.compiler}</version>
                 <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${version.mapstruct}</version>
+                        </path>
+                    </annotationProcessorPaths>
                     <compilerArgs>
-                        <!-- Keeps method parameter names in the bytecode.
-                             Frameworks (JAX-RS, JPA, JSON-B) can then report
-                             real names instead of arg0/arg1. -->
+                        <!--
+                          `unmappedTargetPolicy=ERROR` turns "you added a field
+                          to the DTO and forgot to map it" from a silent null
+                          into a compile failure. It is the reason to use a
+                          generator rather than hand-written mappers.
+                        -->
+                        <arg>-Amapstruct.unmappedTargetPolicy=ERROR</arg>
+                        <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                        <!-- Keep parameter names in the bytecode, for Spring MVC binding. -->
                         <arg>-parameters</arg>
-                        <!-- Turn on all warnings; a clean build is a habit
-                             worth forming early. -->
-                        <arg>-Xlint:all</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-war-plugin</artifactId>
-                <version>${version.plugin.war}</version>
-                <configuration>
-                    <!-- Jakarta EE annotations replaced most of web.xml, so a
-                         missing one is not an error. -->
-                    <failOnMissingWebXml>false</failOnMissingWebXml>
-                    <!-- Drop the WAR straight into the folder Docker watches. -->
-                    <outputDirectory>${deployment.directory}</outputDirectory>
-                </configuration>
-            </plugin>
-
-            <!-- Writes the .dodeploy marker next to the WAR, which is what
-                 actually triggers WildFly to deploy it.
-
-                 The scanner is configured (docker/wildfly/configure.cli, §5)
-                 to be marker-driven rather than timestamp-driven, because the
-                 timestamp comparison is unreliable across a Docker bind mount
-                 on Windows and macOS and puts the server into an endless
-                 redeploy loop. This execution is what keeps `mvn package` a
-                 single command in spite of that.
-
-                 It is bound to `package` and declared AFTER the war plugin, so
-                 the marker is never written before the archive it refers to -
-                 asking WildFly to deploy a half-written WAR fails in confusing
-                 ways. Ordering within a phase follows declaration order here. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>${version.plugin.resources}</version>
-                <executions>
-                    <execution>
-                        <id>write-dodeploy-marker</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${deployment.directory}</outputDirectory>
-                            <overwrite>true</overwrite>
-                            <resources>
-                                <resource>
-                                    <directory>${project.basedir}/src/main/wildfly</directory>
-                                    <includes>
-                                        <include>enrollment.war.dodeploy</include>
-                                    </includes>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- Surefire runs *unit* tests (fast, isolated) during `mvn test`.
-                 Convention: classes named *Test. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>${version.plugin.surefire}</version>
-                <!-- Tests tagged "exercise" are unsolved by design: they fail
-                     until you implement the stub they describe. Excluding them
-                     by default keeps `mvn verify` an honest signal about the
-                     application. Run them with -Pexercises. -->
                 <configuration>
                     <excludedGroups>${excluded.test.groups}</excludedGroups>
                 </configuration>
             </plugin>
 
-            <!-- Failsafe runs *integration* tests during `mvn verify`, after
-                 packaging. Convention: classes named *IT. Splitting the two is
-                 standard: developers run `mvn test` all day, CI runs
-                 `mvn verify`. -->
+            <!--
+              Failsafe runs *IT.java in the `integration-test` phase, AFTER
+              packaging, and - unlike Surefire - does not fail the build the
+              instant a test fails; it records the failure and lets `verify`
+              report it, so the environment it started can still be torn down.
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>${version.plugin.failsafe}</version>
                 <configuration>
                     <excludedGroups>${excluded.test.groups}</excludedGroups>
                 </configuration>
@@ -463,50 +362,19 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <!-- `mvn clean` must also wipe the deployment folder, otherwise a
-                 stale WAR keeps being served. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-clean-plugin</artifactId>
-                <version>${version.plugin.clean}</version>
-                <configuration>
-                    <filesets>
-                        <fileset>
-                            <directory>${deployment.directory}</directory>
-                            <includes>
-                                <include>*.war</include>
-                                <include>*.deployed</include>
-                                <include>*.failed</include>
-                                <include>*.undeployed</include>
-                                <include>*.isdeploying</include>
-                                <include>*.pending</include>
-                            </includes>
-                        </fileset>
-                    </filesets>
-                </configuration>
-            </plugin>
-
         </plugins>
     </build>
 
-    <!-- =====================================================================
-         PROFILES
-         =====================================================================
-         A profile is a named set of overrides, activated with -P. This one
-         inverts the tag filter so that ONLY the exercise tests run:
-
-             mvn verify -Pexercises                     all exercises
-             mvn test   -Pexercises -Dtest=Ex2*         one of them
-
-         They fail until you implement the corresponding stub. That is the
-         point: the failing test is the specification.
-         ===================================================================== -->
     <profiles>
+        <!--
+          `mvn test -Pexercises` runs ONLY the exercise tests - the homework in
+          src/main/java/.../exercises. They fail until you implement the method
+          bodies, which is the point; the default build skips them so that a
+          red build always means something is genuinely broken.
+        -->
         <profile>
             <id>exercises</id>
             <properties>
-                <!-- Exclude nothing... -->
                 <excluded.test.groups></excluded.test.groups>
             </properties>
             <build>
@@ -515,7 +383,6 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
-                            <!-- ...and include only the exercises. -->
                             <groups>exercise</groups>
                         </configuration>
                     </plugin>
@@ -531,49 +398,22 @@
         </profile>
 
         <!--
-          =====================================================================
-          `flyway` - versioned schema migrations
-          =====================================================================
-          Not active by default, so `mvn verify` and `mvn package` are entirely
-          unaffected and the WAR gains nothing.
+          The application runs its own migrations at startup, so this profile
+          is only for inspecting and repairing the schema by hand:
 
-            mvn -Pflyway flyway:info       what has been applied, and what is pending
-            mvn -Pflyway flyway:migrate    apply everything pending, in order
-            mvn -Pflyway flyway:validate   do the applied files still match the repo?
+              mvn -Pflyway flyway:info      (read-only, safe)
+              mvn -Pflyway flyway:validate
 
-          The connection defaults below match docker-compose.yml. A native
-          PostgreSQL on another port needs one flag:
-
-            mvn -Pflyway flyway:migrate -Dflyway.url=jdbc:postgresql://localhost:5433/enrollment
-
-          IF YOUR DATABASE ALREADY HAS TABLES - which it does, because Hibernate
-          created them with hbm2ddl "update" - then `flyway:migrate` will fail on
-          V1 with "relation already exists", and record V1 as failed. Run
-          `flyway:baseline` FIRST: it stamps the current schema as version 1
-          without executing anything, so only V2 onwards are applied. Adopting
-          migrations on a live schema is exactly this one command, and forgetting
-          it is the classic first mistake.
-
-          The password sitting in this file is fine for a local learning stack
-          and would be a finding in a real review - real pipelines inject
-          `flyway.password` from a secret store. The security chapter makes the
-          general version of this argument.
+          It points at the Docker Postgres on port 55433.
         -->
         <profile>
             <id>flyway</id>
-
             <properties>
                 <flyway.url>jdbc:postgresql://localhost:55433/enrollment</flyway.url>
                 <flyway.user>enrollment</flyway.user>
                 <flyway.password>enrollment</flyway.password>
-                <!--
-                  Where the migration files live. This is Flyway's default, but
-                  stating it makes the convention visible to a reader who has
-                  never used the tool.
-                -->
                 <flyway.locations>filesystem:src/main/resources/db/migration</flyway.locations>
             </properties>
-
             <build>
                 <plugins>
                     <plugin>
@@ -581,22 +421,11 @@
                         <artifactId>flyway-maven-plugin</artifactId>
                         <version>${version.plugin.flyway}</version>
                         <dependencies>
-                            <!--
-                              The JDBC driver is a dependency of the PLUGIN, not
-                              of the application. WildFly supplies the driver at
-                              runtime as a server module, which is why it appears
-                              nowhere else in this file.
-                            -->
                             <dependency>
                                 <groupId>org.postgresql</groupId>
                                 <artifactId>postgresql</artifactId>
                                 <version>${version.postgresql.driver}</version>
                             </dependency>
-                            <!--
-                              Flyway 10+ only: the PostgreSQL dialect itself.
-                              The driver above lets Flyway CONNECT; this lets it
-                              understand what it connected to. Both are required.
-                            -->
                             <dependency>
                                 <groupId>org.flywaydb</groupId>
                                 <artifactId>flyway-database-postgresql</artifactId>
@@ -608,5 +437,4 @@
             </build>
         </profile>
     </profiles>
-
 </project>
