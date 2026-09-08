@@ -34,6 +34,18 @@
       ],
       "port": 8280,
       "url": "http://localhost:8280"
+    },
+    {
+      "name": "fieldbook-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "src/main/resources/static",
+        "-c-1"
+      ],
+      "port": 4286,
+      "autoPort": true
     }
   ]
 }
