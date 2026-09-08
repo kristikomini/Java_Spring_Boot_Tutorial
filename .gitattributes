@@ -15,3 +15,16 @@
 *.war binary
 *.jar binary
 *.png binary
+
+# ---------------------------------------------------------------------------
+# Language statistics.
+#
+# tutorial.html is a single 2.5 MB generated course page. On its own it
+# outweighed the 1.2 MB of Java under src/, so GitHub labelled this repository
+# "HTML" and the Jakarta EE work did not show up in the language bar or in
+# language-filtered search.
+#
+# linguist-documentation keeps the page served and versioned, but leaves it
+# out of the language stats.
+# ---------------------------------------------------------------------------
+src/main/resources/static/tutorial.html linguist-documentation
