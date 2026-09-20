@@ -753,3 +753,15 @@ path is reachable. Then <http://localhost:4280>, or
 | [CERTIFICATIONS.md](docs/CERTIFICATIONS.md) | OCP, Spring, AWS, CKAD — cost, time, and honest value |
 | [ADJACENT-TECH.md](docs/ADJACENT-TECH.md) | AI/ML, blockchain, mobile, IoT, the analytics vocabulary, SOAP |
 | [READING-ADVERTS.md](docs/READING-ADVERTS.md) | Filter adverts versus brochure adverts |
+
+---
+
+## Licence
+
+[MIT](LICENSE). Use it, fork it, teach from it, ship pieces of it in something
+commercial — attribution in the licence text is the only condition.
+
+The point of saying so explicitly: a repository with no licence file is not
+"open by default". Under the Berne Convention it is copyrighted the moment it
+is written, and silence means *all rights reserved* — nobody may legally copy
+or reuse it, which is the opposite of what a public teaching repository is for.

@@ -66,6 +66,21 @@
         teaches the whole thing chapter by chapter.
     </description>
 
+    <!--
+        Stating the licence in the POM as well as in LICENSE is not redundant.
+        LICENSE is what GitHub reads to label the repository; this block is what
+        build and dependency-scanning tools read. A project published without it
+        shows up as "unknown licence" in exactly the automated report that
+        decides whether a company is allowed to use it.
+    -->
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
