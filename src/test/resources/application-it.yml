@@ -11,6 +11,25 @@
 # ===========================================================================
 
 spring:
+  # The integration tests exercise the REST API over a real PostgreSQL. MongoDB
+  # has no part in that, but the embedded flapdoodle mongod is on the test
+  # classpath, so Boot auto-configures it for every @SpringBootTest and then
+  # fails with "Set the de.flapdoodle.mongodb.embedded.version property".
+  #
+  # The `test` profile excludes the same four entries for the same reason. This
+  # profile needed its own copy because profile-specific properties REPLACE a
+  # base list rather than merging with it - there is no inheritance between two
+  # sibling profiles.
+  #
+  # CourseDocumentTest re-enables MongoDB under the `mongo` profile, which is
+  # the only place a real mongod is worth starting.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
+      - de.flapdoodle.embed.mongo.spring.autoconfigure.EmbeddedMongoAutoConfiguration
+
   flyway:
     # RUN THE REAL MIGRATIONS.
     #
