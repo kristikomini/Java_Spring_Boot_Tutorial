@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpEntity;
@@ -101,6 +102,16 @@ class EnrollmentApiIT {
 
     @LocalServerPort
     private int port;
+
+    /**
+     * The application serves under {@code /enrollment}, not at the root - see
+     * {@code server.servlet.context-path} in application.yml. Read rather than
+     * hard-coded, so that changing the context path moves these tests with it
+     * instead of turning every assertion into a 404 against Tomcat's own HTML
+     * error page.
+     */
+    @Value("${server.servlet.context-path:}")
+    private String contextPath;
 
     @Autowired
     private TestRestTemplate rest;
@@ -422,7 +433,7 @@ class EnrollmentApiIT {
     }
 
     private String url(String path) {
-        return "http://localhost:" + port + path;
+        return "http://localhost:" + port + contextPath + path;
     }
 
     private JsonNode parse(String json) {
