@@ -16,6 +16,14 @@ about backend Java.
 capacity limits, enrollment windows, prerequisites and academic standing. Exams
 produce grades on the Italian 18–30 scale, with *30 e lode*.
 
+> **One thing to know before you read the source.** `src/main/java/.../exercises/`
+> is full of `TODO` and `UnsupportedOperationException`, on purpose. Those six
+> classes are *exercises* — questions with 88 tests that specify the answers —
+> not unfinished work. They are excluded from the default build, which is why
+> `mvn verify` is green while they throw. Everything else under `src/main/java`
+> is complete. See [docs/EXERCISES.md](docs/EXERCISES.md), or
+> `mvn test -Pexercises` to try them.
+
 ---
 
 ## What you will learn
@@ -102,7 +110,7 @@ PATH — which is why `java -version` can disagree with `mvn -v`, and why `mvn -
 is the one to trust.
 
 ```bash
-# 1. Build and test — 226 unit tests plus the integration tests
+# 1. Build and test — 228 unit tests plus the integration tests
 mvn clean verify
 
 # 2. Start PostgreSQL, Mailpit and the application
@@ -535,7 +543,7 @@ into the log, warns that it has done so, and reports itself as `log only` at
 ## Testing
 
 ```bash
-mvn test      # 226 unit and slice tests — no database, no Docker
+mvn test      # 228 unit and slice tests — no database, no Docker
 mvn verify    # + the integration tests
 ```
 
@@ -595,7 +603,7 @@ practise, roughly in the order worth doing them:
 
 | | |
 |---|---|
-| **[docs/EXERCISES.md](docs/EXERCISES.md)** | Six stubs and 98 failing tests that specify them: a JPQL query, a domain rule with exacting boundaries, an atomic transfer use case, the endpoint that exposes it, the ten coding katas a junior interview actually asks, and an aggregate report with `JOIN`/`GROUP BY`/`HAVING`. Answer key included. `mvn test -Pexercises` |
+| **[docs/EXERCISES.md](docs/EXERCISES.md)** | Six stubs and 88 failing tests that specify them: a JPQL query, a domain rule with exacting boundaries, an atomic transfer use case, the endpoint that exposes it, the ten coding katas a junior interview actually asks, and an aggregate report with `JOIN`/`GROUP BY`/`HAVING`. Answer key included. `mvn test -Pexercises` |
 | **[docs/BREAKING.md](docs/BREAKING.md)** | `./scripts/break.sh` introduces one classic bug at a time — a broken fetch plan, a silent N+1, a missing row lock, a test that lies — and puts it back. |
 | **[docs/DEBUGGING.md](docs/DEBUGGING.md)** | Attach to the running application on port 5005 and step over the closing brace of `enroll()` to watch entities detach. |
 | **[docs/DEPLOY-HETZNER.md](docs/DEPLOY-HETZNER.md)** | Put the whole stack on a public HTTPS URL for about €5 a month: one VPS, Caddy in front of the application in front of PostgreSQL. The interesting part is not the deploy, it is the subtraction — the production stack is the development one with the exposed database and the mail catcher taken away, and with the two settings that make a session cookie actually `Secure` behind a proxy turned on. |
