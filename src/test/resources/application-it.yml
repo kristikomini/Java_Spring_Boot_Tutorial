@@ -14,15 +14,25 @@ spring:
   flyway:
     # RUN THE REAL MIGRATIONS.
     #
-    # Not a schema Hibernate invented from the entity classes in this module -
-    # the actual SQL files the Jakarta EE application deploys, from the root
-    # project. A relative filesystem: location, because these files live outside
-    # this module and are deliberately not copied.
+    # Not a schema Hibernate invented from the entity classes - the actual SQL
+    # files the application ships, so the integration tests validate the
+    # mappings against the schema that production will really have. That pairing
+    # with `ddl-auto: validate` below is the whole point of this profile: a
+    # mapping that has drifted from the migrations fails here rather than on
+    # deployment.
     #
-    # Flyway is test-scoped in pom.xml, so nothing here reaches production. The
-    # root project runs the same files through its `flyway` Maven profile.
+    # classpath:, not a relative filesystem: path. This used to read
+    #
+    #     filesystem:../src/main/resources/db/migration
+    #
+    # which was correct when the Spring service was a module in a subdirectory
+    # and `..` meant the repository root. After the move to a single project at
+    # the root, `..` pointed outside the repository, Flyway resolved no
+    # migrations, and every table was missing - but only where the tests
+    # actually run, since they need Docker and skip themselves without it. A
+    # classpath location does not care where the module sits.
     enabled: true
-    locations: filesystem:../src/main/resources/db/migration
+    locations: classpath:db/migration
 
   datasource:
     hikari:
