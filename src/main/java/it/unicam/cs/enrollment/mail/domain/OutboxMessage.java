@@ -10,6 +10,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Index;
 import jakarta.persistence.Lob;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.NotBlank;
@@ -109,8 +111,21 @@ public class OutboxMessage extends BaseEntity {
     @Column(name = "subject", nullable = false, length = MAX_SUBJECT)
     private String subject;
 
-    /** {@code @Lob} so PostgreSQL gets {@code text} rather than a length limit. */
+    /**
+     * A {@code text} column on PostgreSQL, with no length limit to get wrong.
+     *
+     * <p>{@code @Lob} alone is NOT enough, and this is a genuine Hibernate 5 to
+     * 6 breaking change. Under Hibernate 5 a {@code @Lob String} mapped to
+     * {@code text}. Under Hibernate 6 it maps to {@code oid} - a PostgreSQL
+     * large object, stored out of line in {@code pg_largeobject} with the column
+     * holding only a reference. Against a {@code TEXT} column that fails schema
+     * validation with "found [text], but expecting [oid]".
+     *
+     * <p>{@code @JdbcTypeCode(SqlTypes.LONGVARCHAR)} is the Hibernate 6 way to
+     * ask for the old behaviour: a plain, inline, unbounded {@code text}.
+     */
     @Lob
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @NotBlank
     @Size(max = MAX_BODY)
     @Column(name = "body", nullable = false)

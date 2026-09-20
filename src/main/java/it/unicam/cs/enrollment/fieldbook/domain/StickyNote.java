@@ -8,6 +8,8 @@ import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.Table;
@@ -81,11 +83,20 @@ public class StickyNote extends BaseEntity {
     private String chapterId;
 
     /**
-     * {@code @Lob} maps to {@code text} on PostgreSQL. A {@code VARCHAR(4000)}
-     * would work too; the difference matters mostly when the limit turns out to
-     * be wrong, and a text column has no limit to be wrong about.
+     * A {@code text} column on PostgreSQL, with no length limit to get wrong.
+     *
+     * <p>{@code @Lob} alone is NOT enough, and this is a genuine Hibernate 5 to
+     * 6 breaking change. Under Hibernate 5 a {@code @Lob String} mapped to
+     * {@code text}. Under Hibernate 6 it maps to {@code oid} - a PostgreSQL
+     * large object, stored out of line in {@code pg_largeobject} with the column
+     * holding only a reference. Against a {@code TEXT} column that fails schema
+     * validation with "found [text], but expecting [oid]".
+     *
+     * <p>{@code @JdbcTypeCode(SqlTypes.LONGVARCHAR)} is the Hibernate 6 way to
+     * ask for the old behaviour: a plain, inline, unbounded {@code text}.
      */
     @Lob
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Size(max = MAX_BODY)
     @Column(name = "body", nullable = false)
     private String body;
