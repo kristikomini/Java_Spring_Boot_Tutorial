@@ -30,7 +30,7 @@ import java.time.Instant;
  *       errors live precisely there and nowhere else.</li>
  *   <li><strong>Time as a parameter.</strong> {@code now} is passed in rather
  *       than read from the system clock, so the tests are deterministic. That is
- *       the same idea as the injected {@code Clock} in {@code ClockProducer}.</li>
+ *       the same idea as the injected {@code Clock} in {@code ClockConfig}.</li>
  * </ul>
  *
  * <h2>The exact contract</h2>

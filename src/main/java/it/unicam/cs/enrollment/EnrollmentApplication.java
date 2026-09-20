@@ -9,9 +9,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * WHERE THE SERVER WENT
  * ============================================================================
  * This class is the entire answer to the question fieldbook chapter 16 opens
- * with. The Jakarta EE application has no {@code main} method anywhere: WildFly
- * is the process, and the WAR is something you hand to it. Here the application
- * IS the process, and Tomcat is a library it starts.
+ * with. A Jakarta EE application has no {@code main} method anywhere: the
+ * application server is the process, and the WAR is something you hand to it.
+ * Here the application IS the process, and Tomcat is a library it starts.
  *
  * <p>{@code @SpringBootApplication} is three annotations in a trench coat, and
  * being able to name all three is a standard interview question:

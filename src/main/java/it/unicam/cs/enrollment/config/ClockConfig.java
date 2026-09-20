@@ -8,8 +8,8 @@ import java.time.Clock;
 /**
  * Supplies the application clock.
  *
- * <p>The direct counterpart of ClockProducer in the Jakarta EE application, and
- * the translation is worth staring at for a moment because it is chapter 18 in
+ * <p>The CDI counterpart of this class is a {@code @Produces} method, and the
+ * translation is worth staring at for a moment because it is chapter 18 in
  * miniature:
  *
  * <pre>

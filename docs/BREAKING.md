@@ -1,6 +1,6 @@
 # Breaking it on purpose
 
-`scripts/break.sh` introduces one classic Jakarta EE bug at a time, tells you
+`scripts/break.sh` introduces one classic Spring Boot bug at a time, tells you
 exactly what to run to observe it, and puts it back with `git checkout`.
 
 The exercises in [EXERCISES.md](EXERCISES.md) ask you to make something work.

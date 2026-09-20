@@ -1,5 +1,5 @@
 # =============================================================================
-# The production stack: Caddy + WildFly + PostgreSQL
+# The production stack: Caddy + the Spring Boot application + PostgreSQL
 # =============================================================================
 #   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 #   docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f
@@ -16,11 +16,11 @@
 # reason: when Compose merges two services, LIST-valued keys are APPENDED, not
 # replaced. `ports` is a list. So an override file cannot remove
 #
-#     - "9990:9990"   # the admin console
+#     - "55433:5432"   # the database, straight to the host
 #
 # from the development stack. It can only add more ports. Every hardening step
-# in this file that consists of *taking something away* - the admin console,
-# the exposed database, the mail catcher - is a step an override file is
+# in this file that consists of *taking something away* - the exposed
+# database, the mail catcher - is a step an override file is
 # structurally incapable of performing.
 #
 # That is worth internalising beyond this repository: "production is
@@ -31,15 +31,15 @@
 # WHAT IS DIFFERENT, IN ONE LIST
 # -----------------------------------------------------------------------------
 #   - Caddy sits in front and is the only service with published ports.
-#   - WildFly publishes NOTHING. Not 8080, and emphatically not 9990.
-#   - PostgreSQL publishes NOTHING. It is reachable only by WildFly, over the
+#   - The application publishes NOTHING, not even 8080.
+#   - PostgreSQL publishes NOTHING. It is reachable only by the app, over the
 #     internal Docker network, by the name `postgres`.
 #   - Mailpit is gone. A mail catcher that accepts any credentials and shows
 #     every message in an unauthenticated web inbox is a development tool; on a
 #     public address it is a public archive of your users' password-reset
 #     links.
 #   - Every secret comes from .env.prod, which is not in git.
-#   - There is no hot-deploy bind mount. The WAR is inside the image.
+#   - There is no bind mount. The jar is inside the image.
 # =============================================================================
 
 # An explicit project name. Compose otherwise derives one from the directory,
@@ -85,7 +85,7 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.prod}
 
     depends_on:
-      # Ordering only, no health condition. If WildFly is slow to boot Caddy
+      # Ordering only, no health condition. If the app is slow to boot Caddy
       # should still come up and answer with a 502 - a 502 is a diagnosable
       # answer, whereas a connection refused because Caddy never started is
       # indistinguishable from a DNS or firewall problem.
@@ -104,7 +104,7 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # WildFly - the application server
+  # The Spring Boot application
   # ---------------------------------------------------------------------------
   app:
     build:
@@ -207,7 +207,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      # WildFly plus a first-boot schema update takes a while. The container
+      # Boot plus a first-boot Flyway migration takes a while. The container
       # is not reported unhealthy during this window.
       start_period: 90s
 

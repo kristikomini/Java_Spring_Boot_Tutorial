@@ -1,5 +1,5 @@
-# The notification service. Port 8282, because 8280 is WildFly, 8281 is the
-# Spring enrollment service, and 4280 is the Angular dev server.
+# The notification service. Port 8282, because 8280 is the enrollment
+# application and 4280 is the Angular dev server.
 server:
   port: 8282
 

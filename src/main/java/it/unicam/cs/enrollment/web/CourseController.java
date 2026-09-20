@@ -30,11 +30,14 @@ import java.util.Map;
 
 /**
  * ============================================================================
- * THE ROSETTA STONE, AS TWO FILES
+ * THE ROSETTA STONE: JAX-RS TO SPRING MVC
  * ============================================================================
- * Open it.unicam.cs.enrollment.api.rest.CourseResource beside this. The two
- * classes do the same work through the same service layer; only the annotations
- * differ, and the mapping is completely mechanical:
+ * This project began as a Jakarta EE application and was converted to Spring
+ * Boot; the JAX-RS resource this controller replaced is in the git history,
+ * not the working tree. The translation is worth keeping because it is
+ * completely mechanical, and because a great many Italian job adverts still
+ * list Jakarta EE next to Spring - if you meet the annotations on the left in
+ * an existing codebase, the ones on the right are what they become:
  *
  * <pre>
  *   JAX-RS                              Spring MVC
@@ -66,16 +69,17 @@ import java.util.Map;
  * direction, and it is the mistake most likely to be made by someone porting
  * JAX-RS code to Spring by find-and-replace.
  *
- * <p>Base path: {@code /api}, matching {@code @ApplicationPath("/api")} on
- * JaxRsActivator. Same paths, different port - which is what makes the two
- * services diffable with curl.
+ * <p>Base path: {@code /api}, which in JAX-RS was declared once on an
+ * {@code @ApplicationPath("/api")} activator class and here is simply the
+ * prefix on {@code @RequestMapping} below. The paths themselves did not change
+ * in the conversion, which is why the curl commands in the README still work.
  */
 @RestController
 // TWO PATHS, ONE CONTROLLER.
 //
-// "/api/courses" is what the Jakarta EE application serves, and the two
-// implementations must stay interchangeable, so it cannot move. "/api/v1/..."
-// is the same contract under an explicit version, so new clients can pin one.
+// "/api/courses" is the original unversioned path, kept because clients and
+// the README already use it, so it cannot move. "/api/v1/..." is the same
+// contract under an explicit version, so new clients can pin one.
 //
 // An array of paths on @RequestMapping is the whole mechanism - no filter, no
 // rewrite rule, no gateway. In a greenfield API you would version from the

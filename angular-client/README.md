@@ -25,8 +25,9 @@ Then open <http://localhost:4280>. The `demo` profile runs the Spring service on
 an in-memory H2 seeded with five courses, three students and a course that is
 deliberately **one seat from full** so the 409 path is reachable.
 
-To point the client at the **Jakarta EE** service instead, change one line in
-[`course.service.ts`](src/app/services/course.service.ts):
+The API base URL is one line in
+[`course.service.ts`](src/app/services/course.service.ts) - change it to point
+the client at a deployed instance instead of a local one:
 
 ```ts
 private readonly baseUrl = 'http://localhost:8280/enrollment/api';

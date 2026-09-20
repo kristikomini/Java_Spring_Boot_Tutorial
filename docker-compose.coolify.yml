@@ -1,5 +1,6 @@
 # =============================================================================
-# The Coolify stack: WildFly + PostgreSQL, with Coolify's Traefik in front
+# The Coolify stack: the Spring Boot application + PostgreSQL, with Coolify's
+# Traefik in front
 # =============================================================================
 # This is docker-compose.prod.yml adapted to a server that already runs
 # Coolify. It is not deployed by hand - Coolify reads it out of the git
@@ -14,7 +15,7 @@
 #      job, and it does them the same way Caddy would.
 #
 #      What does NOT change is the reason any of that mattered: Traefik
-#      terminates TLS and forwards plain HTTP to WildFly with an
+#      terminates TLS and forwards plain HTTP to the application with an
 #      X-Forwarded-Proto header, exactly as Caddy would have. So
 #      configure-prod.cli section 5 - proxy-address-forwarding - is still what
 #      makes the session cookie come back marked Secure and the login throttle
@@ -51,7 +52,7 @@
 services:
 
   # ---------------------------------------------------------------------------
-  # WildFly - the application
+  # The Spring Boot application
   # ---------------------------------------------------------------------------
   app:
     build:
@@ -155,7 +156,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      # WildFly plus a first-boot schema update takes a while, and Coolify
+      # Boot plus a first-boot Flyway migration takes a while, and Coolify
       # waits for health before it considers the deploy successful.
       start_period: 120s
 

@@ -1,5 +1,5 @@
 # =============================================================================
-# The local development stack: PostgreSQL + WildFly
+# The local development stack: PostgreSQL + the Spring Boot application
 # =============================================================================
 #   docker compose up -d --build     start everything
 #   docker compose logs -f app       watch the application log
@@ -12,10 +12,15 @@
 # The mail inbox (Mailpit)  is at http://localhost:8225 - every message the
 # application sends lands there and goes no further.
 #
-# The development loop once this is running:
-#   mvn package   ->  the WAR lands in ./docker/deployments
-#                 ->  WildFly's deployment scanner notices and hot-redeploys
-#   No container restart, no manual copying.
+# The development loop once this is running: do NOT rebuild the image on every
+# edit. Keep the database and Mailpit in Docker and run the application from
+# Maven, where a restart is seconds rather than minutes:
+#
+#   docker compose up -d postgres mailpit   # once
+#   mvn spring-boot:run                     # Ctrl-C, re-run
+#
+# There is no deployment step and no scanner: with an embedded server the
+# application IS the process. Stopping it stops the application.
 # =============================================================================
 
 services:
@@ -43,7 +48,7 @@ services:
       #
       # The HOST side is 55433 rather than the usual 5432 because you already
       # have other projects listening on 5432 and 55432. Only the host side
-      # matters here - inside the Docker network WildFly still reaches this
+      # matters here - inside the Docker network the application still reaches this
       # container as `postgres:5432`, which is what configure.cli uses. Changing
       # a host port never requires changing application configuration, and that
       # separation is the whole point of container networking.
@@ -61,7 +66,7 @@ services:
 
     healthcheck:
       # A container being "started" is not the same as the service inside it
-      # being READY. PostgreSQL takes a few seconds to initialise, and WildFly
+      # being READY. PostgreSQL takes a few seconds to initialise, and the app
       # would otherwise try to fill its connection pool against a database that
       # is not listening yet, and fail the deployment.
       #
@@ -75,7 +80,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # WildFly - the Jakarta EE application server
+  # The Spring Boot application - an embedded Tomcat inside an executable jar
   # ---------------------------------------------------------------------------
   app:
     build:
@@ -196,7 +201,7 @@ services:
     ports:
       # Shifted off the defaults (8025 / 1025) for the same reason as 8280 and
       # 55433 above: this machine runs other projects. Only the HOST side moves -
-      # inside the Docker network WildFly still reaches `mailpit:1025`, which is
+      # inside the Docker network the app still reaches `mailpit:1025`, which is
       # what configure.cli refers to.
       - "8225:8025"   # the web inbox: http://localhost:8225
       - "1225:1025"   # SMTP, exposed only so you can point another tool at it

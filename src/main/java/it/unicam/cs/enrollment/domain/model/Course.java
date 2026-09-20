@@ -214,7 +214,7 @@ public class Course extends BaseEntity {
      * inside the method - and becomes untestable, because a test cannot control
      * the clock. Passing time in ("dependency injection for time") lets a test
      * assert behaviour at any instant. The caller obtains {@code now} from an
-     * injected {@link java.time.Clock}; see {@code ClockProducer}.
+     * injected {@link java.time.Clock}; see {@code ClockConfig}.
      *
      * <p>The window is half-open {@code [opens, closes)}: inclusive at the
      * start, exclusive at the end. Half-open intervals compose without

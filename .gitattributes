@@ -4,8 +4,8 @@
 # This machine has core.autocrlf enabled, which rewrites text files to CRLF on
 # checkout. That is harmless for Java sources, and fatal for two things here:
 #
-#   scripts/api-tour.sh          run by bash - CRLF makes the shebang invalid
-#   docker/wildfly/configure.cli read by jboss-cli inside a Linux container
+#   scripts/api-tour.sh   run by bash - CRLF makes the shebang invalid
+#   scripts/break.sh      the same
 #
 # Normalising the whole tree to LF avoids having to remember which files are
 # which, and matches what the Docker images expect.
@@ -21,7 +21,7 @@
 #
 # tutorial.html is a single 2.5 MB generated course page. On its own it
 # outweighed the 1.2 MB of Java under src/, so GitHub labelled this repository
-# "HTML" and the Jakarta EE work did not show up in the language bar or in
+# "HTML" and the Java work did not show up in the language bar or in
 # language-filtered search.
 #
 # linguist-documentation keeps the page served and versioned, but leaves it

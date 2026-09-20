@@ -62,18 +62,16 @@ public class OpenApiConfig {
                         .description("""
                                 Course catalogue and student enrollment.
 
-                                The same API is served by two independent implementations \
-                                against one PostgreSQL schema: a Jakarta EE application on \
-                                WildFly (port 8280) and this Spring Boot service (port 8281). \
-                                A client should not be able to tell them apart.
+                                A Spring Boot service over a PostgreSQL schema, \
+                                served at `/enrollment` on port 8280.
 
                                 ## Versioning
 
                                 `/api/v1` is the current contract and is frozen. `/api/v2` \
                                 nests the professor as an object instead of two flat fields \
                                 and adds `occupiedSeats`. The unversioned `/api` paths are \
-                                an alias for v1, kept because the Jakarta EE service serves \
-                                them.
+                                an alias for v1, kept because existing clients and the \
+                                README already use them.
 
                                 ## Errors
 
