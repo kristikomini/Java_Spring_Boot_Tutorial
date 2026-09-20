@@ -13,6 +13,7 @@ import it.unicam.cs.enrollment.service.CourseService;
 import it.unicam.cs.enrollment.service.EnrollmentService;
 import it.unicam.cs.enrollment.web.mapper.CourseMapper;
 import it.unicam.cs.enrollment.web.mapper.EnrollmentMapperImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,12 +31,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -94,6 +97,25 @@ class CourseControllerTest {
      */
     @MockitoBean
     private Clock clock;
+
+    /**
+     * The fixed "now" every test in this class sees. 2027 deliberately differs
+     * from the year the seed data or any hard-coded default would use, so a
+     * test asserting "defaults to the current year" fails loudly if the
+     * controller ever goes back to a literal.
+     */
+    private static final Instant NOW = Instant.parse("2027-03-14T10:00:00Z");
+
+    /**
+     * A Mockito mock returns null from every unstubbed method, and
+     * {@code Clock} is no exception - so the controller's
+     * {@code clock.instant()} would NPE. Stubbing it once here is what lets
+     * {@code ?year=} be resolved at request time.
+     */
+    @BeforeEach
+    void fixTheClock() {
+        when(clock.instant()).thenReturn(NOW);
+    }
 
     @Test
     @DisplayName("404 carries the full RFC 7807 body, not an empty response")
@@ -322,5 +344,35 @@ class CourseControllerTest {
                 Semester.FALL, 2026, professor,
                 Instant.parse("2026-09-01T00:00:00Z"),
                 Instant.parse("2026-10-01T00:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("?year= omitted means the current year, not a hard-coded one")
+    void yearDefaultsToTheCurrentAcademicYear() throws Exception {
+        when(courseService.findByYearAndSemester(anyInt(), any(), any())).thenReturn(Page.empty());
+        when(courseService.occupiedSeatsFor(any())).thenReturn(Map.of());
+
+        mockMvc.perform(get("/api/courses"))
+                .andExpect(status().isOk());
+
+        // The regression this pins: the default used to be the literal 2025.
+        // It stayed a valid year, so the query ran, matched nothing, and the
+        // endpoint answered 200 OK with an empty page - a wrong answer behind
+        // a healthy status code. Asserting the year the service was actually
+        // asked for is the only way to see it.
+        verify(courseService).findByYearAndSemester(
+                eq(NOW.atZone(ZoneOffset.UTC).getYear()), any(), any());
+    }
+
+    @Test
+    @DisplayName("an explicit ?year= still wins over the clock")
+    void explicitYearOverridesTheDefault() throws Exception {
+        when(courseService.findByYearAndSemester(anyInt(), any(), any())).thenReturn(Page.empty());
+        when(courseService.occupiedSeatsFor(any())).thenReturn(Map.of());
+
+        mockMvc.perform(get("/api/courses").param("year", "2024"))
+                .andExpect(status().isOk());
+
+        verify(courseService).findByYearAndSemester(eq(2024), any(), any());
     }
 }

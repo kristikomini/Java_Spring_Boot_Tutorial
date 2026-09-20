@@ -1,5 +1,6 @@
 package it.unicam.cs.enrollment.web;
 
+import it.unicam.cs.enrollment.common.AcademicYear;
 import it.unicam.cs.enrollment.domain.model.Course;
 import it.unicam.cs.enrollment.domain.model.EnrollmentStatus;
 import it.unicam.cs.enrollment.domain.model.Semester;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -42,7 +44,7 @@ import java.util.Map;
  *   {@literal @}POST                                {@literal @}PostMapping
  *   {@literal @}PathParam("id")                     {@literal @}PathVariable("id")
  *   {@literal @}QueryParam("year")                  {@literal @}RequestParam("year")
- *   {@literal @}DefaultValue("2025")                defaultValue = "2025"
+ *   {@literal @}DefaultValue("20")                  defaultValue = "20"
  *   (an entity/DTO return)              (the same, or ResponseEntity)
  *   {@literal @}Produces(APPLICATION_JSON)          implied by {@literal @}RestController
  *   {@literal @}Consumes(APPLICATION_JSON)          implied by {@literal @}RequestBody
@@ -90,18 +92,31 @@ public class CourseController {
     private final CourseMapper courseMapper;
     private final EnrollmentMapper enrollmentMapper;
 
+    /**
+     * Not for timestamps - this controller writes nothing. It is here so that
+     * {@code ?year=} can default to the current academic year at request time
+     * rather than to a literal frozen at compile time. See
+     * {@link AcademicYear} for why that literal was a bug.
+     */
+    private final Clock clock;
+
     public CourseController(CourseService courseService,
                             EnrollmentService enrollmentService,
                             CourseMapper courseMapper,
-                            EnrollmentMapper enrollmentMapper) {
+                            EnrollmentMapper enrollmentMapper,
+                            Clock clock) {
         this.courseService = courseService;
         this.enrollmentService = enrollmentService;
         this.courseMapper = courseMapper;
         this.enrollmentMapper = enrollmentMapper;
+        this.clock = clock;
     }
 
     /**
-     * GET /api/courses?year=2025&amp;semester=FALL&amp;page=0&amp;size=20
+     * GET /api/courses?year=2026&amp;semester=FALL&amp;page=0&amp;size=20
+     *
+     * <p>{@code year} is optional. Omitted, it means the current academic year,
+     * resolved from the clock at request time - see {@link AcademicYear}.
      *
      * <p>Two queries, always, regardless of page size: one for the courses (plus
      * its count) and one for every seat count at once. The occupied-seats map is
@@ -116,14 +131,14 @@ public class CourseController {
      */
     @GetMapping
     public PageResponse<CourseResponse> list(
-            @RequestParam(name = "year", defaultValue = "2025") @Min(2000) int academicYear,
+            @RequestParam(name = "year", required = false) @Min(2000) Integer academicYear,
             @RequestParam(name = "semester", required = false) String semester,
             @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
             @RequestParam(name = "size", defaultValue = "20") @Min(1) int size) {
 
         PageRequest pageable = PageRequest.of(page, Math.min(size, 100), Sort.by("code").ascending());
         Page<Course> courses = courseService.findByYearAndSemester(
-                academicYear, parseSemester(semester), pageable);
+                AcademicYear.orCurrent(academicYear, clock), parseSemester(semester), pageable);
 
         Map<Long, Long> occupied = courseService.occupiedSeatsFor(
                 courses.getContent().stream().map(Course::getId).toList());

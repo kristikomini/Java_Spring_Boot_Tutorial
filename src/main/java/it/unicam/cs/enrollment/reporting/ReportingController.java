@@ -1,5 +1,6 @@
 package it.unicam.cs.enrollment.reporting;
 
+import it.unicam.cs.enrollment.common.AcademicYear;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import it.unicam.cs.enrollment.reporting.dto.DepartmentRankRow;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,12 +57,21 @@ public class ReportingController {
     private final CourseStatisticsRepository statisticsRepository;
     private final StatisticsRefreshService refreshService;
 
+    /**
+     * Only so {@code ?year=} can default to the current academic year at
+     * request time instead of to a literal frozen at compile time. See
+     * {@link AcademicYear}.
+     */
+    private final Clock clock;
+
     public ReportingController(ReportingRepository reportingRepository,
                                CourseStatisticsRepository statisticsRepository,
-                               StatisticsRefreshService refreshService) {
+                               StatisticsRefreshService refreshService,
+                               Clock clock) {
         this.reportingRepository = reportingRepository;
         this.statisticsRepository = statisticsRepository;
         this.refreshService = refreshService;
+        this.clock = clock;
     }
 
     /**
@@ -72,9 +83,9 @@ public class ReportingController {
     @GetMapping("/funnel")
     @Operation(summary = "Enrollment counts by status, with percentage of total",
             description = "LIVE query. Accurate now; scans the enrollments table.")
-    public List<FunnelRow> funnel(@RequestParam(name = "year", defaultValue = "2026")
-                                  @Min(2000) int year) {
-        return reportingRepository.enrollmentFunnel(year);
+    public List<FunnelRow> funnel(@RequestParam(name = "year", required = false)
+                                  @Min(2000) Integer year) {
+        return reportingRepository.enrollmentFunnel(AcademicYear.orCurrent(year, clock));
     }
 
     /**
@@ -88,8 +99,8 @@ public class ReportingController {
     @Operation(summary = "Courses ranked within their department",
             description = "LIVE query. Window functions: RANK and DENSE_RANK.")
     public List<DepartmentRankRow> departmentRanking(
-            @RequestParam(name = "year", defaultValue = "2026") @Min(2000) int year) {
-        return reportingRepository.rankCoursesWithinDepartment(year);
+            @RequestParam(name = "year", required = false) @Min(2000) Integer year) {
+        return reportingRepository.rankCoursesWithinDepartment(AcademicYear.orCurrent(year, clock));
     }
 
     /**
@@ -123,10 +134,10 @@ public class ReportingController {
             description = "Read from course_statistics. Up to 10 minutes stale; "
                     + "see computedAt in the response.")
     public Map<String, Object> courseStatistics(
-            @RequestParam(name = "year", defaultValue = "2026") @Min(2000) int year) {
+            @RequestParam(name = "year", required = false) @Min(2000) Integer year) {
 
         List<CourseStatistics> rows =
-                statisticsRepository.findByAcademicYearOrderByFillRateDesc(year);
+                statisticsRepository.findByAcademicYearOrderByFillRateDesc(AcademicYear.orCurrent(year, clock));
 
         // LinkedHashMap rather than Map.of: Map.of rejects null values and does
         // not preserve order, and computedAt should be the first thing a reader
@@ -148,8 +159,8 @@ public class ReportingController {
     @Operation(summary = "Courses with the lowest fill rate",
             description = "Materialised. The report somebody acts on.")
     public List<CourseStatistics> underSubscribed(
-            @RequestParam(name = "year", defaultValue = "2026") @Min(2000) int year) {
-        return statisticsRepository.findUnderSubscribed(year);
+            @RequestParam(name = "year", required = false) @Min(2000) Integer year) {
+        return statisticsRepository.findUnderSubscribed(AcademicYear.orCurrent(year, clock));
     }
 
     /**
