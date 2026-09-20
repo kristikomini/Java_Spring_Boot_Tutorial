@@ -1,0 +1,100 @@
+# ---------------------------------------------------------------------------
+# Continuous integration.
+#
+# WHAT THIS IS FOR. Not ceremony: the README claims a number of passing tests,
+# and a reader has no way to check that claim without installing a JDK and
+# waiting. A green badge is the claim, verified, by a machine that has none of
+# this developer's local state - no warm ~/.m2, no already-running Postgres, no
+# environment variable set three months ago and forgotten. "Works on my
+# machine" is precisely the thing CI exists to disprove.
+# ---------------------------------------------------------------------------
+
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  # Lets the workflow be started by hand from the Actions tab, which is useful
+  # when a failure was environmental rather than a real regression.
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run pointless. Cancelling it
+# keeps the queue short and the feedback fast.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Java 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          # Caches ~/.m2 keyed on the POM. Without it every run re-downloads
+          # the whole dependency tree, which is most of the wall-clock time.
+          cache: 'maven'
+
+      # `verify`, not `test`. `test` runs Surefire only - the unit and slice
+      # tests. `verify` additionally runs Failsafe, which is where the *IT
+      # classes live: EnrollmentApiIT and the repository ITs start a real
+      # PostgreSQL through Testcontainers. Those are the tests that prove the
+      # application works against the database it actually ships with, rather
+      # than against H2 pretending to be it.
+      #
+      # Testcontainers needs a Docker daemon; ubuntu-latest runners have one
+      # already running, so no service block is required here.
+      #
+      # -B is batch mode (no ANSI progress spam in the log).
+      - name: Build and test
+        run: mvn -B verify
+
+      # Surefire and Failsafe write XML whether they pass or fail, and `if:
+      # always()` is what makes the report survive a red build - which is the
+      # run where you actually need to read it.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 7
+
+  frontend:
+    name: Angular client
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: angular-client/package-lock.json
+
+      # `npm ci`, not `npm install`. ci installs exactly the lockfile and fails
+      # if package.json and the lock disagree; install is free to resolve a new
+      # tree, which is how a build goes green locally and red in CI.
+      - name: Install dependencies
+        working-directory: angular-client
+        run: npm ci
+
+      # Build only. `npm test` is deliberately not run: the script refers to
+      # `ng test`, but no test runner is installed, so it would fail for want
+      # of a dependency rather than for want of correct code. A step that
+      # cannot pass is worse than no step - see the frontend note in README.
+      - name: Build
+        working-directory: angular-client
+        run: npm run build

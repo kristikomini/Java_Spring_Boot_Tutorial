@@ -1,5 +1,10 @@
 # Java Spring Boot Tutorial
 
+[![build](https://github.com/kristikomini/JavaEE/actions/workflows/build.yml/badge.svg)](https://github.com/kristikomini/JavaEE/actions/workflows/build.yml)
+[![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://adoptium.net/)
+[![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F.svg)](https://spring.io/projects/spring-boot)
+
 A **Spring Boot 3.5 / Java 21** reference application, built to be read.
 
 Every class in this project carries comments explaining *what* it does, *why* it
